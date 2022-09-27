@@ -31,7 +31,7 @@ Simulator::Simulator(const std::string& path) {
 
     wind = new Wind();
 
-    cloths[0]->readDataFromFile("input.txt");
+    // cloths[0]->readDataFromFile("input.txt");
 }
 
 Simulator::~Simulator() {

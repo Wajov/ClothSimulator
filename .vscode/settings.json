@@ -86,6 +86,7 @@
         "thread": "cpp",
         "typeindex": "cpp",
         "valarray": "cpp",
-        "__node_handle": "cpp"
+        "__node_handle": "cpp",
+        "cholesky": "cpp"
     }
 }

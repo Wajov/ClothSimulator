@@ -21,7 +21,7 @@ int main() {
     for (int i = 0; i < 244; i++)
         for (int j = 0; j < 243; j++) {
             double diff = std::abs(a[i][j] - b[i][j]);
-            if (diff > 2e-6)
+            if (diff > 1e-7)
                 std::cout << i << ' ' << j << ' ' << a[i][j] << ' ' << b[i][j] << ' ' << diff << std::endl;
         }
 

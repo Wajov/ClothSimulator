@@ -6,13 +6,11 @@ Cloth::Cloth(const Json::Value& json) {
         translate(i) = json["transform"]["translate"][i].asDouble();
     mesh = new Mesh(json["mesh"], translate);
 
-    for (int i = 0; i < json["materials"].size(); i++)
-        materials.push_back(new Material(json["materials"][i]));
+    material = new Material(json["materials"]);
 }
 
 Cloth::~Cloth() {
-    for (const Material* material : materials)
-        delete material;
+    delete material;
     for (const Handle* handle : handles)
         delete handle;
 }
@@ -67,7 +65,7 @@ Vector2f Cloth::barycentricWeights(const Vector3f& x, const Vector3f& a, const V
     return Vector2f(1.0f - t, t);
 }
 
-std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face, const Material* material) const {
+std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face) const {
     Vector3f x0 = face->getV0()->position;
     Vector3f x1 = face->getV1()->position;
     Vector3f x2 = face->getV2()->position;
@@ -104,7 +102,7 @@ std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face, const M
     return std::make_pair(-area * grad, -area * hess);
 }
 
-std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge, const Material* material) const {
+std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge) const {
     Vector3f x0 = edge->getV0()->position;
     Vector3f x1 = edge->getV1()->position;
     const std::vector<Vertex*>& opposites = edge->getOpposites();
@@ -128,13 +126,6 @@ std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge, const M
     float coefficient = -0.25f * k * length * length / area;
 
     return std::make_pair(coefficient * angle * dtheta, coefficient * dtheta * dtheta.transpose());
-}
-
-std::vector<Constraint*> Cloth::getConstraints() const {
-    std::vector<Constraint*> ans;
-    for (const Handle* handle : handles)
-        ans.push_back(handle->getConstraint());
-    return ans;
 }
 
 void Cloth::init(Eigen::SparseMatrix<float>& A, VectorXf& b) const {
@@ -174,7 +165,7 @@ void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* win
     }
 }
 
-void Cloth::addInternalForces(float dt, const Material* material, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
+void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
     const std::vector<Face*>& faces = mesh->getFaces();
     for (const Face* face : faces) {
         Vertex* v0 = face->getV0();
@@ -182,7 +173,7 @@ void Cloth::addInternalForces(float dt, const Material* material, Eigen::SparseM
         Vertex* v2 = face->getV2();
         Vector9f v = concatenateToVector(v0->velocity, v1->velocity, v2->velocity);
 
-        std::pair<Vector9f, Matrix9x9f> pair = stretchingForce(face, material);
+        std::pair<Vector9f, Matrix9x9f> pair = stretchingForce(face);
         Vector9f f = pair.first;
         Matrix9x9f J = pair.second;
 
@@ -201,7 +192,7 @@ void Cloth::addInternalForces(float dt, const Material* material, Eigen::SparseM
             Vertex* v3 = opposites[1];
             Vector12f v = concatenateToVector(v0->velocity, v1->velocity, v2->velocity, v3->velocity);
 
-            std::pair<Vector12f, Matrix12x12f> pair = bendingForce(edge, material);
+            std::pair<Vector12f, Matrix12x12f> pair = bendingForce(edge);
             Vector12f f = pair.first;
             Matrix12x12f J = pair.second;
 
@@ -212,7 +203,7 @@ void Cloth::addInternalForces(float dt, const Material* material, Eigen::SparseM
     }
 }
 
-void Cloth::addConstraintForces(float dt, const std::vector<Constraint*>& constraints, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
+void Cloth::addHandleForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
     for (const Handle* handle : handles) {
         Vertex* vertex = handle->getVertex();
         Vector3f position = handle->getPosition();
@@ -247,16 +238,15 @@ void Cloth::readDataFromFile(const std::string& path) {
 }
 
 void Cloth::update(float dt, const Vector3f& gravity, const Wind* wind) {
-    mesh->updateData(materials[0]);
+    mesh->updateData(material);
 
     Eigen::SparseMatrix<float> A;
     VectorXf b;
 
-    std::vector<Constraint*> constraints = getConstraints();
     init(A, b);
     addExternalForces(dt, gravity, wind, A, b);
-    addInternalForces(dt, materials[0], A, b);
-    addConstraintForces(dt, constraints, A, b);
+    addInternalForces(dt, A, b);
+    addHandleForces(dt, A, b);
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky;
     cholesky.compute(A);
@@ -264,19 +254,19 @@ void Cloth::update(float dt, const Vector3f& gravity, const Wind* wind) {
 
     mesh->update(dt, dv);
 
-    std::ofstream fout("output.txt");
-    fout.precision(20);
-    for (int i = 0; i < A.rows(); i++) {
-        for (int j = 0; j < A.cols(); j++)
-            fout << A.coeff(i, j) << ' ';
-        fout << std::endl;
-    }
-    for (int i = 0; i < b.rows(); i++)
-        fout << b(i) << ' ' ;
-    fout << std::endl;
-    fout.close();
+    // std::ofstream fout("output.txt");
+    // fout.precision(20);
+    // for (int i = 0; i < A.rows(); i++) {
+    //     for (int j = 0; j < A.cols(); j++)
+    //         fout << A.coeff(i, j) << ' ';
+    //     fout << std::endl;
+    // }
+    // for (int i = 0; i < b.rows(); i++)
+    //     fout << b(i) << ' ' ;
+    // fout << std::endl;
+    // fout.close();
 
-    exit(0);
+    // exit(0);
 }
 
 void Cloth::renderEdge() const {
