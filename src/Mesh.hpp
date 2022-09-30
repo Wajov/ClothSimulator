@@ -13,7 +13,7 @@
 #include "Vertex.hpp"
 #include "Edge.hpp"
 #include "Face.hpp"
-#include "Vertex.hpp"
+#include "Transform.hpp"
 
 class Mesh {
 private:
@@ -26,7 +26,7 @@ private:
     void addEdge(int index0, int index1, const Vertex* opposite, const Face* adjacent, std::map<std::pair<int, int>, int>& map);
 
 public:
-    Mesh(const Json::Value& json, const Vector3f& translate);
+    Mesh(const Json::Value& json, const Transform* transform);
     ~Mesh();
     const std::vector<Vertex>& getVertices() const;
     const std::vector<Edge*>& getEdges() const;

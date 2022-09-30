@@ -10,46 +10,46 @@ Simulator::Simulator(const std::string& path) {
     Json::Value json;
     fin >> json;
 
-    dt = json["frame_time"].asDouble() / json["frame_steps"].asDouble();
-    for (int i = 0; i < 3; i++)
-        gravity(i) = json["gravity"][i].asDouble();
+    frameTime = parseFloat(json["frame_time"]);
+    frameSteps = parseFloat(json["frame_steps"]);
+    dt =  frameTime / frameSteps;
+
+    gravity = parseVector3f(json["gravity"]);
+    wind = new Wind();
+    
     for (const Json::Value& clothJson : json["cloths"])
         cloths.push_back(new Cloth(clothJson));
-    for (const Json::Value& handleJson : json["handles"])
-        for (const Json::Value& nodeJson : handleJson["nodes"]) {
-            int index = nodeJson.asInt();
-            for (Cloth* cloth : cloths) {
-                int size = cloth->getMesh()->getVertices().size();
-                if (index < size) {
-                    cloth->addHandle(index);
-                    break;
-                } else
-                    index -= size;
-            }
-        }
-    fin.close();
 
-    wind = new Wind();
+    for (const Json::Value& obstacleJson : json["obstacles"])
+        obstacles.push_back(new Obstacle(obstacleJson));
+
+    fin.close();
 
     // cloths[0]->readDataFromFile("input.txt");
 }
 
 Simulator::~Simulator() {
+    delete wind;
     for (const Cloth* cloth : cloths)
         delete cloth;
+    for (const Obstacle* obstacle : obstacles)
+        delete obstacle;
 }
 
-void Simulator::renderEdge() const {
+void Simulator::physicsStep() {
     for (Cloth* cloth : cloths)
-        cloth->renderEdge();
+        cloth->physicsStep(dt, gravity, wind);
 }
 
-void Simulator::renderFace() const {
-    for (Cloth* cloth : cloths)
-        cloth->renderFace();
+void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {
+    for (const Cloth* cloth : cloths)
+        cloth->render(model, view, projection, cameraPosition, lightPosition, lightPower);
+
+    for (const Obstacle* obstacle : obstacles)
+        obstacle->render(model, view, projection, cameraPosition, lightPosition, lightPower);
 }
 
-void Simulator::update() {
-    for (Cloth* cloth : cloths)
-        cloth->update(dt, gravity, wind);
+void Simulator::step() {
+    physicsStep();
+
 }

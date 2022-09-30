@@ -8,7 +8,7 @@ EqualConstraint::~EqualConstraint() {}
 
 std::vector<Gradient*> EqualConstraint::energyGradient() const {
     std::vector<Gradient*> ans;
-    ans.push_back(new Gradient(vertex->index, 1000.0f * (vertex->position - position)));
+    ans.push_back(new Gradient(vertex->index, 1000.0f * (vertex->x - position)));
     return ans;
 }
 

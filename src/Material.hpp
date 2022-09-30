@@ -10,6 +10,7 @@
 #include <json/json.h>
 
 #include "TypeHelper.hpp"
+#include "JsonHelper.hpp"
 
 const int N = 30;
 

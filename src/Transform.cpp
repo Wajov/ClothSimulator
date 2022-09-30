@@ -1,11 +1,20 @@
-#ifndef TRANSFORM_HELPER_HPP
-#define TRANSFORM_HELPER_HPP
+#include "Transform.hpp"
 
-#include <cmath>
+Transform::Transform(const Json::Value& json) {
+    if (json.isNull())
+        matrix = Matrix4x4f::Identity();
+    else
+        matrix = translate(parseVector3f(json["translate"])) * scale(parseFloat(json["scale"], 1.0f));
+}
 
-#include "TypeHelper.hpp"
+Transform::~Transform() {}
 
-static Matrix4x4f scale(const float scaling) {
+Vector3f Transform::applyTo(const Vector3f& v) const {
+    Vector4f ans = matrix * Vector4f(v(0), v(1), v(2), 1.0f);
+    return Vector3f(ans(0), ans(1), ans(2));
+}
+
+Matrix4x4f Transform::scale(float scaling) {
     Matrix4x4f ans = Matrix4x4f::Zero();
 
     ans(0, 0) = ans(1, 1) = ans(2, 2) = scaling;
@@ -14,7 +23,7 @@ static Matrix4x4f scale(const float scaling) {
     return ans;
 }
 
-static Matrix4x4f rotate(const Vector3f& v, const float angle) {
+Matrix4x4f Transform::rotate(const Vector3f& v, float angle) {
     Vector3f axis = v.normalized();
     float s = std::sin(angle);
     float c = std::cos(angle);
@@ -37,7 +46,17 @@ static Matrix4x4f rotate(const Vector3f& v, const float angle) {
     return ans;
 }
 
-static Matrix4x4f lookAt(const Vector3f& position, const Vector3f& center, const Vector3f& up) {
+Matrix4x4f Transform::translate(const Vector3f& v) {
+    Eigen::Matrix4f ans = Eigen::Matrix4f::Identity();
+
+    ans(0, 3) = v(0);
+    ans(1, 3) = v(1);
+    ans(2, 3) = v(2);
+
+    return ans;
+}
+
+Matrix4x4f Transform::lookAt(const Vector3f& position, const Vector3f& center, const Vector3f& up) {
     Vector3f f = (center - position).normalized();
     Vector3f s = f.cross(up).normalized();
     Vector3f u = s.cross(f);
@@ -63,7 +82,7 @@ static Matrix4x4f lookAt(const Vector3f& position, const Vector3f& center, const
     return ans;
 }
 
-static Matrix4x4f perspective(const float fovy, const float aspect, const float zNear, const float zFar) {
+Matrix4x4f Transform::perspective(float fovy, float aspect, float zNear, float zFar) {
     float t = std::tan(fovy * 0.5f);
     Matrix4x4f ans = Matrix4x4f::Zero();
 
@@ -76,4 +95,6 @@ static Matrix4x4f perspective(const float fovy, const float aspect, const float 
     return ans;
 }
 
-#endif
+Matrix4x4f Transform::getMatrix() const {
+    return matrix;
+}

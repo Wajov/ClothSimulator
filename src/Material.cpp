@@ -1,8 +1,8 @@
 #include "Material.hpp"
 
 Material::Material(const Json::Value& json) {
-    thicken = json["thicken"].asDouble();
-    std::ifstream fin(json["data"].asString());
+    thicken = parseFloat(json["thicken"]);
+    std::ifstream fin(parseString(json["data"]));
     if (!fin.is_open()) {
         std::cerr << "Failed to open material file: " << json["data"].asString() << std::endl;
         exit(1);
@@ -11,15 +11,15 @@ Material::Material(const Json::Value& json) {
     Json::Value data;
     fin >> data;
 
-    density = data["density"].asDouble();
+    density = parseFloat(data["density"]);
     Vector4f stretchingData[2][5];
     for (int i = 0; i < 4; i++)
-        stretchingData[0][0](i) = data["stretching"][0][i].asDouble();
+        stretchingData[0][0](i) = parseFloat(data["stretching"][0][i]);
     for (int i = 1; i < 5; i++)
         stretchingData[0][i] = stretchingData[0][0];
     for (int i = 0; i < 5; i++)
         for (int j = 0; j < 4; j++)
-            stretchingData[1][i](j) = data["stretching"][i + 1][j].asDouble();
+            stretchingData[1][i](j) = parseFloat(data["stretching"][i + 1][j]);
     for (int i = 0; i < N; i++)
         for (int j = 0; j < N; j++)
             for (int k = 0; k < N; k++) {
@@ -32,7 +32,7 @@ Material::Material(const Json::Value& json) {
 
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 5; j++)
-            bendingSamples[i][j] = data["bending"][i][j].asDouble() * thicken;
+            bendingSamples[i][j] = parseFloat(data["bending"][i][j]) * thicken;
 
     fin.close();
 }
@@ -57,12 +57,12 @@ Vector4f Material::calculateStretchingSample(const Matrix2x2f& G, const Vector4f
 
     float strainWeight = (std::sqrt(eigenValues(0) + 1.0f) - 1.0f) * 6.0f;
     strainWeight = std::clamp(strainWeight, 0.0f, 1.0f - 1e-6f);
-    int strainId = (int)strainWeight;
+    int strainId = static_cast<int>(strainWeight);
     strainWeight -= strainId;
 
     float angleWeight = std::abs(std::atan2(eigenVectors(1, 0), eigenVectors(0, 0))) / M_PI * 8.0f;
     angleWeight = std::clamp(angleWeight, 0.0f, 4.0f - 1e-6f);
-    int angleId = (int)angleWeight;
+    int angleId = static_cast<int>(angleWeight);
     angleWeight -= angleId;
 
     float weights[2][2];
@@ -94,17 +94,17 @@ float Material::getThicken() const {
 Vector4f Material::stretchingStiffness(const Matrix2x2f& G) const {
     float x = (G(0, 0) + 0.25f) * N;
     x = std::clamp(x, 0.0f, N - 1 - 1e-6f);
-    int xi = (int)x;
+    int xi = static_cast<int>(x);
     x -= xi;
 
     float y = (G(1, 1) + 0.25f) * N;
     y = std::clamp(y, 0.0f, N - 1 - 1e-6f);
-    int yi = (int)y;
+    int yi = static_cast<int>(y);
     y -= yi;
 
     float z = std::abs(G(0, 1)) * N;
     z = std::clamp(z, 0.0f, N - 1 - 1e-6f);
-    int zi = (int)z;
+    int zi = static_cast<int>(z);
     z -= zi;
 
     float weights[2][2][2];
@@ -135,12 +135,12 @@ float Material::bendingStiffness(float length, float angle, float area, const Ve
     if (biasWeight > 2.0f)
         biasWeight = 4.0f - biasWeight;
     biasWeight = std::clamp(biasWeight, 0.0f, 2.0f - 1e-6f);
-    int biasId = (int)biasWeight;
+    int biasId = static_cast<int>(biasWeight);
     biasWeight -= biasId;
 
     float valueWeight = 0.2f * alpha;
     valueWeight = std::min(valueWeight, 4.0f - 1e-6f);
-    int valueId = (int)valueWeight;
+    int valueId = static_cast<int>(valueWeight);
     valueId = std::max(valueId, 0);
     valueWeight -= valueId;
 

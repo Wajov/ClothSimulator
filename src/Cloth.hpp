@@ -10,16 +10,19 @@
 
 #include "TypeHelper.hpp"
 #include "MathHelper.hpp"
+#include "Transform.hpp"
 #include "Mesh.hpp"
 #include "Material.hpp"
-#include "Wind.hpp"
 #include "Handle.hpp"
+#include "Wind.hpp"
+#include "Shader.hpp"
 
 class Cloth {
 private:
     Mesh* mesh;
     Material* material;
     std::vector<Handle*> handles;
+    Shader* edgeShader, * faceShader;
     Vector3i indices(const Vertex* v0, const Vertex* v1, const Vertex* v2) const;
     Vector4i indices(const Vertex* v0, const Vertex* v1, const Vertex* v2, const Vertex* v3) const;
     void addSubMatrix(const MatrixXxXf& B, const VectorXi& indices, Eigen::SparseMatrix<float>& A) const;
@@ -37,11 +40,9 @@ public:
     Cloth(const Json::Value& json);
     ~Cloth();
     Mesh* getMesh() const;
-    void addHandle(int index);
     void readDataFromFile(const std::string& path);
-    void renderEdge() const;
-    void renderFace() const;
-    void update(float dt, const Vector3f& gravity, const Wind* wind);
+    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const;
+    void physicsStep(float dt, const Vector3f& gravity, const Wind* wind);
 };
 
 #endif

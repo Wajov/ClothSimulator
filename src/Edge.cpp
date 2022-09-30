@@ -41,9 +41,9 @@ float Edge::getAngle() const {
 }
 
 void Edge::updateData() {
-    length = (v1->position - v0->position).norm();
+    length = (v1->x - v0->x).norm();
     if (adjacents.size() == 2) {
-        Vector3f e = (v0->position - v1->position).normalized();
+        Vector3f e = (v0->x - v1->x).normalized();
         Vector3f n0 = adjacents[0]->getNormal();
         Vector3f n1 = adjacents[1]->getNormal();
         float sine = e.dot(n0.cross(n1));

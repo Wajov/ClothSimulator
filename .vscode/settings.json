@@ -5,5 +5,31 @@
         "args": [
             "conf/sphere.json"
         ]
+    },
+    "files.associations": {
+        "__node_handle": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp",
+        "list": "cpp",
+        "map": "cpp",
+        "regex": "cpp",
+        "set": "cpp",
+        "string": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp",
+        "vector": "cpp",
+        "*.tcc": "cpp",
+        "bitset": "cpp",
+        "forward_list": "cpp",
+        "fstream": "cpp",
+        "istream": "cpp",
+        "mutex": "cpp",
+        "ostream": "cpp",
+        "streambuf": "cpp",
+        "functional": "cpp",
+        "valarray": "cpp",
+        "__tree": "cpp",
+        "random": "cpp",
+        "new": "cpp"
     }
 }
