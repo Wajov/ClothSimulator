@@ -150,7 +150,7 @@ float Material::bendingStiffness(float length, float angle, float area, const Ve
     weights[1][0] = biasWeight * (1.0f - valueWeight);
     weights[1][1] = biasWeight * valueWeight;
 
-    float ans;
+    float ans = 0.0f;
     for (int i = 0; i < 2; i++)
         for (int j = 0; j < 2; j++)
             ans += bendingSamples[biasId + i][valueId + j] * weights[i][j];

@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
-project(ClothSimulator LANGUAGES CUDA CXX)
+
+if (WIN32)
+        set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+        add_compile_definitions(_USE_MATH_DEFINES)
+endif()
+
+project(ClothSimulator LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
@@ -20,22 +26,37 @@ add_subdirectory(lib/glad)
 find_package(glfw3 REQUIRED)
 
 # jsoncpp
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP jsoncpp)
+if (WIN32)
+        find_package(jsoncpp CONFIG REQUIRED)
+elseif()
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(JSONCPP jsoncpp)
+endif()
 
 # Eigen
-find_package(Eigen3)
-include_directories(${EIGEN3_INCLUDE_DIR})
+find_package(Eigen3 REQUIRED)
 
 # CUDA
 find_package(CUDA REQUIRED)
-include_directories("${CUDA_INCLUDE_DIRS}")
 
-set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -ldl")
 set_target_properties(ClothSimulator PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-target_link_libraries(
-        ClothSimulator
-        glad
-        glfw
-        ${JSONCPP_LIBRARIES}
+include_directories(
+        ${OPENGL_INCLUDE_DIRS}
+        ${EIGEN3_INCLUDE_DIR}
+        ${CUDA_INCLUDE_DIRS}
 )
+if (WIN32)
+        target_link_libraries(
+                ClothSimulator
+                glad
+                glfw
+                JsonCpp::JsonCpp
+        )
+else()
+        target_link_libraries(
+                ClothSimulator
+                glad
+                glfw
+                jsoncpp
+        )
+endif()
