@@ -13,6 +13,7 @@
 #include "Wind.hpp"
 #include "Cloth.hpp"
 #include "Obstacle.hpp"
+#include "BVH.hpp"
 
 class Simulator {
 private:
@@ -22,6 +23,7 @@ private:
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
     void physicsStep();
+    void collisionStep();
 
 public:
     Simulator(const std::string& path);

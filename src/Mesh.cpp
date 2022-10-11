@@ -199,6 +199,7 @@ void Mesh::updateData(const Material* material) {
 
 void Mesh::update(float dt, const VectorXf& dv) {
     for (int i = 0; i < vertices.size(); i++) {
+        vertices[i].x0 = vertices[i].x;
         vertices[i].v += dv.block<3, 1>(3 * i, 0);
         vertices[i].x += vertices[i].v * dt;
     }

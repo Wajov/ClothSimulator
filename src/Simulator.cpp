@@ -41,6 +41,16 @@ void Simulator::physicsStep() {
         cloth->physicsStep(dt, gravity, wind);
 }
 
+void Simulator::collisionStep() {
+    std::vector<BVH*> clothBvhs, obstacleBhvs;
+    for (const Cloth* cloth : cloths)
+        clothBvhs.push_back(new BVH(cloth->getMesh(), true));
+    for (const Obstacle* obstacle: obstacles)
+        obstacleBhvs.push_back(new BVH(obstacle->getMesh(), true));
+
+    // TODO
+}
+
 void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {
     for (const Cloth* cloth : cloths)
         cloth->render(model, view, projection, cameraPosition, lightPosition, lightPower);
