@@ -45,3 +45,33 @@ BVHNode::~BVHNode() {
     delete left;
     delete right;
 }
+
+inline bool BVHNode::isLeaf() const {
+    return left == nullptr && right == nullptr;
+}
+
+void BVHNode::getImpacts(float thickness, std::vector<Impact>& impacts) const {
+    if (isLeaf() || !active)
+        return;
+
+    left->getImpacts(thickness, impacts);
+    right->getImpacts(thickness, impacts);
+    left->getImpacts(right, thickness, impacts);
+}
+
+void BVHNode::getImpacts(const BVHNode* bvhNode, float thickness, std::vector<Impact>& impacts) const {
+    if (!active && !bvhNode->active)
+        return;
+    if (!bounds.overlap(bvhNode->bounds, thickness))
+        return;
+
+    if (isLeaf() && bvhNode->isLeaf()) {
+        // TODO
+    } else if (isLeaf()) {
+        getImpacts(bvhNode->left, thickness, impacts);
+        getImpacts(bvhNode->right, thickness, impacts);
+    } else {
+        left->getImpacts(bvhNode, thickness, impacts);
+        right->getImpacts(bvhNode, thickness, impacts);
+    }
+}

@@ -41,6 +41,21 @@ void Simulator::physicsStep() {
         cloth->physicsStep(dt, gravity, wind);
 }
 
+void getImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, std::vector<Impact>& impacts) {
+
+    for (int i = 0; i < clothBvhs.size(); i++) {
+        clothBhvs[i]->getImpacts(COLLISION_THICKNESS, impacts);
+        for (int j = 0; j < i; j++)
+            clothBvhs[i]->getImpacts(clothBvhs[j], COLLISION_THICKNESS, impacts);
+        
+        for (int j = 0; j < obstacleBvhs.size(); j++)
+            clothBvhs[i]->getImpacts(obstacleBvhs[j], COLLISION_THICKNESS, impacts);
+    }
+    // TODO
+
+    return impacts;
+}
+
 void Simulator::collisionStep() {
     std::vector<BVH*> clothBvhs, obstacleBhvs;
     for (const Cloth* cloth : cloths)
@@ -48,6 +63,8 @@ void Simulator::collisionStep() {
     for (const Obstacle* obstacle: obstacles)
         obstacleBhvs.push_back(new BVH(obstacle->getMesh(), true));
 
+    std::vector<Impact> impacts;
+    getImpacts(clothBvhs, obstacleBhvs, impacts);
     // TODO
 }
 

@@ -26,3 +26,10 @@ BVH::BVH(const Mesh* mesh, bool ccd) {
 BVH::~BVH() {
     delete root;
 }
+void BVH::getImpacts(float thickness, std::vector<Impact>& impacts) const {
+    root->getImpacts(thickness, impacts);
+}
+
+void BVH::getImpacts(const BVH* bvh, float thickness, std::vector<Impact>& impacts) const {
+    root->getImpacts(bvh->root, thickness, impacts);
+}

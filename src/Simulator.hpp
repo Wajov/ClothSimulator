@@ -15,6 +15,8 @@
 #include "Obstacle.hpp"
 #include "BVH.hpp"
 
+const float COLLISION_THICKNESS = 1e-4f;
+
 class Simulator {
 private:
     float frameTime, frameSteps, dt;
@@ -23,6 +25,7 @@ private:
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
     void physicsStep();
+    void getImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, std::vector<Impact>& impacts);
     void collisionStep();
 
 public:

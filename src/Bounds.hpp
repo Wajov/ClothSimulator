@@ -18,6 +18,7 @@ public:
     void operator+=(const Bounds& b);
     Vector3f center() const;
     int longestIndex() const;
+    bool overlap(const Bounds& b, float thickness) const;
 };
 
 #endif

@@ -14,6 +14,9 @@ private:
 public:
     BVHNode(int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers);
     ~BVHNode();
+    inline bool isLeaf() const;
+    void getImpacts(float thickness, std::vector<Impact>& impacts) const;
+    void getImpacts(const BVHNode* bvhNode, float thickness, std::vector<Impact>& impacts) const;
 };
 
 #endif
