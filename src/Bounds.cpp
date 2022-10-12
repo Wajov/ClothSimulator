@@ -45,3 +45,7 @@ int Bounds::longestIndex() const {
     else
         return 2;
 }
+
+bool Bounds::overlap(const Bounds& b, float thickness) const {
+    
+}
