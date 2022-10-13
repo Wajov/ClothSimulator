@@ -8,8 +8,8 @@
 class Bounds {
 private:
     Vector3f pMin, pMax;
-    static Vector3f minVector(const Vector3f& a, const Vector3f& b);
-    static Vector3f maxVector(const Vector3f& a, const Vector3f& b);
+    Vector3f minVector(const Vector3f& a, const Vector3f& b) const;
+    Vector3f maxVector(const Vector3f& a, const Vector3f& b) const;
 
 public:
     Bounds();
@@ -18,6 +18,8 @@ public:
     void operator+=(const Bounds& b);
     Vector3f center() const;
     int longestIndex() const;
+    Bounds dilate(float thickness) const;
+    bool overlap(const Bounds& b) const;
     bool overlap(const Bounds& b, float thickness) const;
 };
 

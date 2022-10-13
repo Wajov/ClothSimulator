@@ -14,6 +14,7 @@
 #include "Cloth.hpp"
 #include "Obstacle.hpp"
 #include "BVH.hpp"
+#include "Impact.hpp"
 
 const float COLLISION_THICKNESS = 1e-4f;
 

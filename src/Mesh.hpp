@@ -23,7 +23,7 @@ private:
     std::vector<unsigned int> edgeIndices, faceIndices;
     unsigned int vbo, edgeVao, faceVao;
     std::vector<std::string> split(const std::string& s, char c) const;
-    void addEdge(int index0, int index1, const Vertex* opposite, const Face* adjacent, std::map<std::pair<int, int>, int>& map);
+    Edge* getEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::pair<int, int>, int>& edgeMap) const;
 
 public:
     Mesh(const Json::Value& json, const Transform* transform);

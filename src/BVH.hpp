@@ -4,6 +4,7 @@
 #include "BVHNode.hpp"
 #include "Face.hpp"
 #include "Mesh.hpp"
+#include "Impact.hpp"
 
 class BVH {
 private:

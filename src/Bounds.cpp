@@ -6,7 +6,7 @@ Bounds::Bounds() :
 
 Bounds::~Bounds() {}
 
-Vector3f Bounds::minVector(const Vector3f& a, const Vector3f& b) {
+Vector3f Bounds::minVector(const Vector3f& a, const Vector3f& b) const {
     Vector3f ans;
     for (int i = 0; i < 3; i++)
         ans(i) = std::min(a(i), b(i));
@@ -14,7 +14,7 @@ Vector3f Bounds::minVector(const Vector3f& a, const Vector3f& b) {
     return ans;
 }
 
-Vector3f Bounds::maxVector(const Vector3f& a, const Vector3f& b) {
+Vector3f Bounds::maxVector(const Vector3f& a, const Vector3f& b) const {
     Vector3f ans;
     for (int i = 0; i < 3; i++)
         ans(i) = std::max(a(i), b(i));
@@ -46,6 +46,27 @@ int Bounds::longestIndex() const {
         return 2;
 }
 
-bool Bounds::overlap(const Bounds& b, float thickness) const {
+Bounds Bounds::dilate(float thickness) const {
+    Bounds ans = *this;
+    for (int i = 0; i < 3; i++) {
+        ans.pMin(i) -= thickness;
+        ans.pMax(i) += thickness;
+    }
+
+    return ans;
+}
+
+bool Bounds::overlap(const Bounds& b) const {
+    for (int i = 0; i < 3; i++) {
+        if (pMin(i) > b.pMax(i))
+            return false;
+        if (pMax(i) < b.pMin(i))
+            return false;
+    }
     
+    return true;
+}
+
+bool Bounds::overlap(const Bounds& b, float thickness) const {
+    return overlap(b.dilate(thickness));
 }

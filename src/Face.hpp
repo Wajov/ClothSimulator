@@ -4,21 +4,25 @@
 #include "TypeHelper.hpp"
 #include "MathHelper.hpp"
 #include "Vertex.hpp"
+#include "Edge.hpp"
 #include "Material.hpp"
+
+class Edge;
 
 class Face {
 private:
-    Vertex* v0, * v1, * v2;
+    std::vector<Vertex*> vertices;
+    std::vector<Edge*> edges;
     Vector3f normal;
     Matrix3x3f inverse;
     float area, mass;
 
 public:
-    Face(const Vertex* v0, const Vertex* v1, const Vertex* v2);
+    Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2);
     ~Face();
-    Vertex* getV0() const;
-    Vertex* getV1() const;
-    Vertex* getV2() const;
+    Vertex* getVertex(int index) const;
+    Edge* getEdge(int index) const;
+    void setEdges(const Edge* edge0, const Edge* edge1, const Edge* edge2);
     Vector3f getNormal() const;
     Matrix3x3f getInverse() const;
     float getArea() const;

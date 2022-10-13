@@ -46,6 +46,20 @@ BVHNode::~BVHNode() {
     delete right;
 }
 
+void BVHNode::checkImpacts(const Face* face0, const Face* face1, std::vector<Impact>& impacts) const {
+    Impact impact;
+    // for (int i = 0; i < 3; i++)
+    //     if (checkVertexFaceCollision(face0->getVertex(i), face1, impact))
+    //         impacts.push_back(impact);
+    // for (int i = 0; i < 3; i++)
+    //     if (checkVertexFaceCollision(face1->getVertex(i), face0, impact))
+    //         impacts.push_back(impact);
+    // for (int i = 0; i < 3; i++)
+    //     for (int j = 0; j < 3; j++)
+    //         if (checkEdgeEdgeCollision(face0->getEdge(i), face1->getEdge(j), impact))
+    //             impacts.push_back(impact);
+}
+
 inline bool BVHNode::isLeaf() const {
     return left == nullptr && right == nullptr;
 }
@@ -65,9 +79,9 @@ void BVHNode::getImpacts(const BVHNode* bvhNode, float thickness, std::vector<Im
     if (!bounds.overlap(bvhNode->bounds, thickness))
         return;
 
-    if (isLeaf() && bvhNode->isLeaf()) {
-        // TODO
-    } else if (isLeaf()) {
+    if (isLeaf() && bvhNode->isLeaf())
+        checkImpacts(face, bvhNode->face, impacts);
+    else if (isLeaf()) {
         getImpacts(bvhNode->left, thickness, impacts);
         getImpacts(bvhNode->right, thickness, impacts);
     } else {

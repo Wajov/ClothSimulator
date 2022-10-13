@@ -1,17 +1,12 @@
 #include "Edge.hpp"
 
-Edge::Edge(const Vertex* v0, const Vertex* v1) :
-    v0(const_cast<Vertex*>(v0)),
-    v1(const_cast<Vertex*>(v1)) {}
+Edge::Edge(const Vertex* vertex0, const Vertex* vertex1) :
+    vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1)} {}
 
 Edge::~Edge() {}
 
-Vertex* Edge::getV0() const {
-    return v0;
-}
-
-Vertex* Edge::getV1() const {
-    return v1;
+Vertex* Edge::getVertex(int index) const {
+    return vertices[index];
 }
 
 void Edge::addOpposite(const Vertex* vertex) {
@@ -41,9 +36,9 @@ float Edge::getAngle() const {
 }
 
 void Edge::updateData() {
-    length = (v1->x - v0->x).norm();
+    length = (vertices[1]->x - vertices[0]->x).norm();
     if (adjacents.size() == 2) {
-        Vector3f e = (v0->x - v1->x).normalized();
+        Vector3f e = (vertices[0]->x - vertices[1]->x).normalized();
         Vector3f n0 = adjacents[0]->getNormal();
         Vector3f n1 = adjacents[1]->getNormal();
         float sine = e.dot(n0.cross(n1));

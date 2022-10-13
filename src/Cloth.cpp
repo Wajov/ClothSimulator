@@ -77,9 +77,9 @@ Vector2f Cloth::barycentricWeights(const Vector3f& x, const Vector3f& a, const V
 }
 
 std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face) const {
-    Vector3f x0 = face->getV0()->x;
-    Vector3f x1 = face->getV1()->x;
-    Vector3f x2 = face->getV2()->x;
+    Vector3f x0 = face->getVertex(0)->x;
+    Vector3f x1 = face->getVertex(1)->x;
+    Vector3f x2 = face->getVertex(2)->x;
     Vector3f d1 = x1 - x0;
     Vector3f d2 = x2 - x0;
     Vector3f n = face->getNormal();
@@ -114,8 +114,8 @@ std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face) const {
 }
 
 std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge) const {
-    Vector3f x0 = edge->getV0()->x;
-    Vector3f x1 = edge->getV1()->x;
+    Vector3f x0 = edge->getVertex(0)->x;
+    Vector3f x1 = edge->getVertex(1)->x;
     const std::vector<Vertex*>& opposites = edge->getOpposites();
     Vector3f x2 = opposites[0]->x;
     Vector3f x3 = opposites[1]->x;
@@ -133,7 +133,7 @@ std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge) const {
 
     Vector12f dtheta = concatenateToVector(-w0(0) * n0 / h0 - w1(0) * n1 / h1, -w0(1) * n0 / h0 - w1(1) * n1 / h1, n0 / h0, n1 / h1);
 
-    float k = material->bendingStiffness(length, angle, area, edge->getV1()->u - edge->getV0()->u);
+    float k = material->bendingStiffness(length, angle, area, edge->getVertex(1)->u - edge->getVertex(0)->u);
     float coefficient = -0.25f * k * length * length / area;
 
     return std::make_pair(coefficient * angle * dtheta, coefficient * dtheta * dtheta.transpose());
@@ -165,23 +165,23 @@ void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* win
     for (const Face* face : faces) {
         float area = face->getArea();
         Vector3f normal = face->getNormal();
-        Vector3f average = (face->getV0()->v + face->getV1()->v + face->getV2()->v) / 3.0f;
+        Vector3f average = (face->getVertex(0)->v + face->getVertex(1)->v + face->getVertex(2)->v) / 3.0f;
         Vector3f relative = wind->getVelocity() - average;
         float vn = normal.dot(relative);
         Vector3f vt = relative - vn * normal;
         Vector3f force = area * (wind->getDensity() * std::abs(vn) * vn * normal + wind->getDrag() * vt) / 3.0f;
-        b.block<3, 1>(3 * face->getV0()->index, 0) += dt * force;
-        b.block<3, 1>(3 * face->getV1()->index, 0) += dt * force;
-        b.block<3, 1>(3 * face->getV2()->index, 0) += dt * force;
+        b.block<3, 1>(3 * face->getVertex(0)->index, 0) += dt * force;
+        b.block<3, 1>(3 * face->getVertex(1)->index, 0) += dt * force;
+        b.block<3, 1>(3 * face->getVertex(2)->index, 0) += dt * force;
     }
 }
 
 void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
     const std::vector<Face*>& faces = mesh->getFaces();
     for (const Face* face : faces) {
-        Vertex* v0 = face->getV0();
-        Vertex* v1 = face->getV1();
-        Vertex* v2 = face->getV2();
+        Vertex* v0 = face->getVertex(0);
+        Vertex* v1 = face->getVertex(1);
+        Vertex* v2 = face->getVertex(2);
         Vector9f v = concatenateToVector(v0->v, v1->v, v2->v);
 
         std::pair<Vector9f, Matrix9x9f> pair = stretchingForce(face);
@@ -197,8 +197,8 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf&
     for (const Edge* edge : edges) {
         const std::vector<Vertex*>& opposites = edge->getOpposites();
         if (opposites.size() == 2) {
-            Vertex* v0 = edge->getV0();
-            Vertex* v1 = edge->getV1();
+            Vertex* v0 = edge->getVertex(0);
+            Vertex* v1 = edge->getVertex(1);
             Vertex* v2 = opposites[0];
             Vertex* v3 = opposites[1];
             Vector12f v = concatenateToVector(v0->v, v1->v, v2->v, v3->v);

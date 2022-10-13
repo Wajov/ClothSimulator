@@ -3,6 +3,7 @@
 
 #include "Bounds.hpp"
 #include "Face.hpp"
+#include "Impact.hpp"
 
 class BVHNode {
 private:
@@ -10,6 +11,7 @@ private:
     Bounds bounds;
     BVHNode* left, * right;
     bool active;
+    void checkImpacts(const Face* face0, const Face* face1, std::vector<Impact>& impacts) const;
 
 public:
     BVHNode(int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers);

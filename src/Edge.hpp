@@ -6,18 +6,18 @@
 #include "Vertex.hpp"
 #include "Face.hpp"
 
+class Face;
+
 class Edge {
 private:
-    Vertex* v0, * v1;
-    std::vector<Vertex*> opposites;
+    std::vector<Vertex*> vertices, opposites;
     std::vector<Face*> adjacents;
     float length, angle;
 
 public:
-    Edge(const Vertex* v0, const Vertex* v1);
+    Edge(const Vertex* vertex0, const Vertex* vertex1);
     ~Edge();
-    Vertex* getV0() const;
-    Vertex* getV1() const;
+    Vertex* getVertex(int index) const;
     void addOpposite(const Vertex* vertex);
     const std::vector<Vertex*>& getOpposites() const;
     void addAdjacent(const Face* face);

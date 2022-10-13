@@ -6,14 +6,12 @@ BVH::BVH(const Mesh* mesh, bool ccd) {
     std::vector<Bounds> bounds(n);
     std::vector<Vector3f> centers(n);
     for (int i = 0; i < n; i++) {
-        bounds[i] += faces[i]->getV0()->x;
-        bounds[i] += faces[i]->getV1()->x;
-        bounds[i] += faces[i]->getV2()->x;
+        for (int j = 0; j < 3; j++)
+            bounds[i] += faces[i]->getVertex(j)->x;
         if (ccd) {
             Bounds ccdBounds;
-            ccdBounds += faces[i]->getV0()->x0;
-            ccdBounds += faces[i]->getV1()->x0;
-            ccdBounds += faces[i]->getV2()->x0;
+            for (int j = 0; j < 3; j++)
+                ccdBounds += faces[i]->getVertex(j)->x0;
             centers[i] = 0.5f * (bounds[i].center() + ccdBounds.center());
             bounds[i] += ccdBounds;
         } else

@@ -51,14 +51,21 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform) {
                 index2 = std::stoi(s[3]) - 1;
             }
 
-            Vertex* v0 = &vertices[index0];
-            Vertex* v1 = &vertices[index1];
-            Vertex* v2 = &vertices[index2];
-            Face* face = new Face(v0, v1, v2);
+            Vertex* vertex0 = &vertices[index0];
+            Vertex* vertex1 = &vertices[index1];
+            Vertex* vertex2 = &vertices[index2];
+            Edge* edge0 = getEdge(vertex0, vertex1, edgeMap);
+            Edge* edge1 = getEdge(vertex1, vertex2, edgeMap);
+            Edge* edge2 = getEdge(vertex2, vertex0, edgeMap);
+            Face* face = new Face(vertex0, vertex1, vertex2);
 
-            addEdge(index0, index1, v2, face, edgeMap);
-            addEdge(index1, index2, v0, face, edgeMap);
-            addEdge(index2, index0, v1, face, edgeMap);
+            edge0->addOpposite(vertex2);
+            edge0->addAdjacent(face);
+            edge1->addOpposite(vertex0);
+            edge1->addAdjacent(face);
+            edge2->addOpposite(vertex1);
+            edge2->addAdjacent(face);
+            face->setEdges(edge0, edge1, edge2);
 
             faces.push_back(face);
 
@@ -128,19 +135,12 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     return ans;
 }
 
-void Mesh::addEdge(int index0, int index1, const Vertex* opposite, const Face* adjacent, std::map<std::pair<int, int>, int>& map) {
+Edge* Mesh::getEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::pair<int, int>, int>& edgeMap) const {
+    int index0 = vertex0->index;
+    int index1 = vertex1->index;
     std::pair<int, int> pair = index0 < index1 ? std::make_pair(index0, index1) : std::make_pair(index1, index0);
-    std::map<std::pair<int, int>, int>::const_iterator iter = map.find(pair);
-    if (iter != map.end()) {
-        edges[iter->second]->addOpposite(opposite);
-        edges[iter->second]->addAdjacent(adjacent);
-    } else {
-        map[pair] = edges.size();
-        Edge* edge = new Edge(&vertices[index0], &vertices[index1]);
-        edge->addOpposite(opposite);
-        edge->addAdjacent(adjacent);
-        edges.push_back(edge);
-    }
+    std::map<std::pair<int, int>, int>::const_iterator iter = edgeMap.find(pair);
+    return iter != edgeMap.end() ? edges[iter->second] : new Edge(vertex0, vertex1);
 }
 
 const std::vector<Vertex>& Mesh::getVertices() const {
@@ -186,12 +186,10 @@ void Mesh::updateData(const Material* material) {
     for (const Face* face : faces) {
         float m = face->getMass() / 3.0f;
         Vector3f n = face->getArea() * face->getNormal();
-        face->getV0()->m += m;
-        face->getV1()->m += m;
-        face->getV2()->m += m;
-        face->getV0()->n += n;
-        face->getV1()->n += n;
-        face->getV2()->n += n;
+        for (int i = 0; i < 3; i++) {
+            face->getVertex(i)->m += m;
+            face->getVertex(i)->n += n;
+        }
     }
     for (Vertex& vertex : vertices)
         vertex.n.normalized();
