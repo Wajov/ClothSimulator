@@ -46,25 +46,54 @@ BVHNode::~BVHNode() {
     delete right;
 }
 
-void BVHNode::checkImpacts(const Face* face0, const Face* face1, std::vector<Impact>& impacts) const {
+bool BVHNode::checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Vertex* vertex3, Impact& impact) const {
+    // TODO
+}
+
+bool BVHNode::checkVertexFaceImpact(const Vertex* vertex, const Face* face, float thickness, Impact& impact) const {
+    Vertex* vertex0 = face->getVertex(0);
+    Vertex* vertex1 = face->getVertex(1);
+    Vertex* vertex2 = face->getVertex(2);
+    if (vertex == vertex0 || vertex == vertex1 || vertex == vertex2)
+        return false;
+    if (!vertexBounds(vertex, true).overlap(faceBounds(face, true), thickness))
+        return false;
+    
+    return checkImpact(VertexFace, vertex, vertex0, vertex1, vertex2, impact);
+}
+
+bool BVHNode::checkEdgeEdgeImpact(const Edge* edge0, const Edge* edge1, float thickness, Impact& impact) const {
+    Vertex* vertex0 = edge0->getVertex(0);
+    Vertex* vertex1 = edge0->getVertex(1);
+    Vertex* vertex2 = edge1->gerVertex(0);
+    Vertex* vertex3 = edge1->getVertex(1);
+    if (vertex0 == vertex2 || vertex0 == vertex3 || vertex1 == vertex2 || vertex1 == vertex3)
+        return false;
+    if (!edgeBounds(edge0, true).overlap(edgeBounds(edge1, true), thickness))
+        return false;
+    
+    return checkImpact(EdgeEdge, vertex0, vertex1, vertex2, vertex3, impact);
+}
+
+void BVHNode::checkImpacts(const Face* face0, const Face* face1, float thickness, std::vector<Impact>& impacts) const {
     Impact impact;
-    // for (int i = 0; i < 3; i++)
-    //     if (checkVertexFaceCollision(face0->getVertex(i), face1, impact))
-    //         impacts.push_back(impact);
-    // for (int i = 0; i < 3; i++)
-    //     if (checkVertexFaceCollision(face1->getVertex(i), face0, impact))
-    //         impacts.push_back(impact);
-    // for (int i = 0; i < 3; i++)
-    //     for (int j = 0; j < 3; j++)
-    //         if (checkEdgeEdgeCollision(face0->getEdge(i), face1->getEdge(j), impact))
-    //             impacts.push_back(impact);
+    for (int i = 0; i < 3; i++)
+        if (checkVertexFaceCollision(face0->getVertex(i), face1, thickness, impact))
+            impacts.push_back(impact);
+    for (int i = 0; i < 3; i++)
+        if (checkVertexFaceCollision(face1->getVertex(i), face0, thickness, impact))
+            impacts.push_back(impact);
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            if (checkEdgeEdgeCollision(face0->getEdge(i), face1->getEdge(j), thickness, impact))
+                impacts.push_back(impact);
 }
 
 inline bool BVHNode::isLeaf() const {
     return left == nullptr && right == nullptr;
 }
 
-void BVHNode::getImpacts(float thickness, std::vector<Impact>& impacts) const {
+void BVHNode::getImpacts(const BVHNode* bvhNode, float thickness, std::vector<Impact>& impacts) const {
     if (isLeaf() || !active)
         return;
 
@@ -80,7 +109,7 @@ void BVHNode::getImpacts(const BVHNode* bvhNode, float thickness, std::vector<Im
         return;
 
     if (isLeaf() && bvhNode->isLeaf())
-        checkImpacts(face, bvhNode->face, impacts);
+        checkImpacts(face, bvhNode->face, thickness, impacts);
     else if (isLeaf()) {
         getImpacts(bvhNode->left, thickness, impacts);
         getImpacts(bvhNode->right, thickness, impacts);

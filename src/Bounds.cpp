@@ -56,7 +56,7 @@ Bounds Bounds::dilate(float thickness) const {
     return ans;
 }
 
-bool Bounds::overlap(const Bounds& b) const {
+bool Bounds::overlap(const Bounds& b, float thickness) const {
     for (int i = 0; i < 3; i++) {
         if (pMin(i) > b.pMax(i))
             return false;
@@ -69,4 +69,16 @@ bool Bounds::overlap(const Bounds& b) const {
 
 bool Bounds::overlap(const Bounds& b, float thickness) const {
     return overlap(b.dilate(thickness));
+}
+
+Bounds Bounds::vertexBounds(const Vertex* vertex, bool ccd) {
+    // TODO
+}
+
+Bounds Bounds::edgeBounds(const Edge* edge, bool ccd) {
+    // TODO
+}
+
+Bounds Bounds::faceBounds(const Face* face, bool ccd) {
+    // TODO
 }

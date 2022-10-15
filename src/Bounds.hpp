@@ -21,6 +21,9 @@ public:
     Bounds dilate(float thickness) const;
     bool overlap(const Bounds& b) const;
     bool overlap(const Bounds& b, float thickness) const;
+    static Bounds vertexBounds(const Vertex* vertex, bool ccd);
+    static Bounds edgeBounds(const Edge* edge, bool ccd);
+    static Bounds faceBounds(const Face* face, bool ccd);
 };
 
 #endif
