@@ -158,7 +158,7 @@ const std::vector<Face*>& Mesh::getFaces() const {
 void Mesh::readDataFromFile(const std::string& path) {
     std::ifstream fin("input.txt");
     for (Vertex& vertex : vertices)
-        fin >> vertex.x(0) >> vertex.x(1) >> vertex.x(2) >> vertex.v(0) >> vertex.v(1) >> vertex.v(2);
+        fin >> vertex.x0(0) >> vertex.x0(1) >> vertex.x0(2) >> vertex.x(0) >> vertex.x(1) >> vertex.x(2) >> vertex.v(0) >> vertex.v(1) >> vertex.v(2);
     fin.close();
 }
 

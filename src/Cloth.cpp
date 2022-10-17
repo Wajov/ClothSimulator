@@ -260,19 +260,17 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind) {
 
     mesh->update(dt, dv);
 
-    // std::ofstream fout("output.txt");
-    // fout.precision(20);
-    // for (int i = 0; i < A.rows(); i++) {
-    //     for (int j = 0; j < A.cols(); j++)
-    //         fout << A.coeff(i, j) << ' ';
-    //     fout << std::endl;
-    // }
-    // for (int i = 0; i < b.rows(); i++)
-    //     fout << b(i) << ' ' ;
-    // fout << std::endl;
-    // fout.close();
-
-    // exit(0);
+    std::ofstream fout("output.txt");
+    fout.precision(20);
+    for (int i = 0; i < A.rows(); i++) {
+        for (int j = 0; j < A.cols(); j++)
+            fout << A.coeff(i, j) << ' ';
+        fout << std::endl;
+    }
+    for (int i = 0; i < b.rows(); i++)
+        fout << b(i) << ' ' ;
+    fout << std::endl;
+    fout.close();
 }
 
 void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {

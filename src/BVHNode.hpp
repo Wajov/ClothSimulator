@@ -11,6 +11,8 @@ private:
     Bounds bounds;
     BVHNode* left, * right;
     bool active;
+    float signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w) const;
+    float signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float* w) const;
     bool checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Vertex* vertex3, Impact& impact) const;
     bool checkVertexFaceImpact(const Vertex* vertex, const Face* face, float thickness, Impact& impact) const;
     bool checkEdgeEdgeImpact(const Edge* edge0, const Edge* edge1, float thickness, Impact& impact) const;

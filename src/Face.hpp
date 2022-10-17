@@ -3,6 +3,7 @@
 
 #include "TypeHelper.hpp"
 #include "MathHelper.hpp"
+#include "Bounds.hpp"
 #include "Vertex.hpp"
 #include "Edge.hpp"
 #include "Material.hpp"
@@ -27,6 +28,7 @@ public:
     Matrix3x3f getInverse() const;
     float getArea() const;
     float getMass() const;
+    Bounds bounds(bool ccd) const;
     void updateData(const Material* material);
 };
 

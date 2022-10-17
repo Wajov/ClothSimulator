@@ -3,6 +3,7 @@
 
 #include <vector>
 
+#include "Bounds.hpp"
 #include "Vertex.hpp"
 #include "Face.hpp"
 
@@ -24,6 +25,7 @@ public:
     const std::vector<Face*>& getAdjacents() const;
     float getLength() const;
     float getAngle() const;
+    Bounds bounds(bool ccd) const;
     void updateData();
 };
 

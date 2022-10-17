@@ -25,7 +25,7 @@ Simulator::Simulator(const std::string& path) {
 
     fin.close();
 
-    // cloths[0]->readDataFromFile("input.txt");
+    cloths[0]->readDataFromFile("input.txt");
 }
 
 Simulator::~Simulator() {
@@ -50,7 +50,6 @@ void Simulator::getImpacts(const std::vector<BVH*>& clothBvhs, const std::vector
         for (int j = 0; j < obstacleBvhs.size(); j++)
             clothBvhs[i]->getImpacts(obstacleBvhs[j], COLLISION_THICKNESS, impacts);
     }
-    // TODO
 }
 
 void Simulator::collisionStep() {
@@ -62,6 +61,13 @@ void Simulator::collisionStep() {
 
     std::vector<Impact> impacts;
     getImpacts(clothBvhs, obstacleBvhs, impacts);
+
+    std::ofstream fout("output_impacts.txt");
+    for (const Impact& impact : impacts) {
+        for (int i = 0; i < 4; i++)
+            fout << impact.vertices[i]->index << ' ';
+        fout << std::endl;
+    }
     // TODO
 }
 
@@ -74,7 +80,8 @@ void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Ma
 }
 
 void Simulator::step() {
-    physicsStep();
-    
+    // physicsStep();
+    collisionStep();
+    exit(0);
     // TODO
 }

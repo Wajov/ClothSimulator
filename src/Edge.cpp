@@ -35,6 +35,17 @@ float Edge::getAngle() const {
     return angle;
 }
 
+Bounds Edge::bounds(bool ccd) const {
+    Bounds ans;
+    for (int i = 0; i < 2; i++) {
+        const Vertex* vertex = vertices[i];
+        ans += vertex->x;
+        if (ccd)
+            ans += vertex->x0;
+    }
+    return ans;
+}
+
 void Edge::updateData() {
     length = (vertices[1]->x - vertices[0]->x).norm();
     if (adjacents.size() == 2) {

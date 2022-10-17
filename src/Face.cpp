@@ -38,6 +38,17 @@ float Face::getMass() const {
     return mass;
 }
 
+Bounds Face::bounds(bool ccd) const {
+    Bounds ans;
+    for (int i = 0; i < 3; i++) {
+        const Vertex* vertex = vertices[i];
+        ans += vertex->x;
+        if (ccd)
+            ans += vertex->x0;
+    }
+    return ans;
+}
+
 void Face::updateData(const Material* material) {
     Vector3f d1, d2;
 

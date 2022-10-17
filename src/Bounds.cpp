@@ -38,9 +38,9 @@ Vector3f Bounds::center() const {
 
 int Bounds::longestIndex() const {
     Vector3f d = pMax - pMin;
-    if (d(0) > d(1) && d(0) > d(2))
+    if (d(0) >= d(1) && d(0) >= d(2))
         return 0;
-    else if (d(1) > d(0) && d(1) > d(2))
+    else if (d(1) >= d(0) && d(1) >= d(2))
         return 1;
     else
         return 2;
@@ -56,7 +56,7 @@ Bounds Bounds::dilate(float thickness) const {
     return ans;
 }
 
-bool Bounds::overlap(const Bounds& b, float thickness) const {
+bool Bounds::overlap(const Bounds& b) const {
     for (int i = 0; i < 3; i++) {
         if (pMin(i) > b.pMax(i))
             return false;
@@ -71,14 +71,3 @@ bool Bounds::overlap(const Bounds& b, float thickness) const {
     return overlap(b.dilate(thickness));
 }
 
-Bounds Bounds::vertexBounds(const Vertex* vertex, bool ccd) {
-    // TODO
-}
-
-Bounds Bounds::edgeBounds(const Edge* edge, bool ccd) {
-    // TODO
-}
-
-Bounds Bounds::faceBounds(const Face* face, bool ccd) {
-    // TODO
-}
