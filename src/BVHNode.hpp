@@ -9,7 +9,7 @@ class BVHNode {
 private:
     Face* face;
     Bounds bounds;
-    BVHNode* left, * right;
+    BVHNode* parent, * left, * right;
     bool active;
     float signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w) const;
     float signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float* w) const;
@@ -19,11 +19,14 @@ private:
     void checkImpacts(const Face* face0, const Face* face1, float thickness, std::vector<Impact>& impacts) const;
 
 public:
-    BVHNode(int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers);
+    BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Face*, BVHNode*>& leaves);
     ~BVHNode();
     inline bool isLeaf() const;
+    void setActiveUp(bool active);
+    void setActiveDown(bool active);
     void findImpacts(float thickness, std::vector<Impact>& impacts) const;
     void findImpacts(const BVHNode* bvhNode, float thickness, std::vector<Impact>& impacts) const;
+    void update(bool ccd);
 };
 
 #endif

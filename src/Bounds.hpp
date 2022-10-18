@@ -13,7 +13,9 @@ private:
 
 public:
     Bounds();
+    Bounds(const Vector3f& pMin, const Vector3f& pMax);
     ~Bounds();
+    Bounds operator+(const Bounds& b) const;
     void operator+=(const Vector3f& v);
     void operator+=(const Bounds& b);
     Vector3f center() const;

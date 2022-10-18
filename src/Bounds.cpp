@@ -4,6 +4,10 @@ Bounds::Bounds() :
     pMin(FLT_MAX, FLT_MAX, FLT_MAX),
     pMax(-FLT_MAX, -FLT_MAX, -FLT_MAX) {}
 
+Bounds::Bounds(const Vector3f& pMin, const Vector3f& pMax) :
+    pMin(pMin),
+    pMax(pMax) {}
+
 Bounds::~Bounds() {}
 
 Vector3f Bounds::minVector(const Vector3f& a, const Vector3f& b) const {
@@ -20,6 +24,10 @@ Vector3f Bounds::maxVector(const Vector3f& a, const Vector3f& b) const {
         ans(i) = std::max(a(i), b(i));
     
     return ans;
+}
+
+Bounds Bounds::operator+(const Bounds& b) const {
+    return Bounds(minVector(pMin, b.pMin), maxVector(pMax, b.pMax));
 }
 
 void Bounds::operator+=(const Vector3f& v) {
@@ -70,4 +78,3 @@ bool Bounds::overlap(const Bounds& b) const {
 bool Bounds::overlap(const Bounds& b, float thickness) const {
     return overlap(b.dilate(thickness));
 }
-

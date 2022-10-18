@@ -1,6 +1,8 @@
 #include "Simulator.hpp"
 
-Simulator::Simulator(const std::string& path) {
+Simulator::Simulator(const std::string& path) :
+    COLLISION_THICKNESS(1e-4f),
+    MAX_ITERATION(30) {
     std::ifstream fin(path);
     if (!fin.is_open()) {
         std::cerr << "Failed to open configuration file: " << path << std::endl;
@@ -36,24 +38,6 @@ Simulator::~Simulator() {
         delete obstacle;
 }
 
-void Simulator::physicsStep() {
-    for (Cloth* cloth : cloths)
-        cloth->physicsStep(dt, gravity, wind);
-    for (Cloth* cloth : cloths)
-        cloth->update();
-}
-
-void Simulator::findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, std::vector<Impact>& impacts) const {
-    for (int i = 0; i < clothBvhs.size(); i++) {
-        clothBvhs[i]->findImpacts(COLLISION_THICKNESS, impacts);
-        for (int j = 0; j < i; j++)
-            clothBvhs[i]->findImpacts(clothBvhs[j], COLLISION_THICKNESS, impacts);
-        
-        for (int j = 0; j < obstacleBvhs.size(); j++)
-            clothBvhs[i]->findImpacts(obstacleBvhs[j], COLLISION_THICKNESS, impacts);
-    }
-}
-
 void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const {
     for (BVH* clothBvh : clothBvhs)
         clothBvh->setAllActive(false);
@@ -67,12 +51,84 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
         for (const Vertex* vertex : vertices) {
             for (BVH* clothBvh : clothBvhs)
                 if (clothBvh->contain(vertex))
-                    clothBvh->setActive(vertex);
+                    clothBvh->setActive(vertex, true);
             for (BVH* obstacleBvh : obstacleBvhs)
                 if (obstacleBvh->contain(vertex))
-                    obstacleBvh->setActive(vertex);
+                    obstacleBvh->setActive(vertex, true);
         }
     }
+}
+
+void Simulator::findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, std::vector<Impact>& impacts) const {
+    for (int i = 0; i < clothBvhs.size(); i++) {
+        clothBvhs[i]->findImpacts(COLLISION_THICKNESS, impacts);
+        for (int j = 0; j < i; j++)
+            clothBvhs[i]->findImpacts(clothBvhs[j], COLLISION_THICKNESS, impacts);
+        
+        for (int j = 0; j < obstacleBvhs.size(); j++)
+            clothBvhs[i]->findImpacts(obstacleBvhs[j], COLLISION_THICKNESS, impacts);
+    }
+}
+
+std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& impacts) const {
+    std::vector<Impact> sorted = impacts;
+    std::sort(sorted.begin(), sorted.end());
+    
+    std::vector<Impact> ans;
+    for (const Impact& impact : sorted) {
+        bool conflict = false;
+        for (const Impact& independentImpact : ans)
+            if (impact.conflict(independentImpact)) {
+                conflict = true;
+                break;
+            }
+        if (!conflict)
+            ans.push_back(impact);
+    }
+    return ans;
+}
+
+ImpactZone* Simulator::findImpactZone(const Vertex* vertex, std::vector<ImpactZone*>& zones) const {
+    for (ImpactZone* zone : zones)
+        if (zone->contain(vertex))
+            return zone;
+
+    ImpactZone* zone = new ImpactZone();
+    zone->addVertex(vertex);
+    zones.push_back(zone);
+    return zone;
+}
+
+void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<ImpactZone*>& zones, bool deformObstacles) const {
+    for (ImpactZone* zone : zones)
+        zone->setActive(false);
+    
+    for (const Impact& impact : impacts) {
+        ImpactZone* zone = nullptr;
+        for (int i = 0; i < 4; i++) {
+            Vertex* vertex = impact.vertices[i];
+            if (vertex->isFree || deformObstacles) {
+                if (zone == nullptr)
+                    zone = findImpactZone(vertex, zones);
+                else {
+                    ImpactZone* zoneTemp = findImpactZone(vertex, zones);
+                    if (zone != zoneTemp)
+                        zone->merge(zoneTemp);
+                    std::remove(zones.begin(), zones.end(), zoneTemp);
+                    delete zoneTemp;
+                }
+            }
+        }
+        zone->addImpact(impact);
+        zone->setActive(true);
+    }
+}
+
+void Simulator::physicsStep() {
+    for (Cloth* cloth : cloths)
+        cloth->physicsStep(dt, gravity, wind);
+    for (Cloth* cloth : cloths)
+        cloth->update();
 }
 
 void Simulator::collisionStep() {
@@ -92,11 +148,11 @@ void Simulator::collisionStep() {
     // }
     
     std::vector<ImpactZone*> zones;
-    obstacleMass = 1e3f;
+    float obstacleMass = 1e3f;
     for (int deform = 0; deform < 2; deform++) {
         zones.clear();
         bool success = false;
-        for (int i = 0; i < MAXIMUM_ITERATION; i++) {
+        for (int i = 0; i < MAX_ITERATION; i++) {
             if (!zones.empty())
                 updateActive(clothBvhs, obstacleBvhs, zones);
             
@@ -108,10 +164,10 @@ void Simulator::collisionStep() {
                 break;
             }
 
-            addImpacts(impacts, zones);
+            addImpacts(impacts, zones, deform == 1);
             for (const ImpactZone* zone : zones)
                 if (zone->getActive()) {
-                    Optimization optimization = new CollisionOptimization(zone);
+                    Optimization* optimization = new ImpactZoneOptimization(zone);
                     augmentedLagrangianMethod(optimization);
                     delete optimization;
                 }

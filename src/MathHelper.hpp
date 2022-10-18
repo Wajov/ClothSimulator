@@ -1,7 +1,20 @@
 #ifndef MATH_HELPER_HPP
 #define MATH_HELPER_HPP
 
+#include <vector>
+
 #include "TypeHelper.hpp"
+#include "optimization/Optimization.hpp"
+
+const int MAX_TOTAL_ITERATIONS = 100;
+const int MAX_SUB_ITERATIONS = 10;
+const double EPSILON_G = 1e-6;
+const double EPSILON_F = 1e-12;
+const double EPSILON_X = 1e-6;
+
+static Optimization* optimization;
+static std::vector<float> lambda;
+static float mu;
 
 static float sign(float x) {
     return x < 0.0f ? -1.0f : 1.0f;
@@ -113,6 +126,34 @@ static int solveCubic(float a, float b, float c, float d, float x[]) {
             x[i++] = newtonsMethod(a, b, c, d, xc[1], 1);
         return i;
     }
+}
+
+static void augmentedLagrangianMethod(Optimization* optimization) {
+    ::optimization = optimization;
+    lambda.assign(nConstraints, 0.0f);
+    mu = 1e3f;
+    alglib::real_1d_array x;
+    x.setlength(nVariables);
+    ::optimization->initialize(x.getcontent());
+    alglib::mincgstate state;
+    alglib::mincgreport report;
+    alglib::mincgcreate(x, state);
+    
+    int iter = 0;
+    while (iter < MAX_TOTAL_ITERATIONS) {
+        int maxIterations = std::min(MAX_SUB_ITERATIONS, MAX_TOTAL_ITERATIONS - iter);
+        alglib::mincgsetcond(state, EPSILON_G, EPSILON_F, EPSILON_X, maxIterations);
+        if (iter > 0)
+            alglib::mincgrestartfrom(state, x);
+        alglib::mincgsuggeststep(state, 1e-3 * nVariables);
+        alglib::mincgoptimize(state, valueAndGradient);
+        alglib::mincgresults(state, x, report);
+        updateMultiplier(x);
+        if (report.iterationscount == 0)
+            break;
+        iter += report.iterationscount;
+    }
+    ::optimization->finalize(x.getcontent());
 }
 
 #endif

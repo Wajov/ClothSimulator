@@ -55,6 +55,8 @@ Renderer::~Renderer() {
 }
 
 void Renderer::framebufferSizeCallback(int width, int height) {
+    this->width = width;
+    this->height = height;
     glViewport(0, 0, width, height);
 }
 

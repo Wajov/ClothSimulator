@@ -1,6 +1,7 @@
 #include "BVHNode.hpp"
 
-BVHNode::BVHNode(int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers) {
+BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Face*, BVHNode*>& leaves) : 
+    parent(parent) {
     face = nullptr;
     active = true;
     if (l == r) {
@@ -8,13 +9,14 @@ BVHNode::BVHNode(int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& b
         this->bounds = bounds[l];
         left = nullptr;
         right = nullptr;
+        leaves[face] = this;
     } else {
         for (int i = l; i <= r; i++)
             this->bounds += bounds[i];
         
         if (r - l == 1) {
-            left = new BVHNode(l, l, faces, bounds, centers);
-            right = new BVHNode(r, r, faces, bounds, centers);
+            left = new BVHNode(this, l, l, faces, bounds, centers, leaves);
+            right = new BVHNode(this, r, r, faces, bounds, centers, leaves);
         } else {
             Vector3f center = this->bounds.center();
             int index = this->bounds.longestIndex();
@@ -30,12 +32,12 @@ BVHNode::BVHNode(int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& b
                 }
 
             if (lt > l && lt < r) {
-                left = new BVHNode(l, rt, faces, bounds, centers);
-                right = new BVHNode(lt, r, faces, bounds, centers);
+                left = new BVHNode(this, l, rt, faces, bounds, centers, leaves);
+                right = new BVHNode(this, lt, r, faces, bounds, centers, leaves);
             } else {
                 int mid = l + r >> 1;
-                left = new BVHNode(l, mid, faces, bounds, centers);
-                right = new BVHNode(mid + 1, r, faces, bounds, centers);
+                left = new BVHNode(this, l, mid, faces, bounds, centers, leaves);
+                right = new BVHNode(this, mid + 1, r, faces, bounds, centers, leaves);
             }
         }
     }
@@ -190,6 +192,20 @@ inline bool BVHNode::isLeaf() const {
     return left == nullptr && right == nullptr;
 }
 
+void BVHNode::setActiveUp(bool active) {
+    this->active = active;
+    if (parent != nullptr)
+        setActiveUp(active);
+}
+
+void BVHNode::setActiveDown(bool active) {
+    this->active = active;
+    if (!isLeaf()) { 
+        left->setActiveDown(active);
+        right->setActiveDown(active);
+    }
+}
+
 void BVHNode::findImpacts(float thickness, std::vector<Impact>& impacts) const {
     if (isLeaf() || !active)
         return;
@@ -213,5 +229,15 @@ void BVHNode::findImpacts(const BVHNode* bvhNode, float thickness, std::vector<I
     } else {
         left->findImpacts(bvhNode, thickness, impacts);
         right->findImpacts(bvhNode, thickness, impacts);
+    }
+}
+
+void BVHNode::update(bool ccd) {
+    if (isLeaf())
+        bounds = face->bounds(ccd);
+    else {
+        left->update(ccd);
+        right->update(ccd);
+        bounds = left->bounds + right->bounds;
     }
 }

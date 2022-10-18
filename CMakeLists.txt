@@ -36,6 +36,9 @@ endif()
 # Eigen
 find_package(Eigen3 REQUIRED)
 
+# ALGLIB
+add_subdirectory(lib/alglib)
+
 # CUDA
 find_package(CUDA REQUIRED)
 
@@ -51,6 +54,7 @@ if (WIN32)
                 glad
                 glfw
                 JsonCpp::JsonCpp
+                alglib
         )
 else()
         target_link_libraries(
@@ -58,5 +62,6 @@ else()
                 glad
                 glfw
                 jsoncpp
+                alglib
         )
 endif()

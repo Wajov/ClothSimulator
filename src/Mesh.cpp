@@ -7,6 +7,7 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
         exit(1);
     }
 
+    bool isFree = (material != nullptr);
     std::string line;
     std::vector<Vector3f> u;
     std::vector<int> vertexMap;
@@ -16,7 +17,7 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
         if (s[0] == "v") {
             Vector3f x(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]));
             x = transform->applyTo(x);
-            vertices.emplace_back(vertices.size(), x);
+            vertices.emplace_back(vertices.size(), x, isFree);
             vertexMap.push_back(-1);
         } else if (s[0] == "vt") {
             if (s.size() == 4)

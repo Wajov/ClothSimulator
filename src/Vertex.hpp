@@ -9,7 +9,8 @@ public:
     int index;
     Vector3f x0, x, n, u, v;
     float m;
-    Vertex(int index, const Vector3f& x);
+    bool isFree;
+    Vertex(int index, const Vector3f& x, bool isFree);
     ~Vertex();
     Bounds bounds(bool ccd) const;
     Vector3f position(float t) const;

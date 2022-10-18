@@ -13,18 +13,21 @@
 
 class BVH {
 private:
+    bool ccd;
     BVHNode* root;
     std::unordered_set<Vertex*> vertices;
     std::unordered_map<Vertex*, std::vector<Face*>> adjacents;
+    std::unordered_map<Face*, BVHNode*> leaves;
 
 public:
     BVH(const Mesh* mesh, bool ccd);
     ~BVH();
     bool contain(const Vertex* vertex) const;
-    void setAllActive(const Vertex* vertex);
-    void setActive(const Vertex* vertex);
+    void setAllActive(bool active);
+    void setActive(const Vertex* vertex, bool active);
     void findImpacts(float thickness, std::vector<Impact>& impacts) const;
     void findImpacts(const BVH* bvh, float thickness, std::vector<Impact>& impacts) const;
+    void update();
 };
 
 #endif

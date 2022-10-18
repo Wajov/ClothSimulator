@@ -15,6 +15,9 @@ public:
     Vector3f n;
     Impact();
     ~Impact();
+    bool operator<(const Impact& impact) const;
+    bool contain(const Vertex* vertex) const;
+    bool conflict(const Impact& impact) const;
 };
 
 #endif
