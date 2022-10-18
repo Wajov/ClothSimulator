@@ -49,7 +49,7 @@ Bounds Face::bounds(bool ccd) const {
     return ans;
 }
 
-void Face::updateData(const Material* material) {
+void Face::update(const Material* material) {
     Vector3f d1, d2;
 
     d1 = vertices[1]->x - vertices[0]->x;
@@ -59,5 +59,6 @@ void Face::updateData(const Material* material) {
     d1 = vertices[1]->u - vertices[0]->u;
     d2 = vertices[2]->u - vertices[0]->u;
     area = 0.5f * d1.cross(d2).norm();
-    mass = material->getDensity() * material->getThicken() * area;
+    if (material != nullptr)
+        mass = material->getDensity() * material->getThicken() * area;
 }

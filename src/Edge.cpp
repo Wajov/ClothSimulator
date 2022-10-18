@@ -46,7 +46,7 @@ Bounds Edge::bounds(bool ccd) const {
     return ans;
 }
 
-void Edge::updateData() {
+void Edge::update() {
     length = (vertices[1]->x - vertices[0]->x).norm();
     if (adjacents.size() == 2) {
         Vector3f e = (vertices[0]->x - vertices[1]->x).normalized();

@@ -41,8 +41,9 @@ public:
     ~Cloth();
     Mesh* getMesh() const;
     void readDataFromFile(const std::string& path);
-    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const;
     void physicsStep(float dt, const Vector3f& gravity, const Wind* wind);
+    void update();
+    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const;
 };
 
 #endif

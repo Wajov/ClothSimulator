@@ -1,6 +1,6 @@
 #include "Mesh.hpp"
 
-Mesh::Mesh(const Json::Value &json, const Transform* transform) {
+Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* material) {
     std::ifstream fin(json.asString());
     if (!fin.is_open()) {
         std::cerr << "Failed to open mesh file: " << json.asString() << std::endl;
@@ -83,6 +83,8 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform) {
     }
     fin.close();
 
+    update(material);
+
     unsigned int edgeEbo, faceEbo;
 
     glGenBuffers(1, &vbo);
@@ -143,15 +145,15 @@ Edge* Mesh::getEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::
     return iter != edgeMap.end() ? edges[iter->second] : new Edge(vertex0, vertex1);
 }
 
-const std::vector<Vertex>& Mesh::getVertices() const {
+std::vector<Vertex>& Mesh::getVertices() {
     return vertices;
 }
 
-const std::vector<Edge*>& Mesh::getEdges() const {
+std::vector<Edge*>& Mesh::getEdges() {
     return edges;
 }
 
-const std::vector<Face*>& Mesh::getFaces() const {
+std::vector<Face*>& Mesh::getFaces() {
     return faces;
 }
 
@@ -162,23 +164,11 @@ void Mesh::readDataFromFile(const std::string& path) {
     fin.close();
 }
 
-void Mesh::renderEdge() const {
-    glBindVertexArray(edgeVao);
-    glDrawElements(GL_LINES, edgeIndices.size(), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}
-
-void Mesh::renderFace() const {
-    glBindVertexArray(faceVao);
-    glDrawElements(GL_TRIANGLES, faceIndices.size(), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}
-
-void Mesh::updateData(const Material* material) {
+void Mesh::update(const Material* material) {
     for (Face* face : faces)
-        face->updateData(material);
+        face->update(material);
     for (Edge* edge : edges)
-        edge->updateData();
+        edge->update();
     for (Vertex& vertex : vertices) {
         vertex.m = 0.0f;
         vertex.n = Vector3f(0.0f, 0.0f, 0.0f);
@@ -195,13 +185,19 @@ void Mesh::updateData(const Material* material) {
         vertex.n.normalized();
 }
 
-void Mesh::update(float dt, const VectorXf& dv) {
-    for (int i = 0; i < vertices.size(); i++) {
-        vertices[i].x0 = vertices[i].x;
-        vertices[i].v += dv.block<3, 1>(3 * i, 0);
-        vertices[i].x += vertices[i].v * dt;
-    }
-
+void Mesh::updateRenderingData() const {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW);
+}
+
+void Mesh::renderEdge() const {
+    glBindVertexArray(edgeVao);
+    glDrawElements(GL_LINES, edgeIndices.size(), GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}
+
+void Mesh::renderFace() const {
+    glBindVertexArray(faceVao);
+    glDrawElements(GL_TRIANGLES, faceIndices.size(), GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
 }

@@ -26,7 +26,7 @@ public:
     float getLength() const;
     float getAngle() const;
     Bounds bounds(bool ccd) const;
-    void updateData();
+    void update();
 };
 
 #endif

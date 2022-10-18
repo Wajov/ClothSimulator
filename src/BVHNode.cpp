@@ -117,9 +117,8 @@ bool BVHNode::checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* 
     if (std::abs(a0) < 1e-6f * x1.norm() * x2.norm() * x3.norm())
         return false;
 
-    float t[4];
+    float t[3];
     int nSolution = solveCubic(a3, a2, a1, a0, t);
-    t[nSolution] = 1.0f;
     for (int i = 0; i < nSolution; i++) {
         if (t[i] < 0.0f || t[i] > 1.0f)
             continue;
@@ -191,16 +190,16 @@ inline bool BVHNode::isLeaf() const {
     return left == nullptr && right == nullptr;
 }
 
-void BVHNode::getImpacts(float thickness, std::vector<Impact>& impacts) const {
+void BVHNode::findImpacts(float thickness, std::vector<Impact>& impacts) const {
     if (isLeaf() || !active)
         return;
 
-    left->getImpacts(thickness, impacts);
-    right->getImpacts(thickness, impacts);
-    left->getImpacts(right, thickness, impacts);
+    left->findImpacts(thickness, impacts);
+    right->findImpacts(thickness, impacts);
+    left->findImpacts(right, thickness, impacts);
 }
 
-void BVHNode::getImpacts(const BVHNode* bvhNode, float thickness, std::vector<Impact>& impacts) const {
+void BVHNode::findImpacts(const BVHNode* bvhNode, float thickness, std::vector<Impact>& impacts) const {
     if (!active && !bvhNode->active)
         return;
     if (!bounds.overlap(bvhNode->bounds, thickness))
@@ -209,10 +208,10 @@ void BVHNode::getImpacts(const BVHNode* bvhNode, float thickness, std::vector<Im
     if (isLeaf() && bvhNode->isLeaf())
         checkImpacts(face, bvhNode->face, thickness, impacts);
     else if (isLeaf()) {
-        getImpacts(bvhNode->left, thickness, impacts);
-        getImpacts(bvhNode->right, thickness, impacts);
+        findImpacts(bvhNode->left, thickness, impacts);
+        findImpacts(bvhNode->right, thickness, impacts);
     } else {
-        left->getImpacts(bvhNode, thickness, impacts);
-        right->getImpacts(bvhNode, thickness, impacts);
+        left->findImpacts(bvhNode, thickness, impacts);
+        right->findImpacts(bvhNode, thickness, impacts);
     }
 }

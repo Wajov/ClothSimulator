@@ -29,7 +29,7 @@ public:
     float getArea() const;
     float getMass() const;
     Bounds bounds(bool ccd) const;
-    void updateData(const Material* material);
+    void update(const Material* material);
 };
 
 #endif

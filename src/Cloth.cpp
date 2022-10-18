@@ -2,10 +2,10 @@
 
 Cloth::Cloth(const Json::Value& json) {
     Transform* transform = new Transform(json["transform"]);
-    mesh = new Mesh(json["mesh"], transform);
     material = new Material(json["materials"]);
+    mesh = new Mesh(json["mesh"], transform, material);
 
-    const std::vector<Vertex>& vertices = mesh->getVertices();
+    std::vector<Vertex>& vertices = mesh->getVertices();
     for (const Json::Value& handleJson : json["handles"])
         for (const Json::Value& nodeJson : handleJson["nodes"]) {
             int index = parseInt(nodeJson);
@@ -140,7 +140,7 @@ std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge) const {
 }
 
 void Cloth::init(Eigen::SparseMatrix<float>& A, VectorXf& b) const {
-    const std::vector<Vertex>& vertices = mesh->getVertices();
+    std::vector<Vertex>& vertices = mesh->getVertices();
     int n = vertices.size();
 
     A.resize(3 * n, 3 * n);
@@ -157,11 +157,11 @@ void Cloth::init(Eigen::SparseMatrix<float>& A, VectorXf& b) const {
 }
 
 void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
-    const std::vector<Vertex>& vertices = mesh->getVertices();
+    std::vector<Vertex>& vertices = mesh->getVertices();
     for (const Vertex& vertex : vertices)
         b.block<3, 1>(3 * vertex.index, 0) += dt * vertex.m * gravity;
 
-    const std::vector<Face*>& faces = mesh->getFaces();
+    std::vector<Face*>& faces = mesh->getFaces();
     for (const Face* face : faces) {
         float area = face->getArea();
         Vector3f normal = face->getNormal();
@@ -177,7 +177,7 @@ void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* win
 }
 
 void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
-    const std::vector<Face*>& faces = mesh->getFaces();
+    std::vector<Face*>& faces = mesh->getFaces();
     for (const Face* face : faces) {
         Vertex* v0 = face->getVertex(0);
         Vertex* v1 = face->getVertex(1);
@@ -193,7 +193,7 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf&
         addSubVector(dt * (f + dt * J * v), vertexIndices, b);
     }
 
-    const std::vector<Edge*>& edges = mesh->getEdges();
+    std::vector<Edge*>& edges = mesh->getEdges();
     for (const Edge* edge : edges) {
         const std::vector<Vertex*>& opposites = edge->getOpposites();
         if (opposites.size() == 2) {
@@ -241,11 +241,10 @@ Mesh* Cloth::getMesh() const {
 
 void Cloth::readDataFromFile(const std::string& path) {
     mesh->readDataFromFile(path);
+    mesh->update(material);
 }
 
 void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind) {
-    mesh->updateData(material);
-
     Eigen::SparseMatrix<float> A;
     VectorXf b;
 
@@ -258,19 +257,28 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind) {
     cholesky.compute(A);
     VectorXf dv = cholesky.solve(b);
 
-    mesh->update(dt, dv);
-
-    std::ofstream fout("output.txt");
-    fout.precision(20);
-    for (int i = 0; i < A.rows(); i++) {
-        for (int j = 0; j < A.cols(); j++)
-            fout << A.coeff(i, j) << ' ';
-        fout << std::endl;
+    std::vector<Vertex>& vertices = mesh->getVertices();
+    for (int i = 0; i < vertices.size(); i++) {
+        vertices[i].x0 = vertices[i].x;
+        vertices[i].v += dv.block<3, 1>(3 * i, 0);
+        vertices[i].x += vertices[i].v * dt;
     }
-    for (int i = 0; i < b.rows(); i++)
-        fout << b(i) << ' ' ;
-    fout << std::endl;
-    fout.close();
+
+    // std::ofstream fout("output.txt");
+    // fout.precision(20);
+    // for (int i = 0; i < A.rows(); i++) {
+    //     for (int j = 0; j < A.cols(); j++)
+    //         fout << A.coeff(i, j) << ' ';
+    //     fout << std::endl;
+    // }
+    // for (int i = 0; i < b.rows(); i++)
+    //     fout << b(i) << ' ' ;
+    // fout << std::endl;
+    // fout.close();
+}
+
+void Cloth::update() {
+    mesh->update(material);
 }
 
 void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {

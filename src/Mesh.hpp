@@ -26,16 +26,16 @@ private:
     Edge* getEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::pair<int, int>, int>& edgeMap) const;
 
 public:
-    Mesh(const Json::Value& json, const Transform* transform);
+    Mesh(const Json::Value& json, const Transform* transform, const Material* material);
     ~Mesh();
-    const std::vector<Vertex>& getVertices() const;
-    const std::vector<Edge*>& getEdges() const;
-    const std::vector<Face*>& getFaces() const;
+    std::vector<Vertex>& getVertices();
+    std::vector<Edge*>& getEdges();
+    std::vector<Face*>& getFaces();
     void readDataFromFile(const std::string& path);
+    void update(const Material* material);
+    void updateRenderingData() const;
     void renderEdge() const;
     void renderFace() const;
-    void updateData(const Material* material);
-    void update(float dt, const VectorXf& dv);
 };
 
 #endif

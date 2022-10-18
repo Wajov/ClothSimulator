@@ -49,6 +49,7 @@ int main() {
     }
     fin.close();
 
+    std::cout << s.size() << ' ' << t.size() << std::endl;
     for (auto& tu : s)
         if (t.find(tu) == t.end())
             std::cout << "0: " << std::get<0>(tu) << ' ' << std::get<1>(tu) << ' ' << std::get<2>(tu) << ' ' << std::get<3>(tu) << ' ' << std::endl;
