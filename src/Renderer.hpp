@@ -1,7 +1,7 @@
 #ifndef RENDERER_HPP
 #define RENDERER_HPP
 
-#include <climits>
+#include <cmath>
 #include <iostream>
 
 #include <glad/glad.h>

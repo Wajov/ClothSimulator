@@ -1,8 +1,8 @@
 #include "Simulator.hpp"
 
 Simulator::Simulator(const std::string& path) :
-    COLLISION_THICKNESS(1e-4f),
-    MAX_ITERATION(30) {
+    MAX_ITERATION(30),
+    nSteps(0) {
     std::ifstream fin(path);
     if (!fin.is_open()) {
         std::cerr << "Failed to open configuration file: " << path << std::endl;
@@ -13,11 +13,13 @@ Simulator::Simulator(const std::string& path) :
     fin >> json;
 
     frameTime = parseFloat(json["frame_time"]);
-    frameSteps = parseFloat(json["frame_steps"]);
+    frameSteps = parseInt(json["frame_steps"]);
     dt =  frameTime / frameSteps;
 
     gravity = parseVector3f(json["gravity"]);
     wind = new Wind();
+
+    magic = new Magic(json["magic"]);
     
     for (const Json::Value& clothJson : json["cloths"])
         cloths.push_back(new Cloth(clothJson));
@@ -27,10 +29,11 @@ Simulator::Simulator(const std::string& path) :
 
     fin.close();
 
-    cloths[0]->readDataFromFile("input.txt");
+    // cloths[0]->readDataFromFile("input.txt");
 }
 
 Simulator::~Simulator() {
+    delete magic;
     delete wind;
     for (const Cloth* cloth : cloths)
         delete cloth;
@@ -61,12 +64,12 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
 
 void Simulator::findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, std::vector<Impact>& impacts) const {
     for (int i = 0; i < clothBvhs.size(); i++) {
-        clothBvhs[i]->findImpacts(COLLISION_THICKNESS, impacts);
+        clothBvhs[i]->findImpacts(magic->collisionThickness, impacts);
         for (int j = 0; j < i; j++)
-            clothBvhs[i]->findImpacts(clothBvhs[j], COLLISION_THICKNESS, impacts);
+            clothBvhs[i]->findImpacts(clothBvhs[j], magic->collisionThickness, impacts);
         
         for (int j = 0; j < obstacleBvhs.size(); j++)
-            clothBvhs[i]->findImpacts(obstacleBvhs[j], COLLISION_THICKNESS, impacts);
+            clothBvhs[i]->findImpacts(obstacleBvhs[j], magic->collisionThickness, impacts);
     }
 }
 
@@ -112,10 +115,11 @@ void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<Impac
                     zone = findImpactZone(vertex, zones);
                 else {
                     ImpactZone* zoneTemp = findImpactZone(vertex, zones);
-                    if (zone != zoneTemp)
+                    if (zone != zoneTemp) {
                         zone->merge(zoneTemp);
-                    std::remove(zones.begin(), zones.end(), zoneTemp);
-                    delete zoneTemp;
+                        zones.erase(std::remove(zones.begin(), zones.end(), zoneTemp));
+                        delete zoneTemp;
+                    }
                 }
             }
         }
@@ -126,9 +130,8 @@ void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<Impac
 
 void Simulator::physicsStep() {
     for (Cloth* cloth : cloths)
-        cloth->physicsStep(dt, gravity, wind);
-    for (Cloth* cloth : cloths)
-        cloth->update();
+        cloth->physicsStep(dt, magic->handleStiffness, gravity, wind);
+    update();
 }
 
 void Simulator::collisionStep() {
@@ -137,15 +140,6 @@ void Simulator::collisionStep() {
         clothBvhs.push_back(new BVH(cloth->getMesh(), true));
     for (const Obstacle* obstacle: obstacles)
         obstacleBvhs.push_back(new BVH(obstacle->getMesh(), true));
-
-    // std::vector<Impact> impacts;
-    // findImpacts(clothBvhs, obstacleBvhs, impacts);
-    // std::ofstream fout("output_impacts.txt");
-    // for (const Impact& impact : impacts) {
-    //     for (int i = 0; i < 4; i++)
-    //         fout << impact.vertices[i]->index << ' ';
-    //     fout << std::endl;
-    // }
     
     std::vector<ImpactZone*> zones;
     float obstacleMass = 1e3f;
@@ -167,7 +161,7 @@ void Simulator::collisionStep() {
             addImpacts(impacts, zones, deform == 1);
             for (const ImpactZone* zone : zones)
                 if (zone->getActive()) {
-                    Optimization* optimization = new ImpactZoneOptimization(zone);
+                    Optimization* optimization = new ImpactZoneOptimization(zone, magic->collisionThickness, obstacleMass);
                     augmentedLagrangianMethod(optimization);
                     delete optimization;
                 }
@@ -183,8 +177,7 @@ void Simulator::collisionStep() {
             break;
     }
 
-    for (Cloth* cloth : cloths)
-        cloth->update();
+    update();
 
     for (const BVH* clothBvh : clothBvhs)
         delete clothBvh;
@@ -192,6 +185,30 @@ void Simulator::collisionStep() {
         delete obstacleBvh;
     for (const ImpactZone* zone : zones)
         delete zone;
+}
+
+void Simulator::remeshingStep() {
+    std::vector<BVH*> obstacleBvhs;
+    for (const Obstacle* obstacle: obstacles)
+        obstacleBvhs.push_back(new BVH(obstacle->getMesh(), false));
+
+    for (Cloth* cloth : cloths)
+        cloth->remeshingStep(obstacleBvhs);
+
+    for (const BVH* obstacleBvh : obstacleBvhs)
+        delete obstacleBvh;
+}
+
+void Simulator::update() {
+    for (Cloth* cloth : cloths)
+        cloth->updateGeometry();
+    for (Cloth* cloth : cloths)
+        cloth->updateVelocity(dt);
+}
+
+void Simulator::updateRenderingData() const {
+    for (Cloth* cloth : cloths)
+        cloth->updateRenderingData();
 }
 
 void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {
@@ -203,13 +220,11 @@ void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Ma
 }
 
 void Simulator::step() {
-    // physicsStep();
+    nSteps++;
+    physicsStep();
     collisionStep();
-    exit(0);
-    // TODO
-
-    for (Cloth* cloth : cloths)
-        cloth->getMesh()->updateRenderingData();
-    for (Obstacle* obstacle : obstacles)
-        obstacle->getMesh()->updateRenderingData();
+    if (nSteps % frameSteps == 0)
+        remeshingStep();
+    // exit(0);
+    updateRenderingData();
 }

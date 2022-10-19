@@ -195,7 +195,7 @@ inline bool BVHNode::isLeaf() const {
 void BVHNode::setActiveUp(bool active) {
     this->active = active;
     if (parent != nullptr)
-        setActiveUp(active);
+        parent->setActiveUp(active);
 }
 
 void BVHNode::setActiveDown(bool active) {

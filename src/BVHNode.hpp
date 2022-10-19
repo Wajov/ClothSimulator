@@ -1,6 +1,8 @@
 #ifndef BVH_NODE_HPP
 #define BVH_NODE_HPP
 
+#include <cmath>
+
 #include "Bounds.hpp"
 #include "Face.hpp"
 #include "Impact.hpp"

@@ -126,6 +126,7 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "__hash_table": "cpp",
-        "*.txx": "cpp"
+        "*.txx": "cpp",
+        "climits": "cpp"
     }
 }

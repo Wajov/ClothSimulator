@@ -10,6 +10,7 @@
 
 #include "TypeHelper.hpp"
 #include "JsonHelper.hpp"
+#include "Magic.hpp"
 #include "Wind.hpp"
 #include "Cloth.hpp"
 #include "Obstacle.hpp"
@@ -20,9 +21,10 @@
 
 class Simulator {
 private:
-    const float COLLISION_THICKNESS;
     const int MAX_ITERATION;
-    float frameTime, frameSteps, dt;
+    Magic* magic;
+    int frameSteps, nSteps;
+    float frameTime, dt;
     Vector3f gravity;
     Wind* wind;
     std::vector<Cloth*> cloths;
@@ -34,6 +36,9 @@ private:
     void addImpacts(const std::vector<Impact>& impacts, std::vector<ImpactZone*>& zones, bool deformObstacles) const;
     void physicsStep();
     void collisionStep();
+    void remeshingStep();
+    void update();
+    void updateRenderingData() const;
 
 public:
     Simulator(const std::string& path);

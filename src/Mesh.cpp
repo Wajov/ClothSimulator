@@ -84,7 +84,7 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
     }
     fin.close();
 
-    update(material);
+    updateGeometry(material);
 
     unsigned int edgeEbo, faceEbo;
 
@@ -165,7 +165,7 @@ void Mesh::readDataFromFile(const std::string& path) {
     fin.close();
 }
 
-void Mesh::update(const Material* material) {
+void Mesh::updateGeometry(const Material* material) {
     for (Face* face : faces)
         face->update(material);
     for (Edge* edge : edges)
@@ -184,6 +184,12 @@ void Mesh::update(const Material* material) {
     }
     for (Vertex& vertex : vertices)
         vertex.n.normalized();
+}
+
+void Mesh::updateVelocity(float dt) {
+    float invDt = 1.0f / dt;
+    for (Vertex& vertex : vertices)
+        vertex.v = (vertex.x - vertex.x0) * invDt;
 }
 
 void Mesh::updateRenderingData() const {

@@ -19,6 +19,7 @@ public:
     void setActive(bool active);
     std::vector<Vertex*>& getVertices();
     void addVertex(const Vertex* vertex);
+    std::vector<Impact>& getImpacts();
     void addImpact(const Impact& impact);
     bool contain(const Vertex* vertex) const;
     void merge(const ImpactZone* zone);

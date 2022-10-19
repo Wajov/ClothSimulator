@@ -12,6 +12,8 @@ Cloth::Cloth(const Json::Value& json) {
             handles.push_back(new Handle(&vertices[index], vertices[index].x));
         }
 
+    remeshing = new Remeshing(json["remeshing"]);
+
     edgeShader = new Shader("shader/VertexShader.glsl", "shader/EdgeFragmentShader.glsl");
     faceShader = new Shader("shader/VertexShader.glsl", "shader/FaceFragmentShader.glsl");
     delete transform;
@@ -214,7 +216,7 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf&
     }
 }
 
-void Cloth::addHandleForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
+void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
     for (const Handle* handle : handles) {
         Vertex* vertex = handle->getVertex();
         Vector3f position = handle->getPosition();
@@ -241,17 +243,17 @@ Mesh* Cloth::getMesh() const {
 
 void Cloth::readDataFromFile(const std::string& path) {
     mesh->readDataFromFile(path);
-    mesh->update(material);
+    mesh->updateGeometry(material);
 }
 
-void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind) {
+void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind) {
     Eigen::SparseMatrix<float> A;
     VectorXf b;
 
     init(A, b);
     addExternalForces(dt, gravity, wind, A, b);
     addInternalForces(dt, A, b);
-    addHandleForces(dt, A, b);
+    addHandleForces(dt, handleStiffness, A, b);
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky;
     cholesky.compute(A);
@@ -263,22 +265,22 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind) {
         vertices[i].v += dv.block<3, 1>(3 * i, 0);
         vertices[i].x += vertices[i].v * dt;
     }
-
-    // std::ofstream fout("output.txt");
-    // fout.precision(20);
-    // for (int i = 0; i < A.rows(); i++) {
-    //     for (int j = 0; j < A.cols(); j++)
-    //         fout << A.coeff(i, j) << ' ';
-    //     fout << std::endl;
-    // }
-    // for (int i = 0; i < b.rows(); i++)
-    //     fout << b(i) << ' ' ;
-    // fout << std::endl;
-    // fout.close();
 }
 
-void Cloth::update() {
-    mesh->update(material);
+void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs) {
+    // TODO
+}
+
+void Cloth::updateGeometry() {
+    mesh->updateGeometry(material);
+}
+
+void Cloth::updateVelocity(float dt) {
+    mesh->updateVelocity(dt);
+}
+
+void Cloth::updateRenderingData() const {
+    mesh->updateRenderingData();
 }
 
 void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {

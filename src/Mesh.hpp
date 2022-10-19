@@ -32,7 +32,8 @@ public:
     std::vector<Edge*>& getEdges();
     std::vector<Face*>& getFaces();
     void readDataFromFile(const std::string& path);
-    void update(const Material* material);
+    void updateGeometry(const Material* material);
+    void updateVelocity(float dt);
     void updateRenderingData() const;
     void renderEdge() const;
     void renderFace() const;

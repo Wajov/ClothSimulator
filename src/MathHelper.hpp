@@ -13,18 +13,22 @@ const double EPSILON_F = 1e-12;
 const double EPSILON_X = 1e-6;
 
 static Optimization* optimization;
-static std::vector<float> lambda;
-static float mu;
+static std::vector<double> lambda;
+static double mu;
 
-static float sign(float x) {
-    return x < 0.0f ? -1.0f : 1.0f;
+template<typename T> static T sign(T x) {
+    return x < 0 ? -1 : 1;
 }
 
-static float min(float a, float b, float c) {
+template<typename T> static T sqr(T x) {
+    return x * x;
+}
+
+template<typename T> static T min(T a, T b, T c) {
     return std::min(a, std::min(b, c));
 }
 
-static float min(float a, float b, float c, float d) {
+template<typename T> static T min(T a, T b, T c, T d) {
     return std::min(std::min(a, b), std::min(c, d));
 }
 
@@ -128,12 +132,41 @@ static int solveCubic(float a, float b, float c, float d, float x[]) {
     }
 }
 
+static double clampViolation (double x, int sign) {
+    return sign < 0 ? std::max(x, 0.0) : (sign > 0 ? std::min(x, 0.0) : x);
+}
+
+static void valueAndGradient(const alglib::real_1d_array& x, double& value, alglib::real_1d_array& gradient, void* p) {
+    optimization->precompute(x.getcontent());
+    value = optimization->objective(x.getcontent());
+    optimization->objectiveGradient(x.getcontent(), gradient.getcontent());
+
+    for (int i = 0; i < optimization->getConstraintSize(); i++) {
+        int sign;
+        double constraint = optimization->constraint(x.getcontent(), i, sign);
+        double coefficient = clampViolation(constraint + lambda[i] / mu, sign);
+        if (coefficient != 0.0) {
+            value += 0.5 * mu * sqr(coefficient);
+            optimization->constraintGradient(x.getcontent(), i, mu * coefficient, gradient.getcontent());
+        }
+    }
+}
+
+static void updateMultiplier(const alglib::real_1d_array& x) {
+    optimization->precompute(x.getcontent());
+    for (int i = 0; i < optimization->getConstraintSize(); i++) {
+        int sign;
+        double constraint = optimization->constraint(x.getcontent(), i, sign);
+        lambda[i] = clampViolation(lambda[i] + mu * constraint, sign);
+    }
+}
+
 static void augmentedLagrangianMethod(Optimization* optimization) {
     ::optimization = optimization;
-    lambda.assign(nConstraints, 0.0f);
-    mu = 1e3f;
+    lambda.assign(::optimization->getConstraintSize(), 0.0);
+    mu = 1e3;
     alglib::real_1d_array x;
-    x.setlength(nVariables);
+    x.setlength(::optimization->getVariableSize());
     ::optimization->initialize(x.getcontent());
     alglib::mincgstate state;
     alglib::mincgreport report;
@@ -145,7 +178,7 @@ static void augmentedLagrangianMethod(Optimization* optimization) {
         alglib::mincgsetcond(state, EPSILON_G, EPSILON_F, EPSILON_X, maxIterations);
         if (iter > 0)
             alglib::mincgrestartfrom(state, x);
-        alglib::mincgsuggeststep(state, 1e-3 * nVariables);
+        alglib::mincgsuggeststep(state, 1e-3 * ::optimization->getVariableSize());
         alglib::mincgoptimize(state, valueAndGradient);
         alglib::mincgresults(state, x, report);
         updateMultiplier(x);
