@@ -6,10 +6,10 @@
 #include <fstream>
 #include <iostream>
 
-#include <Eigen/Dense>
 #include <json/json.h>
 
 #include "TypeHelper.hpp"
+#include "MathHelper.hpp"
 #include "JsonHelper.hpp"
 
 const int N = 30;
@@ -27,7 +27,7 @@ public:
     float getDensity() const;
     float getThicken() const;
     Vector4f stretchingStiffness(const Matrix2x2f& G) const;
-    float bendingStiffness(float length, float angle, float area, const Vector3f& d) const;
+    float bendingStiffness(float length, float angle, float area, const Vector2f& d) const;
 };
 
 #endif

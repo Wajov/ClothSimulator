@@ -21,12 +21,14 @@ BVH::BVH(const Mesh* mesh, bool ccd) :
     root = new BVHNode(nullptr, 0, n - 1, faces, bounds, centers, leaves);
 
     std::vector<Vertex>& vertices = const_cast<Mesh*>(mesh)->getVertices();
+    this->vertices.resize(vertices.size());
     for (Vertex& vertex : vertices)
-        this->vertices.insert(&vertex);
+        this->vertices.push_back(&vertex);
 
+    adjacents.resize(vertices.size());
     for (Face* face : faces)
         for (int i = 0; i < 3; i++)
-            adjacents[face->getVertex(i)].push_back(face);
+            adjacents[face->getVertex(i)->index].push_back(face);
 }
 
 BVH::~BVH() {
@@ -34,7 +36,7 @@ BVH::~BVH() {
 }
 
 bool BVH::contain(const Vertex* vertex) const {
-    return vertices.find(const_cast<Vertex*>(vertex)) != vertices.end();
+    return vertex->index < vertices.size() && vertices[vertex->index] == vertex;
 }
 
 void BVH::setAllActive(bool active) {
@@ -42,7 +44,7 @@ void BVH::setAllActive(bool active) {
 }
 
 void BVH::setActive(const Vertex* vertex, bool active) {
-    std::vector<Face*>& adjacents = this->adjacents[const_cast<Vertex*>(vertex)];
+    std::vector<Face*>& adjacents = this->adjacents[vertex->index];
     for (Face* face : adjacents)
         leaves[face]->setActiveUp(active);
 }
@@ -53,6 +55,10 @@ void BVH::findImpacts(float thickness, std::vector<Impact>& impacts) const {
 
 void BVH::findImpacts(const BVH* bvh, float thickness, std::vector<Impact>& impacts) const {
     root->findImpacts(bvh->root, thickness, impacts);
+}
+
+void BVH::findNearestPoint(const Vector3f& x, NearPoint& point) const {
+    root->findNearestPoint(x, point);
 }
 
 void BVH::update() {

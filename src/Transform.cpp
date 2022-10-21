@@ -47,7 +47,7 @@ Matrix4x4f Transform::rotate(const Vector3f& v, float angle) {
 }
 
 Matrix4x4f Transform::translate(const Vector3f& v) {
-    Eigen::Matrix4f ans = Eigen::Matrix4f::Identity();
+    Matrix4x4f ans = Matrix4x4f::Identity();
 
     ans(0, 3) = v(0);
     ans(1, 3) = v(1);

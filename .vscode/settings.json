@@ -127,6 +127,7 @@
         "xutility": "cpp",
         "__hash_table": "cpp",
         "*.txx": "cpp",
-        "climits": "cpp"
+        "climits": "cpp",
+        "__config": "cpp"
     }
 }

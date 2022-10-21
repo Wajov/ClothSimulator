@@ -9,7 +9,7 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
 
     bool isFree = (material != nullptr);
     std::string line;
-    std::vector<Vector3f> u;
+    std::vector<Vector2f> u;
     std::vector<int> vertexMap;
     std::map<std::pair<int, int>, int> edgeMap;
     while (getline(fin, line)) {
@@ -19,12 +19,9 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
             x = transform->applyTo(x);
             vertices.emplace_back(vertices.size(), x, isFree);
             vertexMap.push_back(-1);
-        } else if (s[0] == "vt") {
-            if (s.size() == 4)
-                u.push_back(Vector3f(std::stof(s[1]), std::stof(s[2]), std::stof(s[3])));
-            else if (s.size() == 3)
-                u.push_back(Vector3f(std::stof(s[1]), std::stof(s[2]), 0.0f));
-        } else if (s[0] == "f") {
+        } else if (s[0] == "vt")
+            u.emplace_back(std::stof(s[1]), std::stof(s[2]));
+        else if (s[0] == "f") {
             int index0, index1, index2, uIndex0, uIndex1, uIndex2;
             if (line.find('/') != std::string::npos) {
                 std::vector<std::string> t;
@@ -55,10 +52,10 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
             Vertex* vertex0 = &vertices[index0];
             Vertex* vertex1 = &vertices[index1];
             Vertex* vertex2 = &vertices[index2];
-            Edge* edge0 = getEdge(vertex0, vertex1, edgeMap);
-            Edge* edge1 = getEdge(vertex1, vertex2, edgeMap);
-            Edge* edge2 = getEdge(vertex2, vertex0, edgeMap);
-            Face* face = new Face(vertex0, vertex1, vertex2);
+            Edge* edge0 = findEdge(vertex0, vertex1, edgeMap);
+            Edge* edge1 = findEdge(vertex1, vertex2, edgeMap);
+            Edge* edge2 = findEdge(vertex2, vertex0, edgeMap);
+            Face* face = new Face(vertex0, vertex1, vertex2, material);
 
             edge0->addOpposite(vertex2);
             edge0->addAdjacent(face);
@@ -138,12 +135,18 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     return ans;
 }
 
-Edge* Mesh::getEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::pair<int, int>, int>& edgeMap) const {
+Edge* Mesh::findEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::pair<int, int>, int>& edgeMap) {
     int index0 = vertex0->index;
     int index1 = vertex1->index;
     std::pair<int, int> pair = index0 < index1 ? std::make_pair(index0, index1) : std::make_pair(index1, index0);
     std::map<std::pair<int, int>, int>::const_iterator iter = edgeMap.find(pair);
-    return iter != edgeMap.end() ? edges[iter->second] : new Edge(vertex0, vertex1);
+    if (iter != edgeMap.end())
+        return edges[iter->second];
+    else {
+        edgeMap[pair] = edges.size();
+        edges.push_back(new Edge(vertex0, vertex1));
+        return edges.back();
+    }
 }
 
 std::vector<Vertex>& Mesh::getVertices() {
@@ -167,7 +170,7 @@ void Mesh::readDataFromFile(const std::string& path) {
 
 void Mesh::updateGeometry(const Material* material) {
     for (Face* face : faces)
-        face->update(material);
+        face->update();
     for (Edge* edge : edges)
         edge->update();
     for (Vertex& vertex : vertices) {
@@ -178,12 +181,14 @@ void Mesh::updateGeometry(const Material* material) {
         float m = face->getMass() / 3.0f;
         Vector3f n = face->getArea() * face->getNormal();
         for (int i = 0; i < 3; i++) {
+            float l0 = face->getEdge((i + 2) % 3)->getLength();
+            float l1 = face->getEdge(i)->getLength();
             face->getVertex(i)->m += m;
-            face->getVertex(i)->n += n;
+            face->getVertex(i)->n += n / sqr(l0 * l1);
         }
     }
     for (Vertex& vertex : vertices)
-        vertex.n.normalized();
+        vertex.n.normalize();
 }
 
 void Mesh::updateVelocity(float dt) {

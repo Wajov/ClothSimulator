@@ -17,7 +17,7 @@ static std::string parseString(const Json::Value& json, std::string d = "") {
     return json.isNull() ? d : json.asString();
 }
 
-static Vector3f parseVector3f(const Json::Value& json, const Vector3f& d = Vector3f::Zero()) {
+static Vector3f parseVector3f(const Json::Value& json, const Vector3f& d = Vector3f(0.0f, 0.0f, 0.0f)) {
     Vector3f ans;
     if (json.isNull())
         return d;

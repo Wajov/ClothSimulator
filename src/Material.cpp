@@ -40,27 +40,22 @@ Material::Material(const Json::Value& json) {
 Material::~Material() {}
 
 Vector4f Material::calculateStretchingSample(const Matrix2x2f& G, const Vector4f (&data)[2][5]) const {
-    Eigen::SelfAdjointEigenSolver<Matrix2x2f> evd;
-    evd.compute(2.0f * G);
-    Vector2f eigenValues;
-    Matrix2x2f eigenVectors;
-    for (int i = 0; i < 2; i++) {
-        eigenValues(i) = evd.eigenvalues()(1 - i);
-        eigenVectors.col(i) = evd.eigenvectors().col(1 - i);
-    }
-    if (eigenValues(0) == eigenValues(1) && eigenVectors(0, 0) == 0.0f && eigenVectors(1, 1) == 0.0f)
-        eigenVectors = Matrix2x2f::Identity();
-    if (eigenVectors(0, 0) < 0.0f)
-        eigenVectors.col(0) = -eigenVectors.col(0);
-    if (eigenVectors(1, 1) < 0.0f)
-        eigenVectors.col(1) = -eigenVectors.col(1);
+    Matrix2x2f Q;
+    Vector2f l;
+    eigenvalueDecomposition(2.0f * G, Q, l);
+    if (l(0) == l(1) && Q(0, 0) == 0.0f && Q(1, 1) == 0.0f)
+        Q = Matrix2x2f::Identity();
+    if (Q(0, 0) < 0.0f)
+        Q.col(0) = -Q.col(0);
+    if (Q(1, 1) < 0.0f)
+        Q.col(1) = -Q.col(1);
 
-    float strainWeight = (std::sqrt(eigenValues(0) + 1.0f) - 1.0f) * 6.0f;
+    float strainWeight = (std::sqrt(l(0) + 1.0f) - 1.0f) * 6.0f;
     strainWeight = std::clamp(strainWeight, 0.0f, 1.0f - 1e-6f);
     int strainId = static_cast<int>(strainWeight);
     strainWeight -= strainId;
 
-    float angleWeight = std::abs(std::atan2(eigenVectors(1, 0), eigenVectors(0, 0))) / M_PI * 8.0f;
+    float angleWeight = std::abs(std::atan2(Q(1, 0), Q(0, 0))) / M_PI * 8.0f;
     angleWeight = std::clamp(angleWeight, 0.0f, 4.0f - 1e-6f);
     int angleId = static_cast<int>(angleWeight);
     angleWeight -= angleId;
@@ -127,7 +122,7 @@ Vector4f Material::stretchingStiffness(const Matrix2x2f& G) const {
     return ans;
 }
 
-float Material::bendingStiffness(float length, float angle, float area, const Vector3f& d) const {
+float Material::bendingStiffness(float length, float angle, float area, const Vector2f& d) const {
     float curv = length * angle / area;
     float alpha = 0.5f * curv;
 

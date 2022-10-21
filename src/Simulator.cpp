@@ -29,7 +29,7 @@ Simulator::Simulator(const std::string& path) :
 
     fin.close();
 
-    // cloths[0]->readDataFromFile("input.txt");
+    cloths[0]->readDataFromFile("input.txt");
 }
 
 Simulator::~Simulator() {
@@ -193,7 +193,7 @@ void Simulator::remeshingStep() {
         obstacleBvhs.push_back(new BVH(obstacle->getMesh(), false));
 
     for (Cloth* cloth : cloths)
-        cloth->remeshingStep(obstacleBvhs);
+        cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness, magic->ribStiffening);
 
     for (const BVH* obstacleBvh : obstacleBvhs)
         delete obstacleBvh;
@@ -220,11 +220,11 @@ void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Ma
 }
 
 void Simulator::step() {
-    nSteps++;
-    physicsStep();
-    collisionStep();
-    if (nSteps % frameSteps == 0)
+    // nSteps++;
+    // physicsStep();
+    // collisionStep();
+    // if (nSteps % frameSteps == 0)
         remeshingStep();
-    // exit(0);
+    exit(0);
     updateRenderingData();
 }

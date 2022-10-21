@@ -2,8 +2,8 @@
 
 Remeshing::Remeshing(const Json::Value& json) {
     refineAngle = parseFloat(json["refine_angle"], INFINITY);
-    refineCompression = parseFloat(json["refine_compression"], INFINITY);
     refineVelocity = parseFloat(json["refine_velocity"], INFINITY);
+    refineCompression = parseFloat(json["refine_compression"], INFINITY);
     if (json["size"].isNull()) {
         sizeMin = -INFINITY;
         sizeMax = INFINITY;

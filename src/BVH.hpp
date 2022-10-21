@@ -2,7 +2,6 @@
 #define BVH_HPP
 
 #include <vector>
-#include <unordered_set>
 #include <unordered_map>
 
 #include "BVHNode.hpp"
@@ -10,13 +9,14 @@
 #include "Face.hpp"
 #include "Mesh.hpp"
 #include "Impact.hpp"
+#include "NearPoint.hpp"
 
 class BVH {
 private:
     bool ccd;
     BVHNode* root;
-    std::unordered_set<Vertex*> vertices;
-    std::unordered_map<Vertex*, std::vector<Face*>> adjacents;
+    std::vector<Vertex*> vertices;
+    std::vector<std::vector<Face*>> adjacents;
     std::unordered_map<Face*, BVHNode*> leaves;
 
 public:
@@ -27,6 +27,7 @@ public:
     void setActive(const Vertex* vertex, bool active);
     void findImpacts(float thickness, std::vector<Impact>& impacts) const;
     void findImpacts(const BVH* bvh, float thickness, std::vector<Impact>& impacts) const;
+    void findNearestPoint(const Vector3f& x, NearPoint& point) const;
     void update();
 };
 

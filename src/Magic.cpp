@@ -5,7 +5,8 @@ Magic::~Magic() {}
 Magic::Magic(const Json::Value& json) :
     handleStiffness(1e3f),
     repulsionThickness(1e-3f),
-    collisionThickness(1e-4f) {
+    collisionThickness(1e-4f),
+    ribStiffening(1.0f) {
     if (json.isNull())
         return;
 

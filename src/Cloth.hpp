@@ -18,6 +18,9 @@
 #include "Wind.hpp"
 #include "Shader.hpp"
 #include "BVH.hpp"
+#include "NearPoint.hpp"
+#include "Plane.hpp"
+#include "Disk.hpp"
 
 class Cloth {
 private:
@@ -38,6 +41,10 @@ private:
     void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, VectorXf& b) const;
     void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const;
     void addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, VectorXf& b) const;
+    Matrix2x2f compressionMetric(const Matrix2x2f& G, const Matrix2x2f& S2, float refine, float ribStiffening) const;
+    Matrix2x2f obstacleMetric(const Face* face, const std::vector<Plane>& planes) const;
+    Matrix2x2f maxTensor(const Matrix2x2f M[]) const;
+    Matrix2x2f faceSizing(const Face* face, const std::vector<Plane>& planes, float ribStiffening) const;
 
 public:
     Cloth(const Json::Value& json);
@@ -45,7 +52,7 @@ public:
     Mesh* getMesh() const;
     void readDataFromFile(const std::string& path);
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
-    void remeshingStep(const std::vector<BVH*>& obstacleBvhs);
+    void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness, float ribStiffening);
     void updateGeometry();
     void updateVelocity(float dt);
     void updateRenderingData() const;

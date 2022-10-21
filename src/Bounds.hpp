@@ -21,6 +21,7 @@ public:
     Vector3f center() const;
     int longestIndex() const;
     Bounds dilate(float thickness) const;
+    float distance(const Vector3f& x) const;
     bool overlap(const Bounds& b) const;
     bool overlap(const Bounds& b, float thickness) const;
 };

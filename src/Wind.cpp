@@ -3,7 +3,7 @@
 Wind::Wind() : 
     density(1.0f),
     drag(0.0f),
-    velocity(Vector3f::Zero()) {}
+    velocity(0.0f, 0.0f, 0.0f) {}
 
 Wind::~Wind() {}
 

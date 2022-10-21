@@ -64,6 +64,13 @@ Bounds Bounds::dilate(float thickness) const {
     return ans;
 }
 
+float Bounds::distance(const Vector3f& x) const {
+    Vector3f p;
+    for (int i = 0; i < 3; i++)
+        p(i) = std::clamp(x(i), pMin(i), pMax(i));
+    return (x - p).norm();
+}
+
 bool Bounds::overlap(const Bounds& b) const {
     for (int i = 0; i < 3; i++) {
         if (pMin(i) > b.pMax(i))

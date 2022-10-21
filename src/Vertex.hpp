@@ -7,8 +7,10 @@
 class Vertex {
 public:
     int index;
-    Vector3f x0, x, n, u, v;
-    float m;
+    Vector3f x0, x, n, v;
+    Vector2f u;
+    Matrix2x2f sizing;
+    float m, a;
     bool isFree;
     Vertex(int index, const Vector3f& x, bool isFree);
     ~Vertex();

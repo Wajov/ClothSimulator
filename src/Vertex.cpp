@@ -4,10 +4,12 @@ Vertex::Vertex(int index, const Vector3f& x, bool isFree) :
     index(index),
     x0(x),
     x(x),
-    n(Vector3f::Zero()),
-    u(Vector3f::Zero()),
-    v(Vector3f::Zero()),
+    n(0.0f, 0.0f, 0.0f),
+    v(0.0f, 0.0f, 0.0f),
+    u(0.0f, 0.0f),
+    sizing(Matrix2x2f::Zero()),
     m(0.0f),
+    a(0.0f),
     isFree(isFree) {}
 
 Vertex::~Vertex() {}
