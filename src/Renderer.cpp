@@ -98,14 +98,13 @@ void Renderer::render() const {
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float lightPower = 30.0f;
-        Vector3f lightPosition(3.0f, 3.0f, 3.0f), cameraPosition(0.0f, -0.25f, 2.0f);
+        Vector3f lightDirection(0.0f, 0.0f, 1.0f), cameraPosition(0.0f, -0.25f, 2.0f);
         Matrix4x4f model, view, projection;
         model = Transform::scale(static_cast<float>(scaling)) * rotation;
         view = Transform::lookAt(cameraPosition, Vector3f(0.0f, -0.25f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
         projection = Transform::perspective(45.0f, static_cast<float>(width) / height, 0.1f, 100.0f);
 
-        simulator->render(model, view, projection, cameraPosition, lightPosition, lightPower);
+        simulator->render(model, view, projection, cameraPosition, lightDirection);
         if (!pause)
             simulator->step();
 

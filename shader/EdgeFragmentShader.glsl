@@ -2,8 +2,8 @@
 
 in vec3 vertexPosition;
 in vec3 vertexNormal;
-in vec3 vertexUV;
+in vec2 vertexUV;
 
 void main() {
-    gl_FragColor = vec4(0, 0, 0, 1);
+    gl_FragColor = vec4(0.2, 0.2, 0.2, 1.0);
 }

@@ -588,7 +588,7 @@ void Cloth::bind() {
     mesh->bind();
 }
 
-void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {
+void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
     edgeShader->use();
     edgeShader->setMat4("model", model);
     edgeShader->setMat4("view", view);
@@ -601,7 +601,6 @@ void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix
     faceShader->setMat4("projection", projection);
     faceShader->setVec3("color", Vector3f(0.6f, 0.7f, 1.0f));
     faceShader->setVec3("cameraPosition", cameraPosition);
-    faceShader->setVec3("lightPosition", lightPosition);
-    faceShader->setFloat("lightPower", lightPower);
+    faceShader->setVec3("lightDirection", lightDirection);
     mesh->renderFace();
 }

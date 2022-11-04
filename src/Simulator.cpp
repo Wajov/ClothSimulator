@@ -241,12 +241,12 @@ void Simulator::bind() {
         obstacle->bind();
 }
 
-void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {
+void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
     for (const Cloth* cloth : cloths)
-        cloth->render(model, view, projection, cameraPosition, lightPosition, lightPower);
+        cloth->render(model, view, projection, cameraPosition, lightDirection);
 
     for (const Obstacle* obstacle : obstacles)
-        obstacle->render(model, view, projection, cameraPosition, lightPosition, lightPower);
+        obstacle->render(model, view, projection, cameraPosition, lightDirection);
 }
 
 void Simulator::step() {
