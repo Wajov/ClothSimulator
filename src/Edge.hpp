@@ -11,8 +11,8 @@ class Face;
 
 class Edge {
 private:
-    std::vector<Vertex*> vertices, opposites;
-    std::vector<Face*> adjacents;
+    Vertex* vertices[2], * opposites[2];
+    Face* adjacents[2];
     float length, angle;
 
 public:

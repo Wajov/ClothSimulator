@@ -562,32 +562,8 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
     for (Vertex* vertex : vertices)
         vertex->sizing /= vertex->a;
 
-    // std::ofstream fout("output_sizing.txt");
-    // fout.precision(20);
-    // for (const Vertex* vertex : vertices) {
-    //     for (int i = 0; i < 2; i++)
-    //         for (int j = 0; j < 2; j++)
-    //             fout << vertex->sizing(i, j) << ' ';
-    //     fout << std::endl;
-    // }
-    // fout.close();
-
     std::vector<Edge*> edges = mesh->getEdges();
-
-    // std::ofstream fout("output_sizing.txt");
-    // std::vector<Edge*> edgesToFlip = std::move(independentEdges(findEdgesToFlip(edges)));
-    // for (const Edge* edge : edgesToFlip)
-    //     fout << edge->getVertex(0)->index << ' ' << edge->getVertex(1)->index << std::endl;
-    // fout.close();
-
     flipEdges(edges, nullptr, nullptr, nullptr);
-
-    // fout << std::endl;
-    // std::vector<Edge*> edgesToSplit = std::move(findEdgesToSplit());
-    // for (const Edge* edge : edgesToSplit)
-    //     fout << edge->getVertex(0)->index << ' ' << edge->getVertex(1)->index << std::endl;
-    // fout.close();
-
     splitEdges();
     collapseEdges();
 }

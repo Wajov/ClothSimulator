@@ -252,22 +252,31 @@ void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Ma
 void Simulator::step() {
     nSteps++;
     std::cout << "Step [" << nSteps << "]:" << std::endl;
-    resetObstacles();
 
+    resetObstacles();
+    
+    std::chrono::duration<float> d;
     auto t0 = std::chrono::high_resolution_clock::now();
+    
     physicsStep();
     auto t1 = std::chrono::high_resolution_clock::now();
-    std::cout << "Physics Step: " << std::chrono::duration<float>(t1 - t0).count() << "s";
+    d = t1 - t0;
+    std::cout << "Physics Step: " << d.count() << "s";
+    
     collisionStep();
     auto t2 = std::chrono::high_resolution_clock::now();
-    std::cout << ", Collision Step: " << std::chrono::duration<float>(t2 - t1).count() << "s";
+    d = t2 - t1;
+    std::cout << ", Collision Step: " << d.count() << "s";
+    
     if (nSteps % frameSteps == 0) {
         remeshingStep();
         auto t3 = std::chrono::high_resolution_clock::now();
-        std::cout << ", Remeshing Step: " << std::chrono::duration<float>(t3 - t2).count() << "s";
+        d = t3 - t2;
+        std::cout << ", Remeshing Step: " << d.count() << "s";
         Mesh* mesh = cloths[0]->getMesh();
         updateRenderingData(true);
     } else
         updateRenderingData(false);
+
     std::cout << std::endl;
 }

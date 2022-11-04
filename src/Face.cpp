@@ -21,7 +21,7 @@ Vertex* Face::getVertex(int index) const {
 }
 
 void Face::replaceVertex(const Vertex* v, const Vertex* vertex) {
-    for (int i = 0; i < vertices.size(); i++)
+    for (int i = 0; i < 3; i++)
         if (vertices[i] == v) {
             vertices[i] = const_cast<Vertex*>(vertex);
             return;
@@ -33,11 +33,13 @@ Edge* Face::getEdge(int index) const {
 }
 
 void Face::setEdges(const Edge* edge0, const Edge* edge1, const Edge* edge2) {
-    edges = {const_cast<Edge*>(edge0), const_cast<Edge*>(edge1), const_cast<Edge*>(edge2)};
+    edges[0] = const_cast<Edge*>(edge0);
+    edges[1] = const_cast<Edge*>(edge1);
+    edges[2] = const_cast<Edge*>(edge2);
 }
 
 void Face::replaceEdge(const Edge* e, const Edge* edge) {
-    for (int i = 0; i < edges.size(); i++)
+    for (int i = 0; i < 3; i++)
         if (edges[i] == e) {
             edges[i] = const_cast<Edge*>(edge);
             return;
@@ -63,21 +65,22 @@ float Face::getMass() const {
 int Face::sequence(const Edge* edge) const {
     Vertex* vertex0 = edge->getVertex(0);
     Vertex* vertex1 = edge->getVertex(1);
-    for (int i = 0; i < vertices.size() - 1; i++)
+    for (int i = 0; i < 2; i++)
         if (vertices[i] == vertex0 && vertices[i + 1] == vertex1)
             return 0;
-    return vertices[vertices.size() - 1] == vertex0 && vertices[0] == vertex1 ? 0 : 1;
+    return vertices[2] == vertex0 && vertices[0] == vertex1 ? 0 : 1;
 }
 
 bool Face::contain(const Edge* edge) const {
-    for (const Edge* e : edges)
-        if (e == edge)
+    for (int i = 0; i < 3; i++)
+        if (edges[i] == edge)
             return true;
     return false;
 }
 
 Edge* Face::findEdge(const Vertex* vertex0, const Vertex* vertex1) const {
-    for (Edge* edge : edges) {
+    for (int i = 0; i < 3; i++) {
+        Edge* edge = edges[i];
         Vertex* v0 = edge->getVertex(0);
         Vertex* v1 = edge->getVertex(1);
         if (vertex0 == v0 && vertex1 == v1 || vertex0 == v1 && vertex1 == v0)

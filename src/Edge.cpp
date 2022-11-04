@@ -2,8 +2,8 @@
 
 Edge::Edge(const Vertex* vertex0, const Vertex* vertex1) :
     vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1)},
-    opposites(2, nullptr),
-    adjacents(2, nullptr) {}
+    opposites{nullptr, nullptr},
+    adjacents{nullptr, nullptr} {}
 
 Edge::~Edge() {}
 
@@ -12,7 +12,7 @@ Vertex* Edge::getVertex(int index) const {
 }
 
 void Edge::replaceVertex(const Vertex* v, const Vertex* vertex) {
-    for (int i = 0; i < vertices.size(); i++)
+    for (int i = 0; i < 2; i++)
         if (vertices[i] == v) {
             vertices[i] = const_cast<Vertex*>(vertex);
             return;
@@ -24,7 +24,7 @@ Vertex* Edge::getOpposite(int index) const {
 }
 
 void Edge::replaceOpposite(const Vertex* v, const Vertex* vertex) {
-    for (int i = 0; i < opposites.size(); i++)
+    for (int i = 0; i < 2; i++)
         if (opposites[i] == v) {
             opposites[i] = const_cast<Vertex*>(vertex);
             return;
@@ -36,7 +36,7 @@ Face* Edge::getAdjacent(int index) const {
 }
 
 void Edge::replaceAdjacent(const Face* f, const Face* face) {
-    for (int i = 0; i < adjacents.size(); i++)
+    for (int i = 0; i < 2; i++)
         if (adjacents[i] == f) {
             adjacents[i] = const_cast<Face*>(face);
             return;
@@ -58,8 +58,8 @@ float Edge::getAngle() const {
 }
 
 bool Edge::contain(const Vertex* vertex) const {
-    for (const Vertex* v : vertices)
-        if (v == vertex)
+    for (int i = 0; i < 2; i++)
+        if (vertices[i] == vertex)
             return true;
     return false;
 }

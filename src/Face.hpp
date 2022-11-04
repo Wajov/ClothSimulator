@@ -13,8 +13,8 @@ class Edge;
 
 class Face {
 private:
-    std::vector<Vertex*> vertices;
-    std::vector<Edge*> edges;
+    Vertex* vertices[3];
+    Edge* edges[3];
     Vector3f normal;
     Matrix2x2f inverse;
     float area, mass;
