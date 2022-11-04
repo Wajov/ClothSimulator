@@ -1,7 +1,9 @@
 #include "Edge.hpp"
 
 Edge::Edge(const Vertex* vertex0, const Vertex* vertex1) :
-    vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1)} {}
+    vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1)},
+    opposites(2, nullptr),
+    adjacents(2, nullptr) {}
 
 Edge::~Edge() {}
 
@@ -9,22 +11,42 @@ Vertex* Edge::getVertex(int index) const {
     return vertices[index];
 }
 
-void Edge::addOpposite(const Vertex* vertex) {
-    opposites.push_back(const_cast<Vertex*>(vertex));
-    assert(opposites.size() < 3);
+void Edge::replaceVertex(const Vertex* v, const Vertex* vertex) {
+    for (int i = 0; i < vertices.size(); i++)
+        if (vertices[i] == v) {
+            vertices[i] = const_cast<Vertex*>(vertex);
+            return;
+        }
 }
 
-const std::vector<Vertex*>& Edge::getOpposites() const {
-    return opposites;
+Vertex* Edge::getOpposite(int index) const {
+    return opposites[index];
 }
 
-void Edge::addAdjacent(const Face* face) {
-    adjacents.push_back(const_cast<Face*>(face));
-    assert(adjacents.size() < 3);
+void Edge::replaceOpposite(const Vertex* v, const Vertex* vertex) {
+    for (int i = 0; i < opposites.size(); i++)
+        if (opposites[i] == v) {
+            opposites[i] = const_cast<Vertex*>(vertex);
+            return;
+        }
 }
 
-const std::vector<Face*>& Edge::getAdjacents() const {
-    return adjacents;
+Face* Edge::getAdjacent(int index) const {
+    return adjacents[index];
+}
+
+void Edge::replaceAdjacent(const Face* f, const Face* face) {
+    for (int i = 0; i < adjacents.size(); i++)
+        if (adjacents[i] == f) {
+            adjacents[i] = const_cast<Face*>(face);
+            return;
+        }
+}
+
+void Edge::setOppositeAndAdjacent(const Vertex* vertex, const Face* face) {
+    int i = face->sequence(this);
+    opposites[i] = const_cast<Vertex*>(vertex);
+    adjacents[i] = const_cast<Face*>(face);
 }
 
 float Edge::getLength() const {
@@ -33,6 +55,17 @@ float Edge::getLength() const {
 
 float Edge::getAngle() const {
     return angle;
+}
+
+bool Edge::contain(const Vertex* vertex) const {
+    for (const Vertex* v : vertices)
+        if (v == vertex)
+            return true;
+    return false;
+}
+
+bool Edge::isBoundary() const {
+    return opposites[0] == nullptr || opposites[1] == nullptr;
 }
 
 Bounds Edge::bounds(bool ccd) const {
@@ -48,7 +81,7 @@ Bounds Edge::bounds(bool ccd) const {
 
 void Edge::update() {
     length = (vertices[1]->x - vertices[0]->x).norm();
-    if (adjacents.size() == 2) {
+    if (!isBoundary()) {
         Vector3f e = (vertices[0]->x - vertices[1]->x).normalized();
         Vector3f n0 = adjacents[0]->getNormal();
         Vector3f n1 = adjacents[1]->getNormal();

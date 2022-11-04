@@ -16,6 +16,14 @@ Mesh* Obstacle::getMesh() const {
     return mesh;
 }
 
+void Obstacle::reset() const {
+    mesh->reset();
+}
+
+void Obstacle::bind() {
+    mesh->bind();
+}
+
 void Obstacle::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {
     shader->use();
     shader->setMat4("model", model);

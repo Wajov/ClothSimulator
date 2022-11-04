@@ -8,26 +8,41 @@
 int main() {
     std::ifstream fin;
 
-    // fin.open("standard.txt");
-    // double a[244][243];
-    // for (int i = 0; i < 244; i++)
-    //     for (int j = 0; j < 243; j++)
-    //         fin >> a[i][j];
+    // double x;
+    // fin.open("standard_a.txt");
+    // std::vector<double> a;
+    // while (fin >> x)
+    //     a.push_back(x);
+    // fin.close();
+    // fin.open("standard_b.txt");
+    // std::vector<double> b;
+    // while (fin >> x)
+    //     b.push_back(x);
     // fin.close();
 
-    // fin.open("output.txt");
-    // double b[244][243];
-    // for (int i = 0; i < 244; i++)
-    //     for (int j = 0; j < 243; j++)
-    //         fin >> b[i][j];
+    // fin.open("output_a.txt");
+    // std::vector<double> c;
+    // while (fin >> x)
+    //     c.push_back(x);
+    // fin.close();
+    // fin.open("output_b.txt");
+    // std::vector<double> d;
+    // while (fin >> x)
+    //     d.push_back(x);
     // fin.close();
 
-    // for (int i = 0; i < 244; i++)
-    //     for (int j = 0; j < 243; j++) {
-    //         double diff = std::abs(a[i][j] - b[i][j]);
-    //         if (diff > 1e-6)
-    //             std::cout << i << ' ' << j << ' ' << a[i][j] << ' ' << b[i][j] << ' ' << diff << std::endl;
-    //     }
+    // int N = b.size();
+
+    // for (int i = 0; i < N * N; i++) {
+    //     double diff = std::abs(a[i] - c[i]);
+    //     if (diff > 1e-5)
+    //         std::cout << "A(" << i / N << ", " << i % N << "): " << a[i] << ' ' << c[i] << ' ' << diff << std::endl;
+    // }
+    // for (int i = 0; i < N; i++) {
+    //     double diff = std::abs(b[i] - d[i]);
+    //     if (diff > 1e-5)
+    //         std::cout << "b(" << i << "): " << b[i] << ' ' << d[i] << ' ' << diff << std::endl;
+    // }
 
     // int v0, v1, v2, v3;
 
@@ -58,25 +73,47 @@ int main() {
     //     if (s.find(tu) == s.end())
     //         std::cout << "1: " << std::get<0>(tu) << ' ' << std::get<1>(tu) << ' ' << std::get<2>(tu) << ' ' << std::get<3>(tu) << ' ' << std::endl;
 
+    // double y, z, w;
+
+    // fin.open("standard_post.txt");
+    // std::vector<std::vector<double>> f;
+    // while (fin >> x >> y >> z)
+    //     f.push_back({x, y, z});
+    // fin.close();
+
+    // fin.open("output_post.txt");
+    // std::vector<std::vector<double>> g;
+    // while (fin >> x >> y >> z)
+    //     g.push_back({x, y, z});
+    // fin.close();
+
+    // for (int i = 0; i < f.size(); i++)
+    //     for (int j = 0; j < 3; j++) {
+    //         double diff0 = std::abs(f[i][j] - g[i][j]);
+    //         double diff1 = std::abs((f[i][j] - g[i][j]) / f[i][j]);
+    //         if (diff1 > 1e-2)
+    //             std::cout << i << ' ' << j << ' ' << f[i][j] << ' ' << g[i][j] << ' ' << diff1 << std::endl;
+    //     }
+
+    double x, y, z, w;
     fin.open("standard_sizing.txt");
-    double a[81][4];
-    for (int i = 0; i < 81; i++)
-        for (int j = 0; j < 4; j++)
-            fin >> a[i][j];
+    std::vector<std::vector<double>> a;
+    while (fin >> x >> y >> z >> w)
+        a.push_back({x, y, z, w});
     fin.close();
 
     fin.open("output_sizing.txt");
-    double b[81][4];
-    for (int i = 0; i < 81; i++)
-        for (int j = 0; j < 4; j++)
-            fin >> b[i][j];
+    std::vector<std::vector<double>> b;
+    while (fin >> x >> y >> z >> w)
+        b.push_back({x, y, z, w});
     fin.close();
 
-    for (int i = 0; i < 81; i++)
+    for (int i = 0; i < a.size(); i++)
         for (int j = 0; j < 4; j++) {
-            double diff = std::abs(a[i][j] - b[i][j]);
-            if (diff > 1e-3)
-                std::cout << i << ' ' << j << ' ' << a[i][j] << ' ' << b[i][j] << ' ' << diff << std::endl;
+            double diff0 = std::abs(a[i][j] - b[i][j]);
+            double diff1 = std::abs((a[i][j] - b[i][j]) / a[i][j]);
+            if (std::min(diff0, diff1) > 1e-2)
+                std::cout << i << ' ' << j << ' ' << a[i][j] << ' ' << b[i][j] << ' ' << std::min(diff0, diff1) << std::endl;
         }
 
     return 0;

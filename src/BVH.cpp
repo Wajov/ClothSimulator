@@ -20,11 +20,7 @@ BVH::BVH(const Mesh* mesh, bool ccd) :
     }
     root = new BVHNode(nullptr, 0, n - 1, faces, bounds, centers, leaves);
 
-    std::vector<Vertex>& vertices = const_cast<Mesh*>(mesh)->getVertices();
-    this->vertices.resize(vertices.size());
-    for (Vertex& vertex : vertices)
-        this->vertices.push_back(&vertex);
-
+    vertices = const_cast<Mesh*>(mesh)->getVertices();
     adjacents.resize(vertices.size());
     for (Face* face : faces)
         for (int i = 0; i < 3; i++)

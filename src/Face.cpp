@@ -2,18 +2,30 @@
 
 Face::Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Material* material) :
     vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1), const_cast<Vertex*>(vertex2)} {
-    Vector2f d1 = vertex1->u - vertex0->u;
-    Vector2f d2 = vertex2->u - vertex0->u;
-    inverse = concatenateToMatrix(d1, d2).inverse();
-    area = 0.5f * std::abs(d1(0) * d2(1) - d1(1) * d2(0));
-    if (material != nullptr)
-        mass = material->getDensity() * material->getThicken() * area;
+    initialize(material);
 }
 
 Face::~Face() {}
 
+void Face::initialize(const Material* material) {
+    Vector2f d1 = vertices[1]->u - vertices[0]->u;
+    Vector2f d2 = vertices[2]->u - vertices[0]->u;
+    inverse = concatenateToMatrix(d1, d2).inverse();
+    area = 0.5f * std::abs(cross(d1, d2));
+    if (material != nullptr)
+        mass = material->getDensity() * material->getThicken() * area;
+}
+
 Vertex* Face::getVertex(int index) const {
     return vertices[index];
+}
+
+void Face::replaceVertex(const Vertex* v, const Vertex* vertex) {
+    for (int i = 0; i < vertices.size(); i++)
+        if (vertices[i] == v) {
+            vertices[i] = const_cast<Vertex*>(vertex);
+            return;
+        }
 }
 
 Edge* Face::getEdge(int index) const {
@@ -22,6 +34,14 @@ Edge* Face::getEdge(int index) const {
 
 void Face::setEdges(const Edge* edge0, const Edge* edge1, const Edge* edge2) {
     edges = {const_cast<Edge*>(edge0), const_cast<Edge*>(edge1), const_cast<Edge*>(edge2)};
+}
+
+void Face::replaceEdge(const Edge* e, const Edge* edge) {
+    for (int i = 0; i < edges.size(); i++)
+        if (edges[i] == e) {
+            edges[i] = const_cast<Edge*>(edge);
+            return;
+        }
 }
 
 Vector3f Face::getNormal() const {
@@ -38,6 +58,39 @@ float Face::getArea() const {
 
 float Face::getMass() const {
     return mass;
+}
+
+int Face::sequence(const Edge* edge) const {
+    Vertex* vertex0 = edge->getVertex(0);
+    Vertex* vertex1 = edge->getVertex(1);
+    for (int i = 0; i < vertices.size() - 1; i++)
+        if (vertices[i] == vertex0 && vertices[i + 1] == vertex1)
+            return 0;
+    return vertices[vertices.size() - 1] == vertex0 && vertices[0] == vertex1 ? 0 : 1;
+}
+
+bool Face::contain(const Edge* edge) const {
+    for (const Edge* e : edges)
+        if (e == edge)
+            return true;
+    return false;
+}
+
+Edge* Face::findEdge(const Vertex* vertex0, const Vertex* vertex1) const {
+    for (Edge* edge : edges) {
+        Vertex* v0 = edge->getVertex(0);
+        Vertex* v1 = edge->getVertex(1);
+        if (vertex0 == v0 && vertex1 == v1 || vertex0 == v1 && vertex1 == v0)
+            return edge;
+    }
+    return nullptr;
+}
+
+Edge* Face::findOpposite(const Vertex* vertex) const {
+    for (int i = 0; i < 3; i++)
+        if (vertices[i] == vertex)
+            return edges[(i + 1) % 3];
+    return nullptr;
 }
 
 Bounds Face::bounds(bool ccd) const {

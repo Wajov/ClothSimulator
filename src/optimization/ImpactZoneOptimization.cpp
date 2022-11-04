@@ -21,6 +21,7 @@ ImpactZoneOptimization::ImpactZoneOptimization(const ImpactZone* zone, double th
         }
     }
 
+    invMass = 0.0;
     for (const Vertex* vertex : vertices) {
         double mass = vertex->isFree ? vertex->m : obstacleMass;
         invMass += 1.0 / mass;
@@ -51,7 +52,7 @@ double ImpactZoneOptimization::objective(const double* x) const {
         double mass = vertex->isFree ? vertex->m : obstacleMass;
         double norm2 = 0.0;
         for (int j = 0; j < 3; j++)
-            norm2 += sqr(x[3 * i + j] - vertex->x(j));
+            norm2 += sqr(x[3 * i + j] - vertex->x1(j));
         ans += 0.5 * mass * norm2;
     }
     return ans * invMass;
@@ -62,7 +63,7 @@ void ImpactZoneOptimization::objectiveGradient(const double* x, double* gradient
         Vertex* vertex = vertices[i];
         double mass = vertex->isFree ? vertex->m : obstacleMass;
         for (int j = 0; j < 3; j++)
-            gradient[3 * i + j] = invMass * mass * (x[3 * i + j] - vertex->x(j));
+            gradient[3 * i + j] = invMass * mass * (x[3 * i + j] - vertex->x1(j));
     }
 }
 

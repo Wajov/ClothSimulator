@@ -29,7 +29,9 @@ Simulator::Simulator(const std::string& path) :
 
     fin.close();
 
-    cloths[0]->readDataFromFile("input.txt");
+    // cloths[0]->readDataFromFile("input.txt");
+    remeshingStep();
+    bind();
 }
 
 Simulator::~Simulator() {
@@ -77,16 +79,20 @@ std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& imp
     std::vector<Impact> sorted = impacts;
     std::sort(sorted.begin(), sorted.end());
     
+    std::unordered_set<Vertex*> vertices;
     std::vector<Impact> ans;
     for (const Impact& impact : sorted) {
-        bool conflict = false;
-        for (const Impact& independentImpact : ans)
-            if (impact.conflict(independentImpact)) {
-                conflict = true;
+        bool flag = true;
+        for (int i = 0; i < 4; i++)
+            if (impact.vertices[i]->isFree && vertices.find(impact.vertices[i]) != vertices.end()) {
+                flag = false;
                 break;
             }
-        if (!conflict)
+        if (flag) {
             ans.push_back(impact);
+            for (int i = 0; i < 4; i++)
+                vertices.insert(impact.vertices[i]);
+        }
     }
     return ans;
 }
@@ -117,7 +123,7 @@ void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<Impac
                     ImpactZone* zoneTemp = findImpactZone(vertex, zones);
                     if (zone != zoneTemp) {
                         zone->merge(zoneTemp);
-                        zones.erase(std::remove(zones.begin(), zones.end(), zoneTemp));
+                        zones.erase(std::remove(zones.begin(), zones.end(), zoneTemp), zones.end());
                         delete zoneTemp;
                     }
                 }
@@ -128,10 +134,15 @@ void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<Impac
     }
 }
 
+void Simulator::resetObstacles() {
+    for (Obstacle* obstacle : obstacles)
+        obstacle->reset();
+}
+
 void Simulator::physicsStep() {
     for (Cloth* cloth : cloths)
         cloth->physicsStep(dt, magic->handleStiffness, gravity, wind);
-    update();
+    updateGeometry();
 }
 
 void Simulator::collisionStep() {
@@ -177,7 +188,8 @@ void Simulator::collisionStep() {
             break;
     }
 
-    update();
+    updateGeometry();
+    updateVelocity();
 
     for (const BVH* clothBvh : clothBvhs)
         delete clothBvh;
@@ -193,22 +205,40 @@ void Simulator::remeshingStep() {
         obstacleBvhs.push_back(new BVH(obstacle->getMesh(), false));
 
     for (Cloth* cloth : cloths)
-        cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness, magic->ribStiffening);
+        cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness);
+
+    updateGeometry();
+    updateIndex();
 
     for (const BVH* obstacleBvh : obstacleBvhs)
         delete obstacleBvh;
 }
 
-void Simulator::update() {
+void Simulator::updateGeometry() {
     for (Cloth* cloth : cloths)
         cloth->updateGeometry();
+}
+
+void Simulator::updateVelocity() {
     for (Cloth* cloth : cloths)
         cloth->updateVelocity(dt);
 }
 
-void Simulator::updateRenderingData() const {
+void Simulator::updateIndex() {
     for (Cloth* cloth : cloths)
-        cloth->updateRenderingData();
+        cloth->updateIndex();
+}
+
+void Simulator::updateRenderingData(bool rebind) {
+    for (Cloth* cloth : cloths)
+        cloth->updateRenderingData(rebind);
+}
+
+void Simulator::bind() {
+    for (Cloth* cloth : cloths)
+        cloth->bind();
+    for (Obstacle* obstacle : obstacles)
+        obstacle->bind();
 }
 
 void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightPosition, float lightPower) const {
@@ -220,11 +250,24 @@ void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Ma
 }
 
 void Simulator::step() {
-    // nSteps++;
-    // physicsStep();
-    // collisionStep();
-    // if (nSteps % frameSteps == 0)
+    nSteps++;
+    std::cout << "Step [" << nSteps << "]:" << std::endl;
+    resetObstacles();
+
+    auto t0 = std::chrono::high_resolution_clock::now();
+    physicsStep();
+    auto t1 = std::chrono::high_resolution_clock::now();
+    std::cout << "Physics Step: " << std::chrono::duration<float>(t1 - t0).count() << "s";
+    collisionStep();
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::cout << ", Collision Step: " << std::chrono::duration<float>(t2 - t1).count() << "s";
+    if (nSteps % frameSteps == 0) {
         remeshingStep();
-    exit(0);
-    updateRenderingData();
+        auto t3 = std::chrono::high_resolution_clock::now();
+        std::cout << ", Remeshing Step: " << std::chrono::duration<float>(t3 - t2).count() << "s";
+        Mesh* mesh = cloths[0]->getMesh();
+        updateRenderingData(true);
+    } else
+        updateRenderingData(false);
+    std::cout << std::endl;
 }

@@ -4,6 +4,7 @@ Renderer::Renderer(int width, int height, const std::string& path) :
     width(width),
     height(height),
     press(false),
+    pause(true),
     lastX(INFINITY),
     lastY(INFINITY),
     scaling(1.0f),
@@ -88,6 +89,8 @@ void Renderer::scrollCallback(double x, double y) {
 void Renderer::keyCallback(int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+    else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+        pause = !pause;
 }
 
 void Renderer::render() const {
@@ -103,7 +106,8 @@ void Renderer::render() const {
         projection = Transform::perspective(45.0f, static_cast<float>(width) / height, 0.1f, 100.0f);
 
         simulator->render(model, view, projection, cameraPosition, lightPosition, lightPower);
-        simulator->step();
+        if (!pause)
+            simulator->step();
 
         glfwSwapBuffers(window);
         glfwPollEvents();

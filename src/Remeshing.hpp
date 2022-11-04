@@ -9,9 +9,10 @@
 
 class Remeshing {
 public:
-    float refineAngle, refineVelocity, refineCompression;
+    float refineAngle, refineVelocity, refineCompression, ribStiffening;
     float sizeMin, sizeMax;
     float aspectMin;
+    float flipThreshold;
     Remeshing(const Json::Value& json);
     ~Remeshing();
 };

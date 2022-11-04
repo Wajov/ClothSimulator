@@ -32,6 +32,10 @@ template<typename T> static T min(T a, T b, T c, T d) {
     return std::min(std::min(a, b), std::min(c, d));
 }
 
+static float cross(const Vector2f& v0, const Vector2f& v1) {
+    return v0(0) * v1(1) - v0(1) * v1(0);
+}
+
 static Vector9f concatenateToVector(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2) {
     Vector9f ans;
     ans.block<3, 1>(0, 0) = v0;
@@ -94,11 +98,11 @@ static void eigenvalueDecomposition(const Matrix2x2f& A, Matrix2x2f& Q, Vector2f
     if (b != 0.0f) {
         v0 = l1 - d;
         v1 = b;
-        vn = std::sqrt(v0 * v0 + b2);
+        vn = std::sqrt(sqr(v0) + b2);
         Q(0,0) = v0 / vn;
         Q(1,0) = v1 / vn;
         v0 = l2 - d;
-        vn = std::sqrt(v0 * v0 + b2);
+        vn = std::sqrt(sqr(v0) + b2);
         Q(0, 1) = v0 / vn;
         Q(1, 1) = v1 / vn;
     } else if (a >= d) {

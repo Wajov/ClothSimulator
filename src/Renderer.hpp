@@ -13,7 +13,7 @@
 
 class Renderer {
 private:
-    bool press;
+    bool press, pause;
     int width, height;
     double lastX, lastY, scaling;
     Matrix4x4f rotation;
