@@ -1,8 +1,8 @@
 #ifndef IMPACT_ZONE_OPTIMIZATION_HPP
 #define IMPACT_ZONE_OPTIMIZATION_HPP
 
-#include "TypeHelper.hpp"
 #include "MathHelper.hpp"
+#include "Vector.hpp"
 #include "Optimization.hpp"
 #include "Impact.hpp"
 #include "ImpactZone.hpp"

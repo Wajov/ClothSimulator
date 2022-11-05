@@ -8,7 +8,7 @@ Renderer::Renderer(int width, int height, const std::string& path) :
     lastX(INFINITY),
     lastY(INFINITY),
     scaling(1.0f),
-    rotation(Matrix4x4f::Identity()) {
+    rotation(1.0f) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);

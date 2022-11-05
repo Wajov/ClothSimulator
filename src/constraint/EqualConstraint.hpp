@@ -1,7 +1,7 @@
 #ifndef EQUAL_CONSTRAINT_HPP
 #define EQUAL_CONSTRAINT_HPP
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
 #include "Vertex.hpp"
 #include "Constraint.hpp"
 

@@ -11,7 +11,7 @@ Disk::Disk(const Vector2f& o, float r) :
 Disk::~Disk() {}
 
 bool Disk::enclose(const Disk& d) const {
-    return r >= d.r && sqr(r - d.r) >= (o - d.o).squaredNorm();    
+    return r >= d.r && sqr(r - d.r) >= (o - d.o).norm2();    
 }
 
 Disk Disk::circumscribedDisk(const Disk& d0, const Disk& d1) {

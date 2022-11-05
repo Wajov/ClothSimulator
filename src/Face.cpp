@@ -10,8 +10,8 @@ Face::~Face() {}
 void Face::initialize(const Material* material) {
     Vector2f d1 = vertices[1]->u - vertices[0]->u;
     Vector2f d2 = vertices[2]->u - vertices[0]->u;
-    inverse = concatenateToMatrix(d1, d2).inverse();
-    area = 0.5f * std::abs(cross(d1, d2));
+    inverse = Matrix2x2f(d1, d2).inverse();
+    area = 0.5f * std::abs(d1.cross(d2));
     if (material != nullptr)
         mass = material->getDensity() * material->getThicken() * area;
 }
@@ -108,17 +108,17 @@ Bounds Face::bounds(bool ccd) const {
 }
 
 Matrix3x2f Face::derivative(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2) const {
-    return concatenateToMatrix(v1 - v0, v2 - v0) * inverse;
+    return Matrix3x2f(v1 - v0, v2 - v0) * inverse;
 }
 
 Matrix2x2f Face::curvature() const {
-    Matrix2x2f ans = Matrix2x2f::Zero();
+    Matrix2x2f ans;
     for (int i = 0; i < 3; i++) {
         Edge* edge = edges[i];
         Vector2f e = edge->getVertex(1)->u - edge->getVertex(0)->u;
         Vector2f t = Vector2f(-e(1), e(0)).normalized();
         float angle = edge->getAngle();
-        ans -= 0.5f * angle * e.norm() * t * t.transpose();
+        ans -= 0.5f * angle * e.norm() * t.outer(t);
     }
     return ans / area;
 }

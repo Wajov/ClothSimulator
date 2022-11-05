@@ -1,7 +1,7 @@
 #ifndef GRADIENT_HPP
 #define GRADIENT_HPP
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
 
 class Gradient {
 private:

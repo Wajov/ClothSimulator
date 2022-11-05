@@ -50,7 +50,7 @@ BVHNode::~BVHNode() {
 
 float BVHNode::signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w) const {
     n = (y1 - y0).normalized().cross((y2 - y0).normalized());
-    if (n.squaredNorm() < 1e-6f)
+    if (n.norm2() < 1e-6f)
         return INFINITY;
     n.normalize();
     float h = (x - y0).dot(n);
@@ -66,7 +66,7 @@ float BVHNode::signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, c
 
 float BVHNode::signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float* w) const {
     n = (x1 - x0).normalized().cross((y1 - y0).normalized());
-    if (n.squaredNorm() < 1e-8f) {
+    if (n.norm2() < 1e-8f) {
         Vector3f e0 = (x1 - x0).normalized(), e1 = (y1 - y0).normalized();
         float p0min = x0.dot(e0), p0max = x1.dot(e0), p1min = y0.dot(e0), p1max = y1.dot(e0);
         if (p1max < p1min)

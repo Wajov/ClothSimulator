@@ -7,7 +7,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 #include "Transform.hpp"
 #include "Simulator.hpp"
 

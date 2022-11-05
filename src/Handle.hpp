@@ -1,9 +1,8 @@
 #ifndef HANDLE_HPP
 #define HANDLE_HPP
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
 #include "Vertex.hpp"
-#include "constraint/EqualConstraint.hpp"
 
 class Handle {
 private:
@@ -13,7 +12,6 @@ private:
 public:
     Handle(const Vertex* vertex, const Vector3f& position);
     ~Handle();
-    Constraint* getConstraint() const;
     Vertex* getVertex() const;
     Vector3f getPosition() const;
 };

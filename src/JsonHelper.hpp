@@ -3,7 +3,7 @@
 
 #include <json/json.h>
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
 
 static int parseInt(const Json::Value& json, int d = 0) {
     return json.isNull() ? d : json.asInt();

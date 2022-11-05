@@ -8,7 +8,7 @@ Vertex::Vertex(int index, const Vector3f& x, bool isFree) :
     n(0.0f, 0.0f, 0.0f),
     v(0.0f, 0.0f, 0.0f),
     u(0.0f, 0.0f),
-    sizing(Matrix2x2f::Zero()),
+    sizing(),
     m(0.0f),
     a(0.0f),
     isFree(isFree),

@@ -142,7 +142,7 @@ void Simulator::resetObstacles() {
 void Simulator::physicsStep() {
     for (Cloth* cloth : cloths)
         cloth->physicsStep(dt, magic->handleStiffness, gravity, wind);
-    updateGeometry();
+    updateGeometries();
 }
 
 void Simulator::collisionStep() {
@@ -188,8 +188,8 @@ void Simulator::collisionStep() {
             break;
     }
 
-    updateGeometry();
-    updateVelocity();
+    updateGeometries();
+    updateVelocities();
 
     for (const BVH* clothBvh : clothBvhs)
         delete clothBvh;
@@ -207,26 +207,26 @@ void Simulator::remeshingStep() {
     for (Cloth* cloth : cloths)
         cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness);
 
-    updateGeometry();
-    updateIndex();
+    updateGeometries();
+    updateIndices();
 
     for (const BVH* obstacleBvh : obstacleBvhs)
         delete obstacleBvh;
 }
 
-void Simulator::updateGeometry() {
+void Simulator::updateGeometries() {
     for (Cloth* cloth : cloths)
-        cloth->updateGeometry();
+        cloth->updateGeometries();
 }
 
-void Simulator::updateVelocity() {
+void Simulator::updateVelocities() {
     for (Cloth* cloth : cloths)
-        cloth->updateVelocity(dt);
+        cloth->updateVelocities(dt);
 }
 
-void Simulator::updateIndex() {
+void Simulator::updateIndices() {
     for (Cloth* cloth : cloths)
-        cloth->updateIndex();
+        cloth->updateIndices();
 }
 
 void Simulator::updateRenderingData(bool rebind) {
@@ -273,7 +273,6 @@ void Simulator::step() {
         auto t3 = std::chrono::high_resolution_clock::now();
         d = t3 - t2;
         std::cout << ", Remeshing Step: " << d.count() << "s";
-        Mesh* mesh = cloths[0]->getMesh();
         updateRenderingData(true);
     } else
         updateRenderingData(false);

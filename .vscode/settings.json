@@ -157,6 +157,8 @@
         "sparselu": "cpp",
         "sparseqr": "cpp",
         "*.ipp": "cpp",
-        "dense": "cpp"
+        "dense": "cpp",
+        "__functional_03": "cpp",
+        "__split_buffer": "cpp"
     }
 }

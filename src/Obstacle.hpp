@@ -3,7 +3,8 @@
 
 #include <json/json.h>
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 #include "Transform.hpp"
 #include "Mesh.hpp"
 #include "Shader.hpp"

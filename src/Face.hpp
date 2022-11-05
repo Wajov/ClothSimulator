@@ -1,8 +1,9 @@
 #ifndef FACE_HPP
 #define FACE_HPP
 
-#include "TypeHelper.hpp"
 #include "MathHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 #include "Bounds.hpp"
 #include "Vertex.hpp"
 #include "Edge.hpp"

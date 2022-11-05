@@ -14,6 +14,6 @@ std::vector<Gradient*> EqualConstraint::energyGradient() const {
 
 std::vector<Hessian*> EqualConstraint::energyHessian() const {
     std::vector<Hessian*> ans;
-    ans.push_back(new Hessian(vertex->index, vertex->index, 1000.0f * Matrix3x3f::Identity()));
+    ans.push_back(new Hessian(vertex->index, vertex->index, 1000.0f * Matrix3x3f(1.0f)));
     return ans;
 }

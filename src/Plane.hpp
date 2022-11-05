@@ -1,7 +1,7 @@
 #ifndef PLANE_HPP
 #define PLANE_HPP
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
 
 class Plane {
 public:

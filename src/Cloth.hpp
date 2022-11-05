@@ -11,8 +11,9 @@
 #include <Eigen/Cholesky>
 #include <json/json.h>
 
-#include "TypeHelper.hpp"
 #include "MathHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 #include "Transform.hpp"
 #include "Mesh.hpp"
 #include "Material.hpp"
@@ -33,18 +34,18 @@ private:
     std::vector<Handle*> handles;
     Remeshing* remeshing;
     Shader* edgeShader, * faceShader;
-    Vector3i indices(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2) const;
-    Vector4i indices(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Vertex* vertex3) const;
-    void addSubMatrix(const MatrixXxXf& B, const VectorXi& indices, Eigen::SparseMatrix<float>& A) const;
-    void addSubVector(const VectorXf& b, const VectorXi& indices, VectorXf& a) const;
+    void addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::SparseMatrix<float>& A) const;
+    void addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::SparseMatrix<float>& A) const;
+    void addSubVector(const Vector9f& b, const Vector3i& indices, Eigen::VectorXf& a) const;
+    void addSubVector(const Vector12f& b, const Vector4i& indices, Eigen::VectorXf& a) const;
     float distance(const Vector3f& x, const Vector3f& a, const Vector3f& b) const;
     Vector2f barycentricWeights(const Vector3f& x, const Vector3f& a, const Vector3f& b) const;
     std::pair<Vector9f, Matrix9x9f> stretchingForce(const Face* face) const;
     std::pair<Vector12f, Matrix12x12f> bendingForce(const Edge* edge) const;
-    void init(Eigen::SparseMatrix<float>& A, VectorXf& b) const;
-    void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, VectorXf& b) const;
-    void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const;
-    void addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, VectorXf& b) const;
+    void init(Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
+    void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
+    void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
+    void addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     Matrix2x2f compressionMetric(const Matrix2x2f& G, const Matrix2x2f& S2) const;
     Matrix2x2f obstacleMetric(const Face* face, const std::vector<Plane>& planes) const;
     Matrix2x2f maxTensor(const Matrix2x2f M[]) const;
@@ -69,9 +70,9 @@ public:
     void readDataFromFile(const std::string& path);
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
-    void updateGeometry();
-    void updateVelocity(float dt);
-    void updateIndex();
+    void updateGeometries();
+    void updateVelocities(float dt);
+    void updateIndices();
     void updateRenderingData(bool rebind);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;

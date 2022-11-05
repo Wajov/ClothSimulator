@@ -15,6 +15,7 @@ file(GLOB_RECURSE SOURCE "src/*.cpp" "src/*.hpp")
 add_executable(ClothSimulator ${SOURCE})
 
 add_subdirectory(test)
+add_subdirectory(CudaTest)
 
 # OpenGL
 find_package(OpenGL REQUIRED)

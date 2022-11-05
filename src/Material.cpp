@@ -44,11 +44,15 @@ Vector4f Material::calculateStretchingSample(const Matrix2x2f& G, const Vector4f
     Vector2f l;
     eigenvalueDecomposition(2.0f * G, Q, l);
     if (l(0) == l(1) && Q(0, 0) == 0.0f && Q(1, 1) == 0.0f)
-        Q = Matrix2x2f::Identity();
-    if (Q(0, 0) < 0.0f)
-        Q.col(0) = -Q.col(0);
-    if (Q(1, 1) < 0.0f)
-        Q.col(1) = -Q.col(1);
+        Q = Matrix2x2f(1.0f);
+    if (Q(0, 0) < 0.0f) {
+        Q(0, 0) = -Q(0, 0);
+        Q(1, 0) = -Q(1, 0);
+    }
+    if (Q(1, 1) < 0.0f) {
+        Q(0, 1) = -Q(0, 1);
+        Q(1, 1) = -Q(1, 1);
+    }
 
     float strainWeight = (std::sqrt(l(0) + 1.0f) - 1.0f) * 6.0f;
     strainWeight = std::clamp(strainWeight, 0.0f, 1.0f - 1e-6f);
@@ -67,7 +71,6 @@ Vector4f Material::calculateStretchingSample(const Matrix2x2f& G, const Vector4f
     weights[1][1] = strainWeight * angleWeight;
 
     Vector4f ans;
-    ans.setZero();
     for (int i = 0; i < 2; i++)
         for (int j = 0; j < 2; j++)
             ans += data[strainId + i][angleId + j] * weights[i][j];
@@ -113,7 +116,6 @@ Vector4f Material::stretchingStiffness(const Matrix2x2f& G) const {
     weights[1][1][1] = x * y * z;
 
     Vector4f ans;
-    ans.setZero();
     for (int i = 0; i < 2; i++)
         for (int j = 0; j < 2; j++)
             for (int k = 0; k < 2; k++)

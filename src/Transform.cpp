@@ -2,7 +2,7 @@
 
 Transform::Transform(const Json::Value& json) {
     if (json.isNull())
-        matrix = Matrix4x4f::Identity();
+        matrix = Matrix4x4f(1.0f);
     else
         matrix = translate(parseVector3f(json["translate"])) * scale(parseFloat(json["scale"], 1.0f));
 }
@@ -15,7 +15,7 @@ Vector3f Transform::applyTo(const Vector3f& v) const {
 }
 
 Matrix4x4f Transform::scale(float scaling) {
-    Matrix4x4f ans = Matrix4x4f::Zero();
+    Matrix4x4f ans;
 
     ans(0, 0) = ans(1, 1) = ans(2, 2) = scaling;
     ans(3, 3) = 1.0f;
@@ -27,7 +27,7 @@ Matrix4x4f Transform::rotate(const Vector3f& v, float angle) {
     Vector3f axis = v.normalized();
     float s = std::sin(angle);
     float c = std::cos(angle);
-    Matrix4x4f ans = Matrix4x4f::Zero();
+    Matrix4x4f ans;
 
     ans(0, 0) = (1.0f - c) * axis(0) * axis(0) + c;
     ans(0, 1) = (1.0f - c) * axis(1) * axis(0) - s * axis(2);
@@ -47,7 +47,7 @@ Matrix4x4f Transform::rotate(const Vector3f& v, float angle) {
 }
 
 Matrix4x4f Transform::translate(const Vector3f& v) {
-    Matrix4x4f ans = Matrix4x4f::Identity();
+    Matrix4x4f ans(1.0f);
 
     ans(0, 3) = v(0);
     ans(1, 3) = v(1);
@@ -60,7 +60,7 @@ Matrix4x4f Transform::lookAt(const Vector3f& position, const Vector3f& center, c
     Vector3f f = (center - position).normalized();
     Vector3f s = f.cross(up).normalized();
     Vector3f u = s.cross(f);
-    Matrix4x4f ans = Matrix4x4f::Zero();
+    Matrix4x4f ans;
 
     ans(0, 0) = s(0);
     ans(0, 1) = s(1);
@@ -84,7 +84,7 @@ Matrix4x4f Transform::lookAt(const Vector3f& position, const Vector3f& center, c
 
 Matrix4x4f Transform::perspective(float fovy, float aspect, float zNear, float zFar) {
     float t = std::tan(fovy * 0.5f);
-    Matrix4x4f ans = Matrix4x4f::Zero();
+    Matrix4x4f ans;
 
     ans(0, 0) = 1.0f / (aspect * t);
     ans(1, 1) = 1.0f / t;

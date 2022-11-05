@@ -1,7 +1,8 @@
 #ifndef VERTEX_HPP
 #define VERTEX_HPP
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 #include "Bounds.hpp"
 
 class Vertex {

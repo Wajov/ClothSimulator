@@ -3,7 +3,8 @@
 
 #include <vector>
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 #include "optimization/Optimization.hpp"
 
 const int MAX_TOTAL_ITERATIONS = 100;
@@ -17,7 +18,7 @@ static std::vector<double> lambda;
 static double mu;
 
 template<typename T> static T sign(T x) {
-    return x < 0 ? -1 : 1;
+    return x < static_cast<T>(0) ? static_cast<T>(-1) : static_cast<T>(1);
 }
 
 template<typename T> static T sqr(T x) {
@@ -32,55 +33,8 @@ template<typename T> static T min(T a, T b, T c, T d) {
     return std::min(std::min(a, b), std::min(c, d));
 }
 
-static float cross(const Vector2f& v0, const Vector2f& v1) {
-    return v0(0) * v1(1) - v0(1) * v1(0);
-}
-
-static Vector9f concatenateToVector(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2) {
-    Vector9f ans;
-    ans.block<3, 1>(0, 0) = v0;
-    ans.block<3, 1>(3, 0) = v1;
-    ans.block<3, 1>(6, 0) = v2;
-    return ans;
-}
-
-static Vector12f concatenateToVector(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2, const Vector3f& v3) {
-    Vector12f ans;
-    ans.block<3, 1>(0, 0) = v0;
-    ans.block<3, 1>(3, 0) = v1;
-    ans.block<3, 1>(6, 0) = v2;
-    ans.block<3, 1>(9, 0) = v3;
-    return ans;
-}
-
-static MatrixXxXf concatenateToMatrix(const VectorXf& v0, const VectorXf& v1) {
-    MatrixXxXf ans(v0.rows(), 2);
-    ans.col(0) = v0;
-    ans.col(1) = v1;
-    return ans;
-}
-
-static MatrixXxXf concatenateToMatrix(const VectorXf& v0, const VectorXf& v1, const VectorXf& v2) {
-    MatrixXxXf ans(v0.rows(), 3);
-    ans.col(0) = v0;
-    ans.col(1) = v1;
-    ans.col(2) = v2;
-    return ans;
-}
-
-static float mixed(const Vector3f& a, const Vector3f& b, const Vector3f& c) {
+template<typename T> static T mixed(const Vector<T, 3>& a, const Vector<T, 3>& b, const Vector<T, 3>& c) {
     return a.dot(b.cross(c));
-}
-
-static MatrixXxXf kronecker(const MatrixXxXf& A, const MatrixXxXf& B) {
-    int n = A.rows(), m = A.cols(), p = B.rows(), q = B.cols();
-    MatrixXxXf ans(n * p, m * q);
-    for (int i = 0; i < n; i++)
-        for (int j = 0; j < m; j++)
-            for (int k = 0; k < p; k++)
-                for (int h = 0; h < q; h++)
-                    ans(i * p + k, j * q + h) = A(i, j) * B(k, h);
-    return ans;
 }
 
 static void eigenvalueDecomposition(const Matrix2x2f& A, Matrix2x2f& Q, Vector2f& l) {
@@ -118,9 +72,9 @@ static void eigenvalueDecomposition(const Matrix2x2f& A, Matrix2x2f& Q, Vector2f
     }
 }
 
-static Matrix2x2f diagonal(const Vector2f& v) {
-    Matrix2x2f ans = Matrix2x2f::Zero();
-    for (int i = 0; i < 2; i++)
+template<typename T, int n> static Matrix<T, n, n> diagonal(const Vector<T, n>& v) {
+    Matrix<T, n, n> ans;
+    for (int i = 0; i < n; i++)
         ans(i, i) = v(i);
     return ans;
 }
@@ -150,11 +104,11 @@ static float newtonsMethod(float a, float b, float c, float d, float x0, int dir
         x0 += dir * std::sqrt(std::abs(2.0f * y0 / ddy0));
     }
     for (int iter = 0; iter < 100; iter++) {
-        double y = d + x0 * (c + x0 * (b + x0 * a));
-        double dy = c + x0 * (2*b + 3.0f * x0 * a);
+        float y = d + x0 * (c + x0 * (b + x0 * a));
+        float dy = c + x0 * (2*b + 3.0f * x0 * a);
         if (dy == 0)
             return x0;
-        double x1 = x0 - y / dy;
+        float x1 = x0 - y / dy;
         if (std::abs(x0 - x1) < 1e-6f)
             return x0;
         x0 = x1;

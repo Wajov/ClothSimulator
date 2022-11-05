@@ -1,9 +1,10 @@
 #ifndef BOUNDS_HPP
 #define BOUNDS_HPP
 
+#include <algorithm>
 #include <cfloat>
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
 
 class Bounds {
 private:

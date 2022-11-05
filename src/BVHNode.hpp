@@ -2,6 +2,7 @@
 #define BVH_NODE_HPP
 
 #include <cmath>
+#include <unordered_map>
 
 #include "Bounds.hpp"
 #include "Face.hpp"

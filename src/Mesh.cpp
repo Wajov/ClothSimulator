@@ -34,9 +34,6 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
                 t = split(s[3], '/');
                 index2 = std::stoi(t[0]) - 1;
                 uIndex2 = std::stoi(t[1]) - 1;
-                assert(vertexMap[index0] == -1 || vertexMap[index0] == uIndex0);
-                assert(vertexMap[index1] == -1 || vertexMap[index1] == uIndex1);
-                assert(vertexMap[index2] == -1 || vertexMap[index2] == uIndex2);
                 vertices[index0]->u = u[uIndex0];
                 vertices[index1]->u = u[uIndex1];
                 vertices[index2]->u = u[uIndex2];
@@ -72,7 +69,7 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
             for (int i = 0; i < 2; i++)
                 edge->getVertex(i)->preserve = true;
 
-    updateGeometry();
+    updateGeometries();
 }
 
 Mesh::~Mesh() {
@@ -153,7 +150,7 @@ void Mesh::reset() {
         vertex->x = vertex->x0;
 }
 
-void Mesh::updateGeometry() {
+void Mesh::updateGeometries() {
     for (Face* face : faces)
         face->update();
     for (Edge* edge : edges)
@@ -161,7 +158,7 @@ void Mesh::updateGeometry() {
     for (Vertex* vertex : vertices) {
         vertex->x1 = vertex->x;
         vertex->m = 0.0f;
-        vertex->n = Vector3f::Zero();
+        vertex->n = Vector3f();
     }
     for (const Face* face : faces) {
         float m = face->getMass() / 3.0f;
@@ -170,26 +167,26 @@ void Mesh::updateGeometry() {
             Vector3f e0 = face->getVertex((i + 1) % 3)->x - vertex->x;
             Vector3f e1 = face->getVertex((i + 2) % 3)->x - vertex->x;
             face->getVertex(i)->m += m;
-            vertex->n += e0.cross(e1) / (e0.squaredNorm() * e1.squaredNorm());
+            vertex->n += e0.cross(e1) / (e0.norm2() * e1.norm2());
         }
     }
     for (Vertex* vertex : vertices)
         vertex->n.normalize();
 }
 
-void Mesh::updateVelocity(float dt) {
+void Mesh::updateVelocities(float dt) {
     float invDt = 1.0f / dt;
     for (Vertex* vertex : vertices)
         vertex->v = (vertex->x - vertex->x0) * invDt;
 }
 
-void Mesh::updateIndex() {
+void Mesh::updateIndices() {
     for (int i = 0; i < vertices.size(); i++)
         vertices[i]->index = i;
 }
 
 void Mesh::updateRenderingData(bool rebind) {
-    vertexArray.resize(vertices.size(), Vertex(0, Vector3f::Zero(), true));
+    vertexArray.resize(vertices.size(), Vertex(0, Vector3f(), true));
     for (int i = 0; i < vertices.size(); i++)
         vertexArray[i] = *vertices[i];
 
@@ -220,7 +217,7 @@ void Mesh::updateRenderingData(bool rebind) {
 }
 
 void Mesh::bind() {
-        vertexArray.resize(vertices.size(), Vertex(0, Vector3f::Zero(), true));
+        vertexArray.resize(vertices.size(), Vertex(0, Vector3f(), true));
     for (int i = 0; i < vertices.size(); i++)
         vertexArray[i] = *vertices[i];
 

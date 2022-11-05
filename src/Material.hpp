@@ -8,9 +8,10 @@
 
 #include <json/json.h>
 
-#include "TypeHelper.hpp"
 #include "MathHelper.hpp"
 #include "JsonHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 
 const int N = 30;
 

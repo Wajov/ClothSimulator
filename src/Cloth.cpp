@@ -29,28 +29,11 @@ Cloth::~Cloth() {
     delete faceShader;
 }
 
-Vector3i Cloth::indices(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2) const {
-    Vector3i ans;
-    ans(0) = vertex0->index;
-    ans(1) = vertex1->index;
-    ans(2) = vertex2->index;
-    return ans;
-}
-
-Vector4i Cloth::indices(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Vertex* vertex3) const {
-    Vector4i ans;
-    ans(0) = vertex0->index;
-    ans(1) = vertex1->index;
-    ans(2) = vertex2->index;
-    ans(3) = vertex3->index;
-    return ans;
-}
-
-void Cloth::addSubMatrix(const MatrixXxXf& B, const VectorXi& indices, Eigen::SparseMatrix<float>& A) const {
-    for (int i = 0; i < indices.rows(); i++) {
-        int x = indices[i];
-        for (int j = 0; j < indices.rows(); j++) {
-            int y = indices[j];
+void Cloth::addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::SparseMatrix<float>& A) const {
+    for (int i = 0; i < 3; i++) {
+        int x = indices(i);
+        for (int j = 0; j < 3; j++) {
+            int y = indices(j);
             for (int k = 0; k < 3; k++)
                 for (int h = 0; h < 3; h++)
                     A.coeffRef(3 * x + k, 3 * y + h) += B(3 * i + k, 3 * j + h);
@@ -58,9 +41,29 @@ void Cloth::addSubMatrix(const MatrixXxXf& B, const VectorXi& indices, Eigen::Sp
     }
 }
 
-void Cloth::addSubVector(const VectorXf& b, const VectorXi& indices, VectorXf& a) const {
-    for (int i = 0; i < indices.rows(); i++) {
-        int x = indices[i];
+void Cloth::addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::SparseMatrix<float>& A) const {
+    for (int i = 0; i < 4; i++) {
+        int x = indices(i);
+        for (int j = 0; j < 4; j++) {
+            int y = indices(j);
+            for (int k = 0; k < 3; k++)
+                for (int h = 0; h < 3; h++)
+                    A.coeffRef(3 * x + k, 3 * y + h) += B(3 * i + k, 3 * j + h);
+        }
+    }
+}
+
+void Cloth::addSubVector(const Vector9f& b, const Vector3i& indices, Eigen::VectorXf& a) const {
+    for (int i = 0; i < 3; i++) {
+        int x = indices(i);
+        for (int j = 0; j < 3; j++)
+            a(3 * x + j) += b(3 * i + j);
+    }
+}
+
+void Cloth::addSubVector(const Vector12f& b, const Vector4i& indices, Eigen::VectorXf& a) const {
+    for (int i = 0; i < 4; i++) {
+        int x = indices(i);
         for (int j = 0; j < 3; j++)
             a(3 * x + j) += b(3 * i + j);
     }
@@ -69,24 +72,24 @@ void Cloth::addSubVector(const VectorXf& b, const VectorXi& indices, VectorXf& a
 float Cloth::distance(const Vector3f& x, const Vector3f& a, const Vector3f& b) const {
     Vector3f e = b - a;
     Vector3f t = x - a;
-    Vector3f r = e * e.dot(t) / e.squaredNorm();
+    Vector3f r = e * e.dot(t) / e.norm2();
     return (t - r).norm();
 }
 
 Vector2f Cloth::barycentricWeights(const Vector3f& x, const Vector3f& a, const Vector3f& b) const {
     Vector3f e = b - a;
-    float t = e.dot(x - a) / e.squaredNorm();
+    float t = e.dot(x - a) / e.norm2();
     return Vector2f(1.0f - t, t);
 }
 
 std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face) const {
     Matrix3x2f F = face->derivative(face->getVertex(0)->x, face->getVertex(1)->x, face->getVertex(2)->x);
-    Matrix2x2f G = 0.5f * (F.transpose() * F - Matrix2x2f::Identity());
+    Matrix2x2f G = 0.5f * (F.transpose() * F - Matrix2x2f(1.0f));
 
     Matrix2x2f Y = face->getInverse();
-    Matrix2x3f D = concatenateToMatrix(-Y.row(0) - Y.row(1), Y.row(0), Y.row(1));
-    Matrix3x9f Du = kronecker(D.row(0), Matrix3x3f::Identity());
-    Matrix3x9f Dv = kronecker(D.row(1), Matrix3x3f::Identity());
+    Matrix2x3f D(-Y.row(0) - Y.row(1), Y.row(0), Y.row(1));
+    Matrix3x9f Du(Matrix3x3f(D(0, 0)), Matrix3x3f(D(0, 1)), Matrix3x3f(D(0, 2)));
+    Matrix3x9f Dv(Matrix3x3f(D(1, 0)), Matrix3x3f(D(1, 1)), Matrix3x3f(D(1, 2)));
 
     Vector3f fu = F.col(0);
     Vector3f fv = F.col(1);
@@ -98,10 +101,10 @@ std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face) const {
     Vector4f k = material->stretchingStiffness(G);
 
     Vector9f grad = k(0) * G(0, 0) * fuu + k(2) * G(1, 1) * fvv + k(1) * (G(0, 0) * fvv + G(1, 1) * fuu) + 2.0f * k(3) * G(0, 1) * fuv;
-    Matrix9x9f hess = k(0) * (fuu * fuu.transpose() + std::max(G(0, 0), 0.0f) * Du.transpose() * Du)
-                    + k(2) * (fvv * fvv.transpose() + std::max(G(1, 1), 0.0f) * Dv.transpose() * Dv)
-                    + k(1) * (fuu * fvv.transpose() + std::max(G(0, 0), 0.0f) * Dv.transpose() * Dv + fvv * fuu.transpose() + std::max(G(1, 1), 0.0f) * Du.transpose() * Du)
-                    + 2.0f * k(3) * fuv * fuv.transpose();
+    Matrix9x9f hess = k(0) * (fuu.outer(fuu) + std::max(G(0, 0), 0.0f) * Du.transpose() * Du)
+                    + k(2) * (fvv.outer(fvv) + std::max(G(1, 1), 0.0f) * Dv.transpose() * Dv)
+                    + k(1) * (fuu.outer(fvv) + std::max(G(0, 0), 0.0f) * Dv.transpose() * Dv + fvv.outer(fuu) + std::max(G(1, 1), 0.0f) * Du.transpose() * Du)
+                    + 2.0f * k(3) * fuv.outer(fuv);
 
     float area = face->getArea();
     return std::make_pair(-area * grad, -area * hess);
@@ -125,15 +128,15 @@ std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge) const {
     Vector2f w0 = barycentricWeights(x2, x0, x1);
     Vector2f w1 = barycentricWeights(x3, x0, x1);
 
-    Vector12f dtheta = concatenateToVector(-w0(0) * n0 / h0 - w1(0) * n1 / h1, -w0(1) * n0 / h0 - w1(1) * n1 / h1, n0 / h0, n1 / h1);
+    Vector12f dtheta(-w0(0) * n0 / h0 - w1(0) * n1 / h1, -w0(1) * n0 / h0 - w1(1) * n1 / h1, n0 / h0, n1 / h1);
 
     float k = material->bendingStiffness(length, angle, area, edge->getVertex(1)->u - edge->getVertex(0)->u);
     float coefficient = -0.25f * k * sqr(length) / area;
 
-    return std::make_pair(coefficient * angle * dtheta, coefficient * dtheta * dtheta.transpose());
+    return std::make_pair(coefficient * angle * dtheta, coefficient * dtheta.outer(dtheta));
 }
 
-void Cloth::init(Eigen::SparseMatrix<float>& A, VectorXf& b) const {
+void Cloth::init(Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
     std::vector<Vertex*>& vertices = mesh->getVertices();
     int n = vertices.size();
 
@@ -141,19 +144,21 @@ void Cloth::init(Eigen::SparseMatrix<float>& A, VectorXf& b) const {
     A.setZero();
     for (int i = 0; i < n; i++) {
         float m = vertices[i]->m;
-        A.coeffRef(3 * i, 3 * i) += m;
-        A.coeffRef(3 * i + 1, 3 * i + 1) += m;
-        A.coeffRef(3 * i + 2, 3 * i + 2) += m;
+        for (int j = 0; j < 3; j++)
+            A.coeffRef(3 * i + j, 3 * i + j) = m;
     }
 
     b.resize(3 * n);
     b.setZero();
 }
 
-void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
+void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
     std::vector<Vertex*>& vertices = mesh->getVertices();
-    for (const Vertex* vertex : vertices)
-        b.block<3, 1>(3 * vertex->index, 0) += dt * vertex->m * gravity;
+    for (int i = 0; i < vertices.size(); i++) {
+        Vector3f g = dt * vertices[i]->m * gravity;
+        for (int j = 0; j < 3; j++)
+            b(3 * i + j) += g(j);
+    }
 
     std::vector<Face*>& faces = mesh->getFaces();
     for (const Face* face : faces) {
@@ -164,27 +169,30 @@ void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* win
         float vn = normal.dot(relative);
         Vector3f vt = relative - vn * normal;
         Vector3f force = area * (wind->getDensity() * std::abs(vn) * vn * normal + wind->getDrag() * vt) / 3.0f;
-        b.block<3, 1>(3 * face->getVertex(0)->index, 0) += dt * force;
-        b.block<3, 1>(3 * face->getVertex(1)->index, 0) += dt * force;
-        b.block<3, 1>(3 * face->getVertex(2)->index, 0) += dt * force;
+        Vector3f f = dt * force;
+        for (int i = 0; i < 3; i++) {
+            b(3 * face->getVertex(0)->index + i) += f(i);
+            b(3 * face->getVertex(1)->index + i) += f(i);
+            b(3 * face->getVertex(2)->index + i) += f(i);
+        }
     }
 }
 
-void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
+void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
     std::vector<Face*>& faces = mesh->getFaces();
     for (const Face* face : faces) {
         Vertex* vertex0 = face->getVertex(0);
         Vertex* vertex1 = face->getVertex(1);
         Vertex* vertex2 = face->getVertex(2);
-        Vector9f v = concatenateToVector(vertex0->v, vertex1->v, vertex2->v);
+        Vector9f v(vertex0->v, vertex1->v, vertex2->v);
 
         std::pair<Vector9f, Matrix9x9f> pair = stretchingForce(face);
         Vector9f f = pair.first;
         Matrix9x9f J = pair.second;
 
-        Vector3i vertexIndices = indices(vertex0, vertex1, vertex2);
-        addSubMatrix(-dt * dt * J, vertexIndices, A);
-        addSubVector(dt * (f + dt * J * v), vertexIndices, b);
+        Vector3i indices(vertex0->index, vertex1->index, vertex2->index);
+        addSubMatrix(-dt * dt * J, indices, A);
+        addSubVector(dt * (f + dt * J * v), indices, b);
     }
 
     std::vector<Edge*>& edges = mesh->getEdges();
@@ -194,19 +202,19 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, VectorXf&
             Vertex* vertex1 = edge->getVertex(1);
             Vertex* vertex2 = edge->getOpposite(0);
             Vertex* vertex3 = edge->getOpposite(1);
-            Vector12f v = concatenateToVector(vertex0->v, vertex1->v, vertex2->v, vertex3->v);
+            Vector12f v(vertex0->v, vertex1->v, vertex2->v, vertex3->v);
 
             std::pair<Vector12f, Matrix12x12f> pair = bendingForce(edge);
             Vector12f f = pair.first;
             Matrix12x12f J = pair.second;
 
-            Vector4i vertexIndices = indices(vertex0, vertex1, vertex2, vertex3);
-            addSubMatrix(-dt * dt * J, vertexIndices, A);
-            addSubVector(dt * (f + dt * J * v), vertexIndices, b);
+            Vector4i indices(vertex0->index, vertex1->index, vertex2->index, vertex3->index);
+            addSubMatrix(-dt * dt * J, indices, A);
+            addSubVector(dt * (f + dt * J * v), indices, b);
         }
 }
 
-void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, VectorXf& b) const {
+void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
     for (const Handle* handle : handles) {
         Vertex* vertex = handle->getVertex();
         Vector3f position = handle->getPosition();
@@ -214,7 +222,9 @@ void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float
         A.coeffRef(3 * index, 3 * index) += dt * dt * stiffness;
         A.coeffRef(3 * index + 1, 3 * index + 1) += dt * dt * stiffness;
         A.coeffRef(3 * index + 2, 3 * index + 2) += dt * dt * stiffness;
-        b.block<3, 1>(3 * index, 0) += dt * ((position - vertex->x) - dt * vertex->v) * stiffness;
+        Vector3f f = dt * ((position - vertex->x) - dt * vertex->v) * stiffness;
+        for (int i = 0; i < 3; i++)
+            b(3 * index + i, 0) += f(i);
     }
     // for (const Constraint* constraint : constraints) {
     //     std::vector<Gradient*> gradient = constraint->energyGradient();
@@ -228,23 +238,22 @@ void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float
 }
 
 Matrix2x2f Cloth::compressionMetric(const Matrix2x2f& G, const Matrix2x2f& S2) const {
-    Matrix2x2f P;
-    P << S2(1, 1), -S2(1, 0), -S2(0, 1), S2(0, 0);
+    Matrix2x2f P(Vector2f(S2(1, 1), -S2(1, 0)), Vector2f(-S2(0, 1), S2(0, 0)));
     Matrix2x2f D = G.transpose() * G - 4.0f * sqr(remeshing->refineCompression) * P * remeshing->ribStiffening;
     return max(-G + sqrt(D), 0.0f) / (2.0f * sqr(remeshing->refineCompression));
 }
 
 Matrix2x2f Cloth::obstacleMetric(const Face* face, const std::vector<Plane>& planes) const {
-    Matrix2x2f ans = Matrix2x2f::Zero();
+    Matrix2x2f ans;
     for (int i = 0; i < 3; i++) {
         Plane plane = planes[face->getVertex(i)->index];
-        if (plane.n.squaredNorm() == 0.0f)
+        if (plane.n.norm2() == 0.0f)
             continue;
         float h[3];
         for (int j = 0; j < 3; j++)
             h[j] = (face->getVertex(j)->x - plane.p).dot(plane.n);
         Vector2f dh = face->getInverse().transpose() * Vector2f(h[1] - h[0], h[2] - h[0]);
-        ans += dh * dh.transpose() / sqr(h[i]);
+        ans += dh.outer(dh) / sqr(h[i]);
     }
     return ans / 3.0f;
 }
@@ -293,7 +302,7 @@ Matrix2x2f Cloth::faceSizing(const Face* face, const std::vector<Plane>& planes)
     Matrix3x2f V = face->derivative(vertex0->v, vertex1->v, vertex2->v);
     M[2] = (V.transpose() * V) / sqr(remeshing->refineVelocity);
     Matrix3x2f F = face->derivative(vertex0->x, vertex1->x, vertex2->x);
-    M[3] = compressionMetric(F.transpose() * F - Matrix2x2f::Identity(), Sw2.transpose() * Sw2);
+    M[3] = compressionMetric(F.transpose() * F - Matrix2x2f(1.0f), Sw2.transpose() * Sw2);
     M[4] = obstacleMetric(face, planes);
     Matrix2x2f S = maxTensor(M);
 
@@ -353,7 +362,7 @@ std::vector<Edge*> Cloth::independentEdges(const std::vector<Edge*>& edges) cons
 
 bool Cloth::flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Vertex*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const {
     static int nEdges = 0;
-    std::vector<Edge*> edgesToFlip = std::move(independentEdges(findEdgesToFlip(edges)));
+    std::vector<Edge*> edgesToFlip = std::move(independentEdges(std::move(findEdgesToFlip(edges))));
     if (edgesToFlip.size() == nEdges)
         return false;
     
@@ -432,7 +441,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Vertex*, std::vector<Edge*>>& adja
         return false;
     
     std::vector<Face*>& faces = adjacentFaces[vertex0];
-    for (const Face* face : adjacentFaces[vertex0]) {
+    for (const Face* face : faces) {
         Vertex* v0 = face->getVertex(0);
         Vertex* v1 = face->getVertex(1);
         Vertex* v2 = face->getVertex(2);
@@ -451,7 +460,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Vertex*, std::vector<Edge*>>& adja
         Vector2f u0 = v0->u;
         Vector2f u1 = v1->u;
         Vector2f u2 = v2->u;
-        float a = 0.5f * cross(u1 - u0, u2 - u0);
+        float a = 0.5f * (u1 - u0).cross(u2 - u0);
         float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
         float aspect = 12.0f * std::sqrt(3.0f) / sqr(p);
         if (a < 1e-6f || aspect < remeshing->aspectMin)
@@ -486,7 +495,7 @@ bool Cloth::collapseSomeEdges(std::unordered_map<Vertex*, std::vector<Edge*>>& a
 void Cloth::collapseEdges() const {
     std::vector<Edge*>& edges = mesh->getEdges();
     std::unordered_map<Vertex*, std::vector<Edge*>> adjacentEdges;
-    for (Edge* edge : mesh->getEdges())
+    for (Edge* edge : edges)
         for (int i = 0; i < 2; i++)
             adjacentEdges[edge->getVertex(i)].push_back(edge);
             
@@ -505,12 +514,12 @@ Mesh* Cloth::getMesh() const {
 
 void Cloth::readDataFromFile(const std::string& path) {
     mesh->readDataFromFile(path);
-    mesh->updateGeometry();
+    mesh->updateGeometries();
 }
 
 void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind) {
     Eigen::SparseMatrix<float> A;
-    VectorXf b;
+    Eigen::VectorXf b;
 
     init(A, b);
     addExternalForces(dt, gravity, wind, A, b);
@@ -519,12 +528,12 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky;
     cholesky.compute(A);
-    VectorXf dv = cholesky.solve(b);
+    Eigen::VectorXf dv = cholesky.solve(b);
 
     std::vector<Vertex*>& vertices = mesh->getVertices();
     for (int i = 0; i < vertices.size(); i++) {
         vertices[i]->x0 = vertices[i]->x;
-        vertices[i]->v += dv.block<3, 1>(3 * i, 0);
+        vertices[i]->v += Vector3f(dv(3 * i), dv(3 * i + 1), dv(3 * i + 2));
         vertices[i]->x += vertices[i]->v * dt;
     }
 }
@@ -537,7 +546,7 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
         for (const BVH* obstacleBvh : obstacleBvhs)
             obstacleBvh->findNearestPoint(vertices[i]->x, point);
     
-        if (point.x != vertices[i]->x) {
+        if ((point.x - vertices[i]->x).norm2() > 1e-8f) {
             planes[i].p = point.x;
             planes[i].n = (vertices[i]->x - point.x).normalized();
         }
@@ -545,7 +554,7 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
 
     for (Vertex* vertex : vertices) {
         vertex->a = 0.0f;
-        vertex->sizing = Matrix2x2f::Zero();
+        vertex->sizing = Matrix2x2f();
     }
 
     std::vector<Face*>& faces = mesh->getFaces();
@@ -568,16 +577,16 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
     collapseEdges();
 }
 
-void Cloth::updateGeometry() {
-    mesh->updateGeometry();
+void Cloth::updateGeometries() {
+    mesh->updateGeometries();
 }
 
-void Cloth::updateVelocity(float dt) {
-    mesh->updateVelocity(dt);
+void Cloth::updateVelocities(float dt) {
+    mesh->updateVelocities(dt);
 }
 
-void Cloth::updateIndex() {
-    mesh->updateIndex();
+void Cloth::updateIndices() {
+    mesh->updateIndices();
 }
 
 void Cloth::updateRenderingData(bool rebind) {

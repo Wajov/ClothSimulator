@@ -3,8 +3,9 @@
 
 #include "json/json.h"
 
-#include "TypeHelper.hpp"
 #include "JsonHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 
 class Transform {
 private:

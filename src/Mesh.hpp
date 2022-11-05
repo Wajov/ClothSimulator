@@ -9,7 +9,7 @@
 #include <GLFW/glfw3.h>
 #include <json/json.h>
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
 #include "Vertex.hpp"
 #include "Edge.hpp"
 #include "Face.hpp"
@@ -36,9 +36,9 @@ public:
     void readDataFromFile(const std::string& path);
     void apply(const Operator& op);
     void reset();
-    void updateGeometry();
-    void updateVelocity(float dt);
-    void updateIndex();
+    void updateGeometries();
+    void updateVelocities(float dt);
+    void updateIndices();
     void updateRenderingData(bool rebind);
     void bind();
     void renderEdge() const;

@@ -10,8 +10,9 @@
 
 #include <json/json.h>
 
-#include "TypeHelper.hpp"
 #include "JsonHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 #include "Magic.hpp"
 #include "Wind.hpp"
 #include "Cloth.hpp"
@@ -40,9 +41,9 @@ private:
     void physicsStep();
     void collisionStep();
     void remeshingStep();
-    void updateGeometry();
-    void updateVelocity();
-    void updateIndex();
+    void updateGeometries();
+    void updateVelocities();
+    void updateIndices();
     void updateRenderingData(bool rebind);
 
 public:

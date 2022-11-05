@@ -42,7 +42,7 @@ void ImpactZoneOptimization::precompute(const double *x) {}
 void ImpactZoneOptimization::finalize(const double* x) {
     for (int i = 0; i < vertices.size(); i++)
         for (int j = 0; j < 3; j++)
-            vertices[i]->x(j) = x[3 * i + j];
+            vertices[i]->x(j) = static_cast<float>(x[3 * i + j]);
 }
 
 double ImpactZoneOptimization::objective(const double* x) const {

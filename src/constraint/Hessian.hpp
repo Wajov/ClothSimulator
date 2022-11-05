@@ -1,7 +1,8 @@
 #ifndef HESSIAN_HPP
 #define HESSIAN_HPP
 
-#include "TypeHelper.hpp"
+#include "Vector.hpp"
+#include "Matrix.hpp"
 
 class Hessian {
 private:
