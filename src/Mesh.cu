@@ -1,4 +1,4 @@
-#include "Mesh.hpp"
+#include "Mesh.cuh"
 
 Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* material) {
     std::ifstream fin(json.asString());
@@ -17,7 +17,7 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
         if (s[0] == "v") {
             Vector3f x(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]));
             x = transform->applyTo(x);
-            vertices.push_back(new Vertex(vertices.size(), x, isFree));
+            vertices.push_back(new Vertex(x, isFree));
             vertexMap.push_back(-1);
         } else if (s[0] == "vt")
             u.emplace_back(std::stof(s[1]), std::stof(s[2]));
@@ -49,9 +49,9 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
             Vertex* vertex0 = vertices[index0];
             Vertex* vertex1 = vertices[index1];
             Vertex* vertex2 = vertices[index2];
-            Edge* edge0 = findEdge(vertex0, vertex1, edgeMap);
-            Edge* edge1 = findEdge(vertex1, vertex2, edgeMap);
-            Edge* edge2 = findEdge(vertex2, vertex0, edgeMap);
+            Edge* edge0 = findEdge(index0, index1, edgeMap);
+            Edge* edge1 = findEdge(index1, index2, edgeMap);
+            Edge* edge2 = findEdge(index2, index0, edgeMap);
             Face* face = new Face(vertex0, vertex1, vertex2, material);
 
             edge0->setOppositeAndAdjacent(vertex2, face);
@@ -70,6 +70,7 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
                 edge->getVertex(i)->preserve = true;
 
     updateGeometries();
+    updateIndices();
 }
 
 Mesh::~Mesh() {
@@ -77,6 +78,51 @@ Mesh::~Mesh() {
         delete edge;
     for (const Face* face : faces)
         delete face;
+
+    if (gpu) {
+        cudaGraphicsUnregisterResource(vboCuda);
+        cudaGraphicsUnregisterResource(eboCuda);
+    }
+
+    glDeleteBuffers(1, &vbo);
+    glDeleteBuffers(1, &edgeVao);
+    glDeleteBuffers(1, &edgeEbo);
+    glDeleteBuffers(1, &faceVao);
+    glDeleteBuffers(1, &faceEbo);
+}
+
+void Mesh::initializeGpu(const Material* material) {
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&vboCuda, vbo, cudaGraphicsRegisterFlagsNone));
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&eboCuda, faceEbo, cudaGraphicsRegisterFlagsNone));
+
+    CUDA_CHECK(cudaGraphicsMapResources(1, &vboCuda));
+    Vertex* vertexArray;
+    size_t sizeVertices;
+    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&vertexArray), &sizeVertices, vboCuda));
+    int nVertices = sizeVertices / sizeof(Vertex);
+
+    CUDA_CHECK(cudaGraphicsMapResources(1, &eboCuda));
+    unsigned int* indexArray;
+    size_t sizeIndices;
+    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&indexArray), &sizeIndices, eboCuda));
+    int nFaces = sizeIndices / (sizeof(unsigned int) * 3);
+    int nEdges = 3 * nFaces;
+
+    verticesGpu.resize(nVertices);
+    initializeVertices<<<64, 64>>>(nVertices, vertexArray, thrust::raw_pointer_cast(verticesGpu.data()));
+
+    facesGpu.resize(nFaces);
+    thrust::device_vector<EdgeData> edgeData(nEdges);
+    initializeFaces<<<64, 64>>>(nFaces, indexArray, thrust::raw_pointer_cast(verticesGpu.data()), material, thrust::raw_pointer_cast(facesGpu.data()), thrust::raw_pointer_cast(edgeData.data()));
+    thrust::sort(edgeData.begin(), edgeData.end(), EdgeDataLess());
+
+    edgesGpu.resize(nEdges);
+    initializeEdges<<<64, 64>>>(nEdges, thrust::raw_pointer_cast(edgeData.data()), thrust::raw_pointer_cast(verticesGpu.data()), thrust::raw_pointer_cast(edgesGpu.data()));
+    setupEdges<<<64, 64>>>(nEdges, thrust::raw_pointer_cast(edgeData.data()), thrust::raw_pointer_cast(edgesGpu.data()));
+    edgesGpu.erase(thrust::remove_if(edgesGpu.begin(), edgesGpu.end(), IsNull()), edgesGpu.end());
+
+    CUDA_CHECK(cudaGraphicsUnmapResources(1, &vboCuda));
+    CUDA_CHECK(cudaGraphicsUnmapResources(1, &eboCuda));
 }
 
 std::vector<std::string> Mesh::split(const std::string& s, char c) const {
@@ -91,16 +137,16 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     return ans;
 }
 
-Edge* Mesh::findEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::pair<int, int>, int>& edgeMap) {
-    int index0 = vertex0->index;
-    int index1 = vertex1->index;
-    std::pair<int, int> pair = index0 < index1 ? std::make_pair(index0, index1) : std::make_pair(index1, index0);
+Edge* Mesh::findEdge(int index0, int index1, std::map<std::pair<int, int>, int>& edgeMap) {
+    if (index0 > index1)
+        std::swap(index0, index1);
+    std::pair<int, int> pair = std::make_pair(index0, index1);
     std::map<std::pair<int, int>, int>::const_iterator iter = edgeMap.find(pair);
     if (iter != edgeMap.end())
         return edges[iter->second];
     else {
         edgeMap[pair] = edges.size();
-        edges.push_back(new Edge(vertex0, vertex1));
+        edges.push_back(new Edge(vertices[index0], vertices[index1]));
         return edges.back();
     }
 }
@@ -183,10 +229,14 @@ void Mesh::updateVelocities(float dt) {
 void Mesh::updateIndices() {
     for (int i = 0; i < vertices.size(); i++)
         vertices[i]->index = i;
+    for (int i = 0; i < edges.size(); i++)
+        edges[i]->setIndex(i);
+    for (int i = 0; i < faces.size(); i++)
+        faces[i]->setIndex(i);
 }
 
 void Mesh::updateRenderingData(bool rebind) {
-    vertexArray.resize(vertices.size(), Vertex(0, Vector3f(), true));
+    vertexArray.resize(vertices.size(), Vertex(Vector3f(), true));
     for (int i = 0; i < vertices.size(); i++)
         vertexArray[i] = *vertices[i];
 
@@ -216,8 +266,8 @@ void Mesh::updateRenderingData(bool rebind) {
     }
 }
 
-void Mesh::bind() {
-        vertexArray.resize(vertices.size(), Vertex(0, Vector3f(), true));
+void Mesh::bind(const Material* material) {
+    vertexArray.resize(vertices.size(), Vertex(Vector3f(), true));
     for (int i = 0; i < vertices.size(); i++)
         vertexArray[i] = *vertices[i];
 
@@ -260,6 +310,9 @@ void Mesh::bind() {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, n)));
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, u)));
+
+    if (gpu)
+        initializeGpu(material);
 }
 
 void Mesh::renderEdge() const {

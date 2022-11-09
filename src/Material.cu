@@ -1,4 +1,4 @@
-#include "Material.hpp"
+#include "Material.cuh"
 
 Material::Material(const Json::Value& json) {
     thicken = parseFloat(json["thicken"]);

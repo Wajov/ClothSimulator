@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cfloat>
 
-#include "Vector.hpp"
+#include "Vector.cuh"
 
 class Bounds {
 private:

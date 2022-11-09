@@ -1,6 +1,7 @@
-#include "Face.hpp"
+#include "Face.cuh"
 
 Face::Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Material* material) :
+    index(0),
     vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1), const_cast<Vertex*>(vertex2)} {
     initialize(material);
 }
@@ -14,6 +15,14 @@ void Face::initialize(const Material* material) {
     area = 0.5f * std::abs(d1.cross(d2));
     if (material != nullptr)
         mass = material->getDensity() * material->getThicken() * area;
+}
+
+int Face::getIndex() const {
+    return index;
+}
+
+void Face::setIndex(int index) {
+    this->index = index;
 }
 
 Vertex* Face::getVertex(int index) const {
@@ -30,6 +39,15 @@ void Face::replaceVertex(const Vertex* v, const Vertex* vertex) {
 
 Edge* Face::getEdge(int index) const {
     return edges[index];
+}
+
+void Face::setEdge(const Edge* edge) {
+    for (int i = 0; i < 2; i++)
+        if (vertices[0] == edge->getVertex(0) && vertices[1] == edge->getVertex(1) || vertices[1] == edge->getVertex(0) && vertices[0] == edge->getVertex(1)) {
+            edges[i] = const_cast<Edge*>(edge);
+            return;
+        }
+    edges[2] = const_cast<Edge*>(edge);
 }
 
 void Face::setEdges(const Edge* edge0, const Edge* edge1, const Edge* edge2) {

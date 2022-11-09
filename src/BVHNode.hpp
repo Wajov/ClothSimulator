@@ -2,10 +2,9 @@
 #define BVH_NODE_HPP
 
 #include <cmath>
-#include <unordered_map>
 
 #include "Bounds.hpp"
-#include "Face.hpp"
+#include "Face.cuh"
 #include "Impact.hpp"
 #include "NearPoint.hpp"
 
@@ -26,7 +25,7 @@ private:
     void checkNearestPoint(const Vector3f& x, const Face* face, NearPoint& point) const;
 
 public:
-    BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Face*, BVHNode*>& leaves);
+    BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::vector<BVHNode*>& leaves);
     ~BVHNode();
     inline bool isLeaf() const;
     void setActiveUp(bool active);

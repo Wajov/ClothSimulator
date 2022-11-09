@@ -4,8 +4,8 @@
 #include "json/json.h"
 
 #include "JsonHelper.hpp"
-#include "Vector.hpp"
-#include "Matrix.hpp"
+#include "Vector.cuh"
+#include "Matrix.cuh"
 
 class Transform {
 private:

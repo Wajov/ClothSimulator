@@ -255,27 +255,32 @@ void Simulator::step() {
 
     resetObstacles();
     
-    std::chrono::duration<float> d;
-    auto t0 = std::chrono::high_resolution_clock::now();
-    
-    physicsStep();
-    auto t1 = std::chrono::high_resolution_clock::now();
-    d = t1 - t0;
-    std::cout << "Physics Step: " << d.count() << "s";
-    
-    collisionStep();
-    auto t2 = std::chrono::high_resolution_clock::now();
-    d = t2 - t1;
-    std::cout << ", Collision Step: " << d.count() << "s";
-    
-    if (nSteps % frameSteps == 0) {
-        remeshingStep();
-        auto t3 = std::chrono::high_resolution_clock::now();
-        d = t3 - t2;
-        std::cout << ", Remeshing Step: " << d.count() << "s";
-        updateRenderingData(true);
-    } else
-        updateRenderingData(false);
+    if (!gpu) {
+        std::chrono::duration<float> d;
+        auto t0 = std::chrono::high_resolution_clock::now();
+        
+        physicsStep();
+        auto t1 = std::chrono::high_resolution_clock::now();
+        d = t1 - t0;
+        std::cout << "Physics Step: " << d.count() << "s";
+        
+        collisionStep();
+        auto t2 = std::chrono::high_resolution_clock::now();
+        d = t2 - t1;
+        std::cout << ", Collision Step: " << d.count() << "s";
+        
+        if (nSteps % frameSteps == 0) {
+            remeshingStep();
+            auto t3 = std::chrono::high_resolution_clock::now();
+            d = t3 - t2;
+            std::cout << ", Remeshing Step: " << d.count() << "s";
+            updateRenderingData(true);
+        } else
+            updateRenderingData(false);
 
-    std::cout << std::endl;
+        std::cout << std::endl;
+    } else {
+        // for (Cloth* cloth : cloths)
+            // cloth->getMesh()->initializeGpu();
+    }
 }

@@ -1,8 +1,8 @@
 #ifndef EQUAL_CONSTRAINT_HPP
 #define EQUAL_CONSTRAINT_HPP
 
-#include "Vector.hpp"
-#include "Vertex.hpp"
+#include "Vector.cuh"
+#include "Vertex.cuh"
 #include "Constraint.hpp"
 
 class EqualConstraint : public Constraint {

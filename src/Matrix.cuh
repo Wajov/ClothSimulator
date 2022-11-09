@@ -1,7 +1,9 @@
-#ifndef MATRIX_HPP
-#define MATRIX_HPP
+#ifndef MATRIX_CUH
+#define MATRIX_CUH
 
-#include "Vector.hpp"
+#include <cuda_runtime.h>
+
+#include "Vector.cuh"
 
 template<typename T, int n> class Vector;
 
@@ -9,13 +11,13 @@ template<typename T, int n, int p> class Matrix {
 public:
     T data[n][p];
 
-    Matrix() {
+    __host__ __device__ Matrix() {
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
                 data[i][j] = static_cast<T>(0);
     };
 
-    Matrix(T s) {
+    __host__ __device__ Matrix(T s) {
         static_assert(n == p);
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
@@ -24,7 +26,7 @@ public:
             data[i][i] = s;
     };
 
-    Matrix(const Vector<T, n>& v0, const Vector<T, n>& v1) {
+    __host__ __device__ Matrix(const Vector<T, n>& v0, const Vector<T, n>& v1) {
         static_assert(p == 2);
         for (int i = 0; i < n; i++) {
             data[i][0] = v0(i);
@@ -32,7 +34,7 @@ public:
         }
     };
 
-    Matrix(const Vector<T, n>& v0, const Vector<T, n>& v1, const Vector<T, n>& v2) {
+    __host__ __device__ Matrix(const Vector<T, n>& v0, const Vector<T, n>& v1, const Vector<T, n>& v2) {
         static_assert(p == 3);
         for (int i = 0; i < n; i++) {
             data[i][0] = v0(i);
@@ -41,7 +43,7 @@ public:
         }
     };
 
-    template<int q> Matrix(const Matrix<T, n, q>& m0, const Matrix<T, n, q>& m1, const Matrix<T, n, q>& m2) {
+    template<int q> __host__ __device__ Matrix(const Matrix<T, n, q>& m0, const Matrix<T, n, q>& m1, const Matrix<T, n, q>& m2) {
         static_assert(p == 3 * q);
         for (int i = 0; i < n; i++)
             for (int j = 0; j < q; j++) {
@@ -51,17 +53,17 @@ public:
             }
     }
 
-    ~Matrix() {};
+    __host__ __device__ ~Matrix() {};
 
-    const T& operator()(int i, int j) const {
+    __host__ __device__ const T& operator()(int i, int j) const {
         return data[i][j];
     };
 
-    T& operator()(int i, int j) {
+    __host__ __device__ T& operator()(int i, int j) {
         return data[i][j];
     };
 
-    Matrix<T, n, p> operator+(const Matrix<T, n, p>& m) const {
+    __host__ __device__ Matrix<T, n, p> operator+(const Matrix<T, n, p>& m) const {
         Matrix<T, n, p> ans;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
@@ -69,13 +71,13 @@ public:
         return ans;
     };
 
-    void operator+=(const Matrix<T, n, p>& m) {
+    __host__ __device__ void operator+=(const Matrix<T, n, p>& m) {
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
                 data[i][j] += m.data[i][j];
     };
 
-    Matrix<T, n, p> operator-() const {
+    __host__ __device__ Matrix<T, n, p> operator-() const {
         Matrix<T, n, p> ans;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
@@ -83,7 +85,7 @@ public:
         return ans;
     };
 
-    Matrix<T, n, p> operator-(const Matrix<T, n, p>& m) const {
+    __host__ __device__ Matrix<T, n, p> operator-(const Matrix<T, n, p>& m) const {
         Matrix<T, n, p> ans;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
@@ -91,13 +93,13 @@ public:
         return ans;
     };
 
-    void operator-=(const Matrix<T, n, p>& m) {
+    __host__ __device__ void operator-=(const Matrix<T, n, p>& m) {
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
                 data[i][j] -= m.data[i][j];
     };
 
-    friend Matrix<T, n, p> operator*(T s, const Matrix<T, n, p>& m) {
+    __host__ __device__ friend Matrix<T, n, p> operator*(T s, const Matrix<T, n, p>& m) {
         Matrix<T, n, p> ans;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
@@ -105,7 +107,7 @@ public:
         return ans;
     };
 
-    Matrix<T, n, p> operator*(T s) const {
+    __host__ __device__ Matrix<T, n, p> operator*(T s) const {
         Matrix<T, n, p> ans;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
@@ -113,13 +115,13 @@ public:
         return ans;
     };
 
-    void operator*=(T s) {
+    __host__ __device__ void operator*=(T s) {
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
                 data[i][j] *= s;
     };
 
-    Vector<T, n> operator*(const Vector<T, p>& v) const {
+    __host__ __device__ Vector<T, n> operator*(const Vector<T, p>& v) const {
         Vector<T, n> ans;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
@@ -127,7 +129,7 @@ public:
         return ans;
     };
 
-    template<int q> Matrix<T, n, q> operator*(const Matrix<T, p, q>& m) const {
+    template<int q> __host__ __device__ Matrix<T, n, q> operator*(const Matrix<T, p, q>& m) const {
         Matrix<T, n, q> ans;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < q; j++)
@@ -136,7 +138,7 @@ public:
         return ans;
     };
 
-    Matrix<T, n, p> operator/(T s) const {
+    __host__ __device__ Matrix<T, n, p> operator/(T s) const {
         T invS = static_cast<T>(1) / s;
         Matrix<T, n, p> ans;
         for (int i = 0; i < n; i++)
@@ -145,14 +147,14 @@ public:
         return ans;
     };
 
-    void operator/=(T s) {
+    __host__ __device__ void operator/=(T s) {
         T invS = static_cast<T>(1) / s;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
                 data[i][j] *= invS;
     };
 
-    Matrix<T, p, n> transpose() const {
+    __host__ __device__ Matrix<T, p, n> transpose() const {
         Matrix<T, p, n> ans;
         for (int i = 0; i < p; i++)
             for (int j = 0; j < n; j++)
@@ -160,7 +162,7 @@ public:
         return ans;
     };
 
-    T trace() const {
+    __host__ __device__ T trace() const {
         static_assert(n == p);
         T ans = static_cast<T>(0);
         for (int i = 0; i < n; i++)
@@ -168,7 +170,7 @@ public:
         return ans;
     }
 
-    Matrix<T, n, p> inverse() const {
+    __host__ __device__ Matrix<T, n, p> inverse() const {
         static_assert(n == 2 && p == 2);
         Matrix<T, n, p> ans;
         T a = data[0][0];
@@ -183,14 +185,14 @@ public:
         return ans;
     }
 
-    Vector<T, p> row(int r) const {
+    __host__ __device__ Vector<T, p> row(int r) const {
         Vector<T, p> ans;
         for (int i = 0; i < p; i++)
             ans(i) = data[r][i];
         return ans;
     };
 
-    Vector<T, n> col(int c) const {
+    __host__ __device__ Vector<T, n> col(int c) const {
         Vector<T, n> ans;
         for (int i = 0; i < n; i++)
             ans(i) = data[i][c];

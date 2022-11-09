@@ -5,10 +5,10 @@
 #include <unordered_set>
 #include <unordered_map>
 
-#include "Vertex.hpp"
-#include "Edge.hpp"
-#include "Face.hpp"
-#include "Material.hpp"
+#include "Vertex.cuh"
+#include "Edge.cuh"
+#include "Face.cuh"
+#include "Material.cuh"
 
 class Operator {
 private:

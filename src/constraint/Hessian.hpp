@@ -1,8 +1,8 @@
 #ifndef HESSIAN_HPP
 #define HESSIAN_HPP
 
-#include "Vector.hpp"
-#include "Matrix.hpp"
+#include "Vector.cuh"
+#include "Matrix.cuh"
 
 class Hessian {
 private:

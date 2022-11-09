@@ -1,7 +1,7 @@
 #ifndef WIND_HPP
 #define WIND_HPP
 
-#include "Vector.hpp"
+#include "Vector.cuh"
 
 class Wind {
 private:

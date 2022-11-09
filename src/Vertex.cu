@@ -1,7 +1,7 @@
-#include "Vertex.hpp"
+#include "Vertex.cuh"
 
-Vertex::Vertex(int index, const Vector3f& x, bool isFree) :
-    index(index),
+Vertex::Vertex(const Vector3f& x, bool isFree) :
+    index(0),
     x0(x),
     x1(x),
     x(x),

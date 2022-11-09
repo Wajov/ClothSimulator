@@ -1,10 +1,10 @@
-#ifndef MATH_HELPER_HPP
-#define MATH_HELPER_HPP
+#ifndef MATH_HELPER_CUH
+#define MATH_HELPER_CUH
 
 #include <vector>
 
-#include "Vector.hpp"
-#include "Matrix.hpp"
+#include "Vector.cuh"
+#include "Matrix.cuh"
 #include "optimization/Optimization.hpp"
 
 const int MAX_TOTAL_ITERATIONS = 100;
@@ -16,6 +16,12 @@ const double EPSILON_X = 1e-6;
 static Optimization* optimization;
 static std::vector<double> lambda;
 static double mu;
+
+template<typename T> __host__ __device__ static void mySwap(T& a, T& b) {
+    T t = a;
+    a = b;
+    b = t;
+}
 
 template<typename T> static T sign(T x) {
     return x < static_cast<T>(0) ? static_cast<T>(-1) : static_cast<T>(1);

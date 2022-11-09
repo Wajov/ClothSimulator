@@ -1,5 +1,5 @@
-#ifndef MESH_HPP
-#define MESH_HPP
+#ifndef MESH_CUH
+#define MESH_CUH
 
 #include <vector>
 #include <map>
@@ -8,13 +8,20 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <json/json.h>
+#include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
+#include <thrust/device_vector.h>
 
-#include "Vector.hpp"
-#include "Vertex.hpp"
-#include "Edge.hpp"
-#include "Face.hpp"
+#include "CudaHelper.cuh"
+#include "MeshHelper.cuh"
+#include "Vector.cuh"
+#include "Vertex.cuh"
+#include "Edge.cuh"
+#include "Face.cuh"
 #include "Transform.hpp"
 #include "Operator.hpp"
+
+extern bool gpu;
 
 class Mesh {
 private:
@@ -24,8 +31,13 @@ private:
     std::vector<Vertex> vertexArray;
     std::vector<unsigned int> edgeIndices, faceIndices;
     unsigned int vbo, edgeVao, edgeEbo, faceVao, faceEbo;
+    thrust::device_vector<Vertex*> verticesGpu;
+    thrust::device_vector<Edge*> edgesGpu;
+    thrust::device_vector<Face*> facesGpu;
+    cudaGraphicsResource* vboCuda, * eboCuda;
+    void initializeGpu(const Material* material);
     std::vector<std::string> split(const std::string& s, char c) const;
-    Edge* findEdge(const Vertex* vertex0, const Vertex* vertex1, std::map<std::pair<int, int>, int>& edgeMap);
+    Edge* findEdge(int index0, int index1, std::map<std::pair<int, int>, int>& edgeMap);
 
 public:
     Mesh(const Json::Value& json, const Transform* transform, const Material* material);
@@ -40,7 +52,7 @@ public:
     void updateVelocities(float dt);
     void updateIndices();
     void updateRenderingData(bool rebind);
-    void bind();
+    void bind(const Material* material);
     void renderEdge() const;
     void renderFace() const;
 };

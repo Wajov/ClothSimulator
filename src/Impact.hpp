@@ -1,7 +1,7 @@
 #ifndef IMPACT_HPP
 #define IMPACT_HPP
 
-#include "Vertex.hpp"
+#include "Vertex.cuh"
 
 enum ImpactType {
     VertexFace,

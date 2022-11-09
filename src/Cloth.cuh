@@ -1,22 +1,24 @@
-#ifndef CLOTH_HPP
-#define CLOTH_HPP
+#ifndef CLOTH_CUH
+#define CLOTH_CUH
 
 #include <vector>
 #include <queue>
 #include <unordered_set>
 #include <unordered_map>
+#include <chrono>
 
+#include <json/json.h>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-#include <Eigen/Cholesky>
-#include <json/json.h>
+#include <cuda_runtime.h>
 
-#include "MathHelper.hpp"
-#include "Vector.hpp"
-#include "Matrix.hpp"
+#include "MathHelper.cuh"
+#include "CudaHelper.cuh"
+#include "Vector.cuh"
+#include "Matrix.cuh"
 #include "Transform.hpp"
-#include "Mesh.hpp"
-#include "Material.hpp"
+#include "Mesh.cuh"
+#include "Material.cuh"
 #include "Handle.hpp"
 #include "Remeshing.hpp"
 #include "Wind.hpp"
@@ -27,10 +29,12 @@
 #include "Disk.hpp"
 #include "Operator.hpp"
 
+extern bool gpu;
+
 class Cloth {
 private:
     Mesh* mesh;
-    Material* material;
+    Material* material, * materialGpu;
     std::vector<Handle*> handles;
     Remeshing* remeshing;
     Shader* edgeShader, * faceShader;

@@ -11,11 +11,11 @@
 #include <json/json.h>
 
 #include "JsonHelper.hpp"
-#include "Vector.hpp"
-#include "Matrix.hpp"
+#include "Vector.cuh"
+#include "Matrix.cuh"
 #include "Magic.hpp"
 #include "Wind.hpp"
-#include "Cloth.hpp"
+#include "Cloth.cuh"
 #include "Obstacle.hpp"
 #include "BVH.hpp"
 #include "Impact.hpp"

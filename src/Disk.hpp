@@ -1,8 +1,8 @@
 #ifndef DISK_HPP
 #define DISK_HPP
 
-#include "MathHelper.hpp"
-#include "Vector.hpp"
+#include "MathHelper.cuh"
+#include "Vector.cuh"
 
 class Disk {
 public:

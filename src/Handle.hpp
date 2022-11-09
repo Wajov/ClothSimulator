@@ -1,8 +1,8 @@
 #ifndef HANDLE_HPP
 #define HANDLE_HPP
 
-#include "Vector.hpp"
-#include "Vertex.hpp"
+#include "Vector.cuh"
+#include "Vertex.cuh"
 
 class Handle {
 private:

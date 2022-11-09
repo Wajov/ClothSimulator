@@ -2,12 +2,11 @@
 #define BVH_HPP
 
 #include <vector>
-#include <unordered_map>
 
 #include "BVHNode.hpp"
-#include "Vertex.hpp"
-#include "Face.hpp"
-#include "Mesh.hpp"
+#include "Vertex.cuh"
+#include "Face.cuh"
+#include "Mesh.cuh"
 #include "Impact.hpp"
 #include "NearPoint.hpp"
 
@@ -17,7 +16,7 @@ private:
     BVHNode* root;
     std::vector<Vertex*> vertices;
     std::vector<std::vector<Face*>> adjacents;
-    std::unordered_map<Face*, BVHNode*> leaves;
+    std::vector<BVHNode*> leaves;
 
 public:
     BVH(const Mesh* mesh, bool ccd);

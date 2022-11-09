@@ -3,7 +3,7 @@
 
 #include <vector>
 
-#include "Vertex.hpp"
+#include "Vertex.cuh"
 #include "Impact.hpp"
 
 class ImpactZone {

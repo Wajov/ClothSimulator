@@ -1,7 +1,7 @@
 #ifndef PLANE_HPP
 #define PLANE_HPP
 
-#include "Vector.hpp"
+#include "Vector.cuh"
 
 class Plane {
 public:

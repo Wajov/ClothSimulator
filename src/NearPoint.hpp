@@ -1,7 +1,7 @@
 #ifndef NEAR_POINT_HPP
 #define NEAR_POINT_HPP
 
-#include "Vector.hpp"
+#include "Vector.cuh"
 
 class NearPoint {
 public:

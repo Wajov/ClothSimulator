@@ -3,10 +3,10 @@
 
 #include <json/json.h>
 
-#include "Vector.hpp"
-#include "Matrix.hpp"
+#include "Vector.cuh"
+#include "Matrix.cuh"
 #include "Transform.hpp"
-#include "Mesh.hpp"
+#include "Mesh.cuh"
 #include "Shader.hpp"
 
 class Obstacle {

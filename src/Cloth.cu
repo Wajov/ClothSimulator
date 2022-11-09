@@ -1,4 +1,4 @@
-#include "Cloth.hpp"
+#include "Cloth.cuh"
 
 Cloth::Cloth(const Json::Value& json) {
     Transform* transform = new Transform(json["transform"]);
@@ -18,6 +18,11 @@ Cloth::Cloth(const Json::Value& json) {
     edgeShader = new Shader("shader/VertexShader.glsl", "shader/EdgeFragmentShader.glsl");
     faceShader = new Shader("shader/VertexShader.glsl", "shader/FaceFragmentShader.glsl");
     delete transform;
+
+    if (gpu) {
+        CUDA_CHECK(cudaMalloc(&materialGpu, sizeof(Material)));
+        CUDA_CHECK(cudaMemcpy(materialGpu, material, sizeof(Material), cudaMemcpyHostToDevice));
+    }
 }
 
 Cloth::~Cloth() {
@@ -27,6 +32,9 @@ Cloth::~Cloth() {
         delete handle;
     delete edgeShader;
     delete faceShader;
+    
+    if (gpu)
+        CUDA_CHECK(cudaFree(materialGpu));
 }
 
 void Cloth::addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::SparseMatrix<float>& A) const {
@@ -530,12 +538,83 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
     cholesky.compute(A);
     Eigen::VectorXf dv = cholesky.solve(b);
 
+    // cuSOLVER
+    // cusparseHandle_t cusparseHandle;
+    // cusparseStatus_t cusparseStatus;
+    // cusparseStatus = cusparseCreate(&cusparseHandle);
+    // if (cusparseStatus != 0)
+    //     std::cout << "status create cusparse handle: " << cusparseStatus << std::endl;
+
+    // cusolverSpHandle_t cusolverHandle;
+    // cusolverStatus_t cusolverStatus;
+    // cusolverStatus = cusolverSpCreate(&cusolverHandle);
+    // if (cusolverStatus != 0)
+    //     std::cout << "status create cusolver handle: " << cusolverStatus << std::endl;
+
+    // A.makeCompressed();
+    // int n = A.rows(), nNonZero = A.nonZeros();
+    // float* cscVal;
+    // CUDA_CHECK(cudaMalloc(&cscVal, sizeof(float) * nNonZero));
+    // cudaMemcpy(cscVal, A.valuePtr(), sizeof(float) * nNonZero, cudaMemcpyHostToDevice);
+    // int* cscColPtr;
+    // cudaMalloc(&cscColPtr, sizeof(int) * (n + 1));
+    // cudaMemcpy(cscColPtr, A.outerIndexPtr(), sizeof(int) * (n + 1), cudaMemcpyHostToDevice);
+    // int* cscRowInd;
+    // cudaMalloc(&cscRowInd, sizeof(int) * nNonZero);
+    // cudaMemcpy(cscRowInd, A.innerIndexPtr(), sizeof(int) * nNonZero, cudaMemcpyHostToDevice);
+
+    // float* csrVal;
+    // cudaMalloc(&csrVal, sizeof(float) * nNonZero);
+    // int* csrRowPtr;
+    // cudaMalloc(&csrRowPtr, sizeof(int) * (n + 1));
+    // int* csrColInd;
+    // cudaMalloc(&csrColInd, sizeof(int) * nNonZero);
+
+    // size_t bufferSize;
+    // cusparseCsr2cscEx2_bufferSize(cusparseHandle, n, n, nNonZero, cscVal, cscColPtr, cscRowInd, csrVal, csrRowPtr, csrColInd, CUDA_R_32F, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, 
+    // CUSPARSE_CSR2CSC_ALG1, &bufferSize);
+    // cudaDeviceSynchronize();
+    // int* buffer;
+    // cudaMalloc(&buffer, sizeof(int) * bufferSize);
+    // cusparseCsr2cscEx2(cusparseHandle, n, n, nNonZero, cscVal, cscColPtr, cscRowInd, csrVal, csrRowPtr, csrColInd, CUDA_R_32F, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, buffer);
+    // cudaDeviceSynchronize();
+
+    // float* bGpu;
+    // cudaMalloc(&bGpu, sizeof(float) * n);
+    // cudaMemcpy(bGpu, b.data(), sizeof(float) * n, cudaMemcpyHostToDevice);
+    // float* dvGpu;
+    // cudaMalloc(&dvGpu, sizeof(float) * n);
+    // cusparseMatDescr_t descr;
+    // cusparseCreateMatDescr(&descr);
+    // int singularity;
+    // cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, csrVal, csrRowPtr, csrColInd, bGpu, 0.0f, 0, dvGpu, &singularity);
+    // cudaDeviceSynchronize();
+    // if (singularity != -1)
+    //     std::cout << "Not SPD! " << std::endl;
+
+    // float* dv = new float[n];
+    // cudaMemcpy(dv, dvGpu, sizeof(float) * n, cudaMemcpyDeviceToHost);
+
     std::vector<Vertex*>& vertices = mesh->getVertices();
     for (int i = 0; i < vertices.size(); i++) {
         vertices[i]->x0 = vertices[i]->x;
         vertices[i]->v += Vector3f(dv(3 * i), dv(3 * i + 1), dv(3 * i + 2));
         vertices[i]->x += vertices[i]->v * dt;
     }
+
+    // cudaFree(cscVal);
+    // cudaFree(cscColPtr);
+    // cudaFree(cscRowInd);
+    // cudaFree(csrVal);
+    // cudaFree(csrRowPtr);
+    // cudaFree(csrColInd);
+    // cudaFree(buffer);
+    // cudaFree(bGpu);
+    // cudaFree(dvGpu);
+    // delete[] dv;
+
+    // cusparseDestroy(cusparseHandle);
+    // cusolverSpDestroy(cusolverHandle);
 }
 
 void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness) {
@@ -594,7 +673,7 @@ void Cloth::updateRenderingData(bool rebind) {
 }
 
 void Cloth::bind() {
-    mesh->bind();
+    mesh->bind(materialGpu);
 }
 
 void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {

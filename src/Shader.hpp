@@ -8,8 +8,8 @@
 
 #include <glad/glad.h>
 
-#include "Vector.hpp"
-#include "Matrix.hpp"
+#include "Vector.cuh"
+#include "Matrix.cuh"
 
 class Shader {
 private:

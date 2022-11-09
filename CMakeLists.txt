@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 
 include_directories(src)
-file(GLOB_RECURSE SOURCE "src/*.cpp" "src/*.hpp")
+file(GLOB_RECURSE SOURCE "src/*.cpp" "src/*.hpp" "src/*.cu" "src/*.cuh")
 add_executable(ClothSimulator ${SOURCE})
 
 add_subdirectory(test)
@@ -56,6 +56,8 @@ if (WIN32)
                 glfw
                 JsonCpp::JsonCpp
                 alglib
+                ${CUDA_cusparse_LIBRARY}
+                ${CUDA_cusolver_LIBRARY}
         )
 else()
         target_link_libraries(
@@ -64,5 +66,7 @@ else()
                 glfw
                 jsoncpp
                 alglib
+                ${CUDA_cusparse_LIBRARY}
+                ${CUDA_cusolver_LIBRARY}
         )
 endif()

@@ -61,7 +61,7 @@ void Operator::split(const Edge* edge, const Material* material) {
     Vertex* vertex2 = edge->getOpposite(0);
     Vertex* vertex3 = edge->getOpposite(1);
     
-    Vertex* newVertex = new Vertex(0, 0.5f * (vertex0->x + vertex1->x), true);
+    Vertex* newVertex = new Vertex(0.5f * (vertex0->x + vertex1->x), true);
     newVertex->u = 0.5f * (vertex0->u + vertex1->u);
     newVertex->v = 0.5f * (vertex0->v + vertex1->v);
     newVertex->sizing = 0.5f * (vertex0->sizing + vertex1->sizing);

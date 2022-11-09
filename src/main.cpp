@@ -3,6 +3,8 @@
 
 #include "Renderer.hpp"
 
+bool gpu = true;
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         std::cerr << "Please enter configuration file path" << std::endl;

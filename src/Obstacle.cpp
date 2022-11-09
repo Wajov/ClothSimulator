@@ -21,7 +21,7 @@ void Obstacle::reset() const {
 }
 
 void Obstacle::bind() {
-    mesh->bind();
+    mesh->bind(nullptr);
 }
 
 void Obstacle::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
