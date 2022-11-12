@@ -1,9 +1,9 @@
 #ifndef BOUNDS_HPP
 #define BOUNDS_HPP
 
-#include <algorithm>
 #include <cfloat>
 
+#include "MathHelper.cuh"
 #include "Vector.cuh"
 
 class Bounds {

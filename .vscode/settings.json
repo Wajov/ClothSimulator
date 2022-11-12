@@ -3,7 +3,8 @@
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}",
         "args": [
-            "conf/sphere.json"
+            "conf/sphere.json",
+            "--gpu"
         ]
     },
     "files.associations": {

@@ -11,7 +11,7 @@ void Face::initialize(const Material* material) {
     Vector2f d1 = vertices[1]->u - vertices[0]->u;
     Vector2f d2 = vertices[2]->u - vertices[0]->u;
     inverse = Matrix2x2f(d1, d2).inverse();
-    area = 0.5f * std::abs(d1.cross(d2));
+    area = 0.5f * abs(d1.cross(d2));
     if (material != nullptr)
         mass = material->getDensity() * material->getThicken() * area;
 }

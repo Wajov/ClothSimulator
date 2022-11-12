@@ -25,8 +25,8 @@ Matrix4x4f Transform::scale(float scaling) {
 
 Matrix4x4f Transform::rotate(const Vector3f& v, float angle) {
     Vector3f axis = v.normalized();
-    float s = std::sin(angle);
-    float c = std::cos(angle);
+    float s = sin(angle);
+    float c = cos(angle);
     Matrix4x4f ans;
 
     ans(0, 0) = (1.0f - c) * axis(0) * axis(0) + c;
@@ -83,7 +83,7 @@ Matrix4x4f Transform::lookAt(const Vector3f& position, const Vector3f& center, c
 }
 
 Matrix4x4f Transform::perspective(float fovy, float aspect, float zNear, float zFar) {
-    float t = std::tan(fovy * 0.5f);
+    float t = tan(fovy * 0.5f);
     Matrix4x4f ans;
 
     ans(0, 0) = 1.0f / (aspect * t);

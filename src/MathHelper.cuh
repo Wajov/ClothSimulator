@@ -23,23 +23,35 @@ template<typename T> __host__ __device__ static void mySwap(T& a, T& b) {
     b = t;
 }
 
-template<typename T> static T sign(T x) {
+template<typename T> __host__ __device__ static T min(T a, T b) {
+    return a < b ? a : b;
+}
+
+template<typename T> __host__ __device__ static T max(T a, T b) {
+    return a > b ? a : b;
+}
+
+template<typename T> __host__ __device__ static T clamp(T x , T a, T b) {
+    return x < a ? a : (x > b ? b : x);
+}
+
+template<typename T> __host__ __device__ static T sign(T x) {
     return x < static_cast<T>(0) ? static_cast<T>(-1) : static_cast<T>(1);
 }
 
-template<typename T> static T sqr(T x) {
+template<typename T> __host__ __device__ static T sqr(T x) {
     return x * x;
 }
 
-template<typename T> static T min(T a, T b, T c) {
-    return std::min(a, std::min(b, c));
+template<typename T> __host__ __device__ static T min(T a, T b, T c) {
+    return min(a, min(b, c));
 }
 
-template<typename T> static T min(T a, T b, T c, T d) {
-    return std::min(std::min(a, b), std::min(c, d));
+template<typename T> __host__ __device__ static T min(T a, T b, T c, T d) {
+    return min(min(a, b), min(c, d));
 }
 
-template<typename T> static T mixed(const Vector<T, 3>& a, const Vector<T, 3>& b, const Vector<T, 3>& c) {
+template<typename T> __host__ __device__ static T mixed(const Vector<T, 3>& a, const Vector<T, 3>& b, const Vector<T, 3>& c) {
     return a.dot(b.cross(c));
 }
 
@@ -58,11 +70,11 @@ static void eigenvalueDecomposition(const Matrix2x2f& A, Matrix2x2f& Q, Vector2f
     if (b != 0.0f) {
         v0 = l1 - d;
         v1 = b;
-        vn = std::sqrt(sqr(v0) + b2);
+        vn = sqrt(sqr(v0) + b2);
         Q(0,0) = v0 / vn;
         Q(1,0) = v1 / vn;
         v0 = l2 - d;
-        vn = std::sqrt(sqr(v0) + b2);
+        vn = sqrt(sqr(v0) + b2);
         Q(0, 1) = v0 / vn;
         Q(1, 1) = v1 / vn;
     } else if (a >= d) {
@@ -90,7 +102,7 @@ static Matrix2x2f sqrt(const Matrix2x2f& A) {
     Vector2f l;
     eigenvalueDecomposition(A, Q, l);
     for (int i = 0; i < 2; i++)
-        l(i) = l(i) >= 0.0f ? std::sqrt(l(i)) : -std::sqrt(-l(i));
+        l(i) = l(i) >= 0.0f ? sqrt(l(i)) : -sqrt(-l(i));
     return Q * diagonal(l) * Q.transpose();
 }
 
@@ -99,7 +111,7 @@ static Matrix2x2f max(const Matrix2x2f& A, float v) {
     Vector2f l;
     eigenvalueDecomposition(A, Q, l);
     for (int i = 0; i < 2; i++)
-        l(i) = std::max(l(i), v);
+        l(i) = max(l(i), v);
     return Q * diagonal(l) * Q.transpose();
 }
 
@@ -107,7 +119,7 @@ static float newtonsMethod(float a, float b, float c, float d, float x0, int dir
     if (dir != 0) {
         float y0 = d + x0 * (c + x0 * (b + x0 * a));
         float ddy0 = 2.0f * b + x0 * (6.0f * a);
-        x0 += dir * std::sqrt(std::abs(2.0f * y0 / ddy0));
+        x0 += dir * sqrt(abs(2.0f * y0 / ddy0));
     }
     for (int iter = 0; iter < 100; iter++) {
         float y = d + x0 * (c + x0 * (b + x0 * a));
@@ -115,7 +127,7 @@ static float newtonsMethod(float a, float b, float c, float d, float x0, int dir
         if (dy == 0)
             return x0;
         float x1 = x0 - y / dy;
-        if (std::abs(x0 - x1) < 1e-6f)
+        if (abs(x0 - x1) < 1e-6f)
             return x0;
         x0 = x1;
     }
@@ -130,12 +142,12 @@ static int solveQuadratic(float a, float b, float c, float x[2]) {
     }
     float q = -(b + sign(b) * sqrt(d)) * 0.5f;
     int i = 0;
-    if (std::abs(a) > 1e-12 * std::abs(q))
+    if (abs(a) > 1e-12 * abs(q))
         x[i++] = q / a;
-    if (std::abs(q) > 1e-12 * std::abs(c))
+    if (abs(q) > 1e-12 * abs(c))
         x[i++] = c / q;
     if (i == 2 && x[0] > x[1])
-        std::swap(x[0], x[1]);
+        mySwap(x[0], x[1]);
     return i;
 }
 
@@ -163,7 +175,7 @@ static int solveCubic(float a, float b, float c, float d, float x[]) {
 }
 
 static double clampViolation (double x, int sign) {
-    return sign < 0 ? std::max(x, 0.0) : (sign > 0 ? std::min(x, 0.0) : x);
+    return sign < 0 ? max(x, 0.0) : (sign > 0 ? min(x, 0.0) : x);
 }
 
 static void valueAndGradient(const alglib::real_1d_array& x, double& value, alglib::real_1d_array& gradient, void* p) {
@@ -204,7 +216,7 @@ static void augmentedLagrangianMethod(Optimization* optimization) {
     
     int iter = 0;
     while (iter < MAX_TOTAL_ITERATIONS) {
-        int maxIterations = std::min(MAX_SUB_ITERATIONS, MAX_TOTAL_ITERATIONS - iter);
+        int maxIterations = min(MAX_SUB_ITERATIONS, MAX_TOTAL_ITERATIONS - iter);
         alglib::mincgsetcond(state, EPSILON_G, EPSILON_F, EPSILON_X, maxIterations);
         if (iter > 0)
             alglib::mincgrestartfrom(state, x);

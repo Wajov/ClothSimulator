@@ -48,7 +48,7 @@ Disk Disk::circumscribedDisk(const Disk& d0, const Disk& d1, const Disk& d2) {
     float b = 2.0f * M * N - 2.0f * N * x0 + 2.0f * P * Q - 2.0f * Q * y0 + 2.0f * r0;
     float c = sqr(x0) + sqr(M) - 2.0f * M * x0 + sqr(P) + sqr(y0) - 2.0f * P * y0 - sqr(r0);
     float D = sqr(b) - 4.0f * a * c;
-    float rs = (-b - std::sqrt(D)) / (2.0f * a);
+    float rs = (-b - sqrt(D)) / (2.0f * a);
     float xs = M + N * rs;
     float ys = P + Q * rs;
 

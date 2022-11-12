@@ -48,7 +48,7 @@ __global__ static void initializeVertices(int nVertices, const Vertex* vertexArr
     }
 }
 
-__device__ static void setEdgeData(int index0, int index1, const Vertex* vertex, const Face* face, thrust::pair<int, int>& index, EdgeData& edgeData) {
+__device__ static void setEdgeData(int index0, int index1, const Vertex* vertex, const Face* face, PairIndex& index, EdgeData& edgeData) {
     if (index0 > index1)
         mySwap(index0, index1);
     
@@ -58,7 +58,7 @@ __device__ static void setEdgeData(int index0, int index1, const Vertex* vertex,
     edgeData.adjacent = const_cast<Face*>(face);
 }
 
-__global__ static void initializeFaces(int nFaces, const unsigned int* indices, const Vertex* const* vertices, const Material* material, Face** faces, thrust::pair<int, int>* edgeIndices, EdgeData* edgeData) {
+__global__ static void initializeFaces(int nFaces, const unsigned int* indices, const Vertex* const* vertices, const Material* material, Face** faces, PairIndex* edgeIndices, EdgeData* edgeData) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
@@ -78,12 +78,12 @@ __global__ static void initializeFaces(int nFaces, const unsigned int* indices, 
     }
 }
 
-__global__ static void initializeEdges(int nEdges, const thrust::pair<int, int>* indices, const EdgeData* edgeData, const Vertex* const* vertices, Edge** edges) {
+__global__ static void initializeEdges(int nEdges, const PairIndex* indices, const EdgeData* edgeData, const Vertex* const* vertices, Edge** edges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads)
         if (i == 0 || indices[i] != indices[i - 1]) {
-            const thrust::pair<int, int>& index = indices[i];
+            const PairIndex& index = indices[i];
             const EdgeData& e = edgeData[i];
             edges[i] = new Edge(vertices[index.first], vertices[index.second]);
             edges[i]->setOppositeAndAdjacent(e.opposite, e.adjacent);
@@ -92,7 +92,7 @@ __global__ static void initializeEdges(int nEdges, const thrust::pair<int, int>*
             edges[i] = nullptr;
 }
 
-__global__ static void setupEdges(int nEdges, const thrust::pair<int, int>* indices, const EdgeData* edgeData, Edge** edges) {
+__global__ static void setupEdges(int nEdges, const PairIndex* indices, const EdgeData* edgeData, Edge** edges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads)

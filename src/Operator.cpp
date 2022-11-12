@@ -132,9 +132,9 @@ void Operator::collapse(const Edge* edge, bool reverse, const Material* material
     Face* face1 = edge->getAdjacent(1);
     
     if (reverse) {
-        std::swap(vertex0, vertex1);
-        std::swap(vertex2, vertex3);
-        std::swap(face0, face1);
+        mySwap(vertex0, vertex1);
+        mySwap(vertex2, vertex3);
+        mySwap(face0, face1);
     }
 
     removedVertices.push_back(vertex0);

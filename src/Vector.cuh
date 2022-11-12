@@ -133,7 +133,7 @@ public:
     };
 
     __host__ __device__ T norm() const {
-        return std::sqrt(norm2());
+        return sqrt(norm2());
     };
 
     __host__ __device__ T norm2() const {

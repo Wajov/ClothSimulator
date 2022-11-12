@@ -7,19 +7,27 @@ Cloth::Cloth(const Json::Value& json) {
         CUDA_CHECK(cudaMalloc(&materialGpu, sizeof(Material)));
         CUDA_CHECK(cudaMemcpy(materialGpu, material, sizeof(Material), cudaMemcpyHostToDevice));
     }
+    
+    mesh = new Mesh(json["mesh"], transform, !gpu ? material : materialGpu);
 
+    std::vector<int> handleIndices;
+    for (const Json::Value& handleJson : json["handles"])
+        for (const Json::Value& nodeJson : handleJson["nodes"])
+            handleIndices.push_back(parseInt(nodeJson));
     if (!gpu) {
-        mesh = new Mesh(json["mesh"], transform, material);
         std::vector<Vertex*>& vertices = mesh->getVertices();
-        for (const Json::Value& handleJson : json["handles"])
-            for (const Json::Value& nodeJson : handleJson["nodes"]) {
-                int index = parseInt(nodeJson);
-                vertices[index]->preserve = true;
-                handles.push_back(new Handle(vertices[index], vertices[index]->x));
-            }
+        handles.resize(handleIndices.size());
+        for (int i = 0; i < handleIndices.size(); i++) {
+            int index = handleIndices[i];
+            vertices[index]->preserve = true;
+            handles[i] = new Handle(vertices[index], vertices[index]->x);
+        }
     } else {
-        mesh = new Mesh(json["mesh"], transform, materialGpu);
-        // TODO
+        thrust::device_vector<int> handleIndicesGpu = handleIndices;
+        thrust::device_vector<Vertex*> vertices = mesh->getVerticesGpu();
+        handlesGpu.resize(handleIndicesGpu.size());
+        initializeHandles<<<GRID_SIZE, BLOCK_SIZE>>>(handleIndicesGpu.size(), pointer(handleIndicesGpu), pointer(vertices), pointer(handlesGpu));
+        CUDA_CHECK_LAST();
     }
 
     remeshing = new Remeshing(json["remeshing"]);
@@ -37,8 +45,11 @@ Cloth::~Cloth() {
     delete edgeShader;
     delete faceShader;
     
-    if (gpu)
+    if (gpu) {
         CUDA_CHECK(cudaFree(materialGpu));
+        deleteHandles<<<GRID_SIZE, BLOCK_SIZE>>>(handlesGpu.size(), pointer(handlesGpu));
+        CUDA_CHECK_LAST();
+    }
 }
 
 void Cloth::addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::SparseMatrix<float>& A) const {
@@ -81,73 +92,6 @@ void Cloth::addSubVector(const Vector12f& b, const Vector4i& indices, Eigen::Vec
     }
 }
 
-float Cloth::distance(const Vector3f& x, const Vector3f& a, const Vector3f& b) const {
-    Vector3f e = b - a;
-    Vector3f t = x - a;
-    Vector3f r = e * e.dot(t) / e.norm2();
-    return (t - r).norm();
-}
-
-Vector2f Cloth::barycentricWeights(const Vector3f& x, const Vector3f& a, const Vector3f& b) const {
-    Vector3f e = b - a;
-    float t = e.dot(x - a) / e.norm2();
-    return Vector2f(1.0f - t, t);
-}
-
-std::pair<Vector9f, Matrix9x9f> Cloth::stretchingForce(const Face* face) const {
-    Matrix3x2f F = face->derivative(face->getVertex(0)->x, face->getVertex(1)->x, face->getVertex(2)->x);
-    Matrix2x2f G = 0.5f * (F.transpose() * F - Matrix2x2f(1.0f));
-
-    Matrix2x2f Y = face->getInverse();
-    Matrix2x3f D(-Y.row(0) - Y.row(1), Y.row(0), Y.row(1));
-    Matrix3x9f Du(Matrix3x3f(D(0, 0)), Matrix3x3f(D(0, 1)), Matrix3x3f(D(0, 2)));
-    Matrix3x9f Dv(Matrix3x3f(D(1, 0)), Matrix3x3f(D(1, 1)), Matrix3x3f(D(1, 2)));
-
-    Vector3f fu = F.col(0);
-    Vector3f fv = F.col(1);
-
-    Vector9f fuu = Du.transpose() * fu;
-    Vector9f fvv = Dv.transpose() * fv;
-    Vector9f fuv = 0.5f * (Du.transpose() * fv + Dv.transpose() * fu);
-
-    Vector4f k = material->stretchingStiffness(G);
-
-    Vector9f grad = k(0) * G(0, 0) * fuu + k(2) * G(1, 1) * fvv + k(1) * (G(0, 0) * fvv + G(1, 1) * fuu) + 2.0f * k(3) * G(0, 1) * fuv;
-    Matrix9x9f hess = k(0) * (fuu.outer(fuu) + std::max(G(0, 0), 0.0f) * Du.transpose() * Du)
-                    + k(2) * (fvv.outer(fvv) + std::max(G(1, 1), 0.0f) * Dv.transpose() * Dv)
-                    + k(1) * (fuu.outer(fvv) + std::max(G(0, 0), 0.0f) * Dv.transpose() * Dv + fvv.outer(fuu) + std::max(G(1, 1), 0.0f) * Du.transpose() * Du)
-                    + 2.0f * k(3) * fuv.outer(fuv);
-
-    float area = face->getArea();
-    return std::make_pair(-area * grad, -area * hess);
-}
-
-std::pair<Vector12f, Matrix12x12f> Cloth::bendingForce(const Edge* edge) const {
-    Vector3f x0 = edge->getVertex(0)->x;
-    Vector3f x1 = edge->getVertex(1)->x;
-    Vector3f x2 = edge->getOpposite(0)->x;
-    Vector3f x3 = edge->getOpposite(1)->x;
-    Face* adjacent0 = edge->getAdjacent(0);
-    Face* adjacent1 = edge->getAdjacent(1);
-    Vector3f n0 = adjacent0->getNormal();
-    Vector3f n1 = adjacent1->getNormal();
-    float length = edge->getLength();
-    float angle = edge->getAngle();
-    float area = adjacent0->getArea() + adjacent1->getArea();
-
-    float h0 = distance(x2, x0, x1);
-    float h1 = distance(x3, x0, x1);
-    Vector2f w0 = barycentricWeights(x2, x0, x1);
-    Vector2f w1 = barycentricWeights(x3, x0, x1);
-
-    Vector12f dtheta(-w0(0) * n0 / h0 - w1(0) * n1 / h1, -w0(1) * n0 / h0 - w1(1) * n1 / h1, n0 / h0, n1 / h1);
-
-    float k = material->bendingStiffness(length, angle, area, edge->getVertex(1)->u - edge->getVertex(0)->u);
-    float coefficient = -0.25f * k * sqr(length) / area;
-
-    return std::make_pair(coefficient * angle * dtheta, coefficient * dtheta.outer(dtheta));
-}
-
 void Cloth::init(Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
     std::vector<Vertex*>& vertices = mesh->getVertices();
     int n = vertices.size();
@@ -182,7 +126,7 @@ void Cloth::addExternalForces(float dt, const Vector3f& gravity, const Wind* win
         Vector3f relative = velocity - average;
         float vn = normal.dot(relative);
         Vector3f vt = relative - vn * normal;
-        Vector3f force = area * (density * std::abs(vn) * vn * normal + wind->getDrag() * vt) / 3.0f;
+        Vector3f force = area * (density * abs(vn) * vn * normal + wind->getDrag() * vt) / 3.0f;
         Vector3f f = dt * force;
         for (int i = 0; i < 3; i++) {
             b(3 * face->getVertex(0)->index + i) += f(i);
@@ -199,10 +143,10 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::Ve
         Vertex* vertex1 = face->getVertex(1);
         Vertex* vertex2 = face->getVertex(2);
         Vector9f v(vertex0->v, vertex1->v, vertex2->v);
-
-        std::pair<Vector9f, Matrix9x9f> pair = stretchingForce(face);
-        Vector9f f = pair.first;
-        Matrix9x9f J = pair.second;
+        
+        Vector9f f;
+        Matrix9x9f J;
+        stretchingForce(face, material, f, J);
 
         Vector3i indices(vertex0->index, vertex1->index, vertex2->index);
         addSubMatrix(-dt * dt * J, indices, A);
@@ -218,9 +162,9 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::Ve
             Vertex* vertex3 = edge->getOpposite(1);
             Vector12f v(vertex0->v, vertex1->v, vertex2->v, vertex3->v);
 
-            std::pair<Vector12f, Matrix12x12f> pair = bendingForce(edge);
-            Vector12f f = pair.first;
-            Matrix12x12f J = pair.second;
+            Vector12f f;
+            Matrix12x12f J;
+            bendingForce(edge, material, f, J);
 
             Vector4i indices(vertex0->index, vertex1->index, vertex2->index, vertex3->index);
             addSubMatrix(-dt * dt * J, indices, A);
@@ -324,17 +268,17 @@ Matrix2x2f Cloth::faceSizing(const Face* face, const std::vector<Plane>& planes)
     Vector2f l;
     eigenvalueDecomposition(S, Q, l);
     for (int i = 0; i < 2; i++)
-        l(i) = std::clamp(l(i), 1.0f / sqr(remeshing->sizeMax), 1.0f / sqr(remeshing->sizeMin));
-    float lMax = std::max(l(0), l(1));
+        l(i) = clamp(l(i), 1.0f / sqr(remeshing->sizeMax), 1.0f / sqr(remeshing->sizeMin));
+    float lMax = max(l(0), l(1));
     float lMin = lMax * sqr(remeshing->aspectMin);
     for (int i = 0; i < 2; i++)
-        l(i) = std::max(l(i), lMin);
+        l(i) = max(l(i), lMin);
     return Q * diagonal(l) * Q.transpose();
 }
 
 float Cloth::edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const {
     Vector2f du = vertex0->u - vertex1->u;
-    return std::sqrt(0.5f * (du.dot(vertex0->sizing * du) + du.dot(vertex1->sizing * du)));
+    return sqrt(0.5f * (du.dot(vertex0->sizing * du) + du.dot(vertex1->sizing * du)));
 }
 
 bool Cloth::shouldFlip(const Edge* edge) const {
@@ -439,7 +383,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Vertex*, std::vector<Edge*>>& adja
     Vertex* vertex0 = edge->getVertex(0);
     Vertex* vertex1 = edge->getVertex(1);
     if (reverse)
-        std::swap(vertex0, vertex1);
+        mySwap(vertex0, vertex1);
 
     if (vertex0->preserve)
         return false;
@@ -466,17 +410,17 @@ bool Cloth::shouldCollapse(std::unordered_map<Vertex*, std::vector<Edge*>>& adja
             v0 = vertex1;
         else if (v1 == vertex0) {
             v1 = vertex1;
-            std::swap(v0, v1);
+            mySwap(v0, v1);
         } else {
             v2 = vertex1;
-            std::swap(v0, v2);
+            mySwap(v0, v2);
         }
         Vector2f u0 = v0->u;
         Vector2f u1 = v1->u;
         Vector2f u2 = v2->u;
         float a = 0.5f * (u1 - u0).cross(u2 - u0);
         float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
-        float aspect = 12.0f * std::sqrt(3.0f) / sqr(p);
+        float aspect = 12.0f * sqrt(3.0f) / sqr(p);
         if (a < 1e-6f || aspect < remeshing->aspectMin)
             return false;
         if (edgeMetric(v0, v1) > 0.9f || edgeMetric(v0, v2) > 0.9f)
@@ -552,80 +496,99 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
             vertices[i]->x += vertices[i]->v * dt;
         }
     } else {
-        thrust::device_vector<MatrixEntry> aEntries;
-        thrust::device_vector<VectorEntry> bEntries;
+        thrust::device_vector<Vertex*>& vertices = mesh->getVerticesGpu();
+        thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
+        thrust::device_vector<Face*>& faces = mesh->getFacesGpu();
 
-        // TODO
+        int nVertices = vertices.size();
+        Vertex** verticesPointer = pointer(vertices);
+        int nEdges = edges.size();
+        Edge** edgesPointer = pointer(edges);
+        int nFaces = faces.size();
+        Face** facesPointer = pointer(faces);
+        int nHandles = handlesGpu.size();
 
-        // cusparseHandle_t cusparseHandle;
-        // cusparseStatus_t cusparseStatus;
-        // cusparseStatus = cusparseCreate(&cusparseHandle);
-        // if (cusparseStatus != 0)
-        //     std::cout << "status create cusparse handle: " << cusparseStatus << std::endl;
+        int aSize = 3 * nVertices + 144 * nEdges + 81 * nFaces + 3 * nHandles;
+        int bSize = 3 * nVertices + 12 * nEdges + 18 * nFaces + 3 * nHandles;
 
-        // cusolverSpHandle_t cusolverHandle;
-        // cusolverStatus_t cusolverStatus;
-        // cusolverStatus = cusolverSpCreate(&cusolverHandle);
-        // if (cusolverStatus != 0)
-        //     std::cout << "status create cusolver handle: " << cusolverStatus << std::endl;
+        thrust::device_vector<PairIndex> aIndices(aSize);
+        thrust::device_vector<int> bIndices(bSize);
+        thrust::device_vector<float> aValues(aSize), bValues(bSize);
 
-        // A.makeCompressed();
-        // int n = A.rows(), nNonZero = A.nonZeros();
-        // float* cscVal;
-        // CUDA_CHECK(cudaMalloc(&cscVal, sizeof(float) * nNonZero));
-        // cudaMemcpy(cscVal, A.valuePtr(), sizeof(float) * nNonZero, cudaMemcpyHostToDevice);
-        // int* cscColPtr;
-        // cudaMalloc(&cscColPtr, sizeof(int) * (n + 1));
-        // cudaMemcpy(cscColPtr, A.outerIndexPtr(), sizeof(int) * (n + 1), cudaMemcpyHostToDevice);
-        // int* cscRowInd;
-        // cudaMalloc(&cscRowInd, sizeof(int) * nNonZero);
-        // cudaMemcpy(cscRowInd, A.innerIndexPtr(), sizeof(int) * nNonZero, cudaMemcpyHostToDevice);
+        addMass<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, verticesPointer, pointer(aIndices), pointer(aValues));
+        CUDA_CHECK_LAST();
 
-        // float* csrVal;
-        // cudaMalloc(&csrVal, sizeof(float) * nNonZero);
-        // int* csrRowPtr;
-        // cudaMalloc(&csrRowPtr, sizeof(int) * (n + 1));
-        // int* csrColInd;
-        // cudaMalloc(&csrColInd, sizeof(int) * nNonZero);
+        addGravity<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, verticesPointer, dt, gravity, pointer(bIndices), pointer(bValues));
+        CUDA_CHECK_LAST();
 
-        // size_t bufferSize;
-        // cusparseCsr2cscEx2_bufferSize(cusparseHandle, n, n, nNonZero, cscVal, cscColPtr, cscRowInd, csrVal, csrRowPtr, csrColInd, CUDA_R_32F, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, 
-        // CUSPARSE_CSR2CSC_ALG1, &bufferSize);
-        // cudaDeviceSynchronize();
-        // int* buffer;
-        // cudaMalloc(&buffer, sizeof(int) * bufferSize);
-        // cusparseCsr2cscEx2(cusparseHandle, n, n, nNonZero, cscVal, cscColPtr, cscRowInd, csrVal, csrRowPtr, csrColInd, CUDA_R_32F, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, buffer);
-        // cudaDeviceSynchronize();
+        addWindForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, wind, pointer(bIndices, 3 * nVertices), pointer(bValues, 3 * nVertices));
+        CUDA_CHECK_LAST();
 
-        // float* bGpu;
-        // cudaMalloc(&bGpu, sizeof(float) * n);
-        // cudaMemcpy(bGpu, b.data(), sizeof(float) * n, cudaMemcpyHostToDevice);
-        // float* dvGpu;
-        // cudaMalloc(&dvGpu, sizeof(float) * n);
-        // cusparseMatDescr_t descr;
-        // cusparseCreateMatDescr(&descr);
-        // int singularity;
-        // cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, csrVal, csrRowPtr, csrColInd, bGpu, 0.0f, 0, dvGpu, &singularity);
-        // cudaDeviceSynchronize();
-        // if (singularity != -1)
-        //     std::cout << "Not SPD! " << std::endl;
+        addStretchingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, materialGpu, pointer(aIndices, 3 * nVertices), pointer(aValues, 3 * nVertices), pointer(bIndices, 3 * nVertices + 9 * nFaces), pointer(bValues, 3 * nVertices + 9 * nFaces));
+        CUDA_CHECK_LAST();
 
-        // float* dv = new float[n];
-        // cudaMemcpy(dv, dvGpu, sizeof(float) * n, cudaMemcpyDeviceToHost);
-        
-        // cudaFree(cscVal);
-        // cudaFree(cscColPtr);
-        // cudaFree(cscRowInd);
-        // cudaFree(csrVal);
-        // cudaFree(csrRowPtr);
-        // cudaFree(csrColInd);
-        // cudaFree(buffer);
-        // cudaFree(bGpu);
-        // cudaFree(dvGpu);
-        // delete[] dv;
+        addBendingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, dt, materialGpu, pointer(aIndices, 3 * nVertices + 81 * nFaces), pointer(aValues, 3 * nVertices + 81 * nFaces), pointer(bIndices, 3 * nVertices + 18 * nFaces), pointer(bValues, 3 * nVertices + 18 * nFaces));
+        CUDA_CHECK_LAST();
 
-        // cusparseDestroy(cusparseHandle);
-        // cusolverSpDestroy(cusolverHandle);
+        addHandleForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), dt, handleStiffness, pointer(aIndices, 3 * nVertices + 144 * nEdges + 81 * nFaces), pointer(aValues, 3 * nVertices + 144 * nEdges + 81 * nFaces), pointer(bIndices, 3 * nVertices + 12 * nEdges + 18 * nFaces), pointer(bValues, 3 * nVertices + 12 * nEdges + 18 * nFaces));
+        CUDA_CHECK_LAST();
+
+        int n = 3 * nVertices;
+
+        thrust::sort_by_key(aIndices.begin(), aIndices.end(), aValues.begin());
+        thrust::device_vector<PairIndex> outputAIndices(aSize);
+        thrust::device_vector<float> values(aSize);
+        auto iter = thrust::reduce_by_key(aIndices.begin(), aIndices.end(), aValues.begin(), outputAIndices.begin(), values.begin());
+        int nNonZero = iter.first - outputAIndices.begin();
+        thrust::device_vector<int> rowIndices(nNonZero), colIndies(nNonZero);
+        splitIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nNonZero, pointer(outputAIndices), pointer(rowIndices), pointer(colIndies));
+        CUDA_CHECK_LAST();
+
+        thrust::sort_by_key(bIndices.begin(), bIndices.end(), bValues.begin());
+        thrust::device_vector<int> outputBIndices(bSize);
+        thrust::device_vector<float> outputBValues(bSize);
+        auto jter = thrust::reduce_by_key(bIndices.begin(), bIndices.end(), bValues.begin(), outputBIndices.begin(), outputBValues.begin());
+        int outputBSize = jter.first - outputBIndices.begin();
+        thrust::device_vector<float> b(n);
+        setupVector<<<GRID_SIZE, BLOCK_SIZE>>>(outputBSize, pointer(outputBIndices), pointer(outputBValues), pointer(b));
+        CUDA_CHECK_LAST();
+
+        cusparseHandle_t cusparseHandle;
+        cusparseStatus_t cusparseStatus;
+        cusparseStatus = cusparseCreate(&cusparseHandle);
+        if (cusparseStatus != 0)
+            std::cerr << "status create cusparse handle: " << cusparseStatus << std::endl;
+
+        cusolverSpHandle_t cusolverHandle;
+        cusolverStatus_t cusolverStatus;
+        cusolverStatus = cusolverSpCreate(&cusolverHandle);
+        if (cusolverStatus != 0)
+            std::cerr << "status create cusolver handle: " << cusolverStatus << std::endl;
+
+        thrust::device_vector<int> rowPointer(n + 1);
+        cusparseStatus = cusparseXcoo2csr(cusparseHandle, pointer(rowIndices), nNonZero, n, pointer(rowPointer), CUSPARSE_INDEX_BASE_ZERO);
+        if (cusparseStatus != 0)
+            std::cerr << "coo2csr error" << std::endl;
+
+        cusparseMatDescr_t descr;
+        cusparseCreateMatDescr(&descr);
+        thrust::device_vector<float> dv(n);
+        int singularity;
+        cusolverStatus = cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, pointer(values), pointer(rowPointer), pointer(colIndies), pointer(b), 1e-5f, 0, pointer(dv), &singularity);
+        if (cusolverStatus != 0)
+            std::cerr << "solve error" << std::endl;
+        if (singularity != -1)
+            std::cerr << "Not SPD! " << std::endl;
+
+        updateVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, dt, pointer(dv), verticesPointer);
+
+        cusparseStatus = cusparseDestroy(cusparseHandle);
+        if (cusparseStatus != 0)
+            std::cerr << "cusparse destroy error" << std::endl;
+
+        cusolverStatus = cusolverSpDestroy(cusolverHandle);
+        if (cusolverStatus != 0)
+            std::cerr << "cusolve destroy error" << std::endl;
     }
 }
 

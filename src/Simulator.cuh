@@ -12,6 +12,7 @@
 #include <cuda_runtime.h>
 
 #include "JsonHelper.hpp"
+#include "CudaHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Magic.hpp"
@@ -22,6 +23,8 @@
 #include "Impact.hpp"
 #include "ImpactZone.hpp"
 #include "optimization/ImpactZoneOptimization.hpp"
+
+extern bool gpu;
 
 class Simulator {
 private:

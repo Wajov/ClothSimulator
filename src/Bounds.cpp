@@ -13,7 +13,7 @@ Bounds::~Bounds() {}
 Vector3f Bounds::minVector(const Vector3f& a, const Vector3f& b) const {
     Vector3f ans;
     for (int i = 0; i < 3; i++)
-        ans(i) = std::min(a(i), b(i));
+        ans(i) = min(a(i), b(i));
     
     return ans;
 }
@@ -21,7 +21,7 @@ Vector3f Bounds::minVector(const Vector3f& a, const Vector3f& b) const {
 Vector3f Bounds::maxVector(const Vector3f& a, const Vector3f& b) const {
     Vector3f ans;
     for (int i = 0; i < 3; i++)
-        ans(i) = std::max(a(i), b(i));
+        ans(i) = max(a(i), b(i));
     
     return ans;
 }
@@ -67,7 +67,7 @@ Bounds Bounds::dilate(float thickness) const {
 float Bounds::distance(const Vector3f& x) const {
     Vector3f p;
     for (int i = 0; i < 3; i++)
-        p(i) = std::clamp(x(i), pMin(i), pMax(i));
+        p(i) = clamp(x(i), pMin(i), pMax(i));
     return (x - p).norm();
 }
 

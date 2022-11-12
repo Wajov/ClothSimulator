@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <unordered_map>
 
+#include "MathHelper.cuh"
 #include "Vertex.cuh"
 #include "Edge.cuh"
 #include "Face.cuh"

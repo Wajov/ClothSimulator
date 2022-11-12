@@ -1,4 +1,4 @@
-#include "Handle.hpp"
+#include "Handle.cuh"
 
 Handle::Handle(const Vertex* vertex, const Vector3f& position) :
     vertex(const_cast<Vertex*>(vertex)),

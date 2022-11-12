@@ -10,11 +10,12 @@
 #include <json/json.h>
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
-#include <thrust/pair.h>
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 #include <thrust/remove.h>
 #include <thrust/reduce.h>
+
+#include "MathHelper.cuh"
 #include "CudaHelper.cuh"
 #include "MeshHelper.cuh"
 #include "Vector.cuh"
@@ -23,6 +24,8 @@
 #include "Face.cuh"
 #include "Transform.hpp"
 #include "Operator.hpp"
+
+extern bool gpu;
 
 class Mesh {
 private:

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <unordered_map>
 
+#include "MathHelper.cuh"
 #include "Bounds.hpp"
 #include "Face.cuh"
 #include "Impact.hpp"

@@ -54,13 +54,13 @@ Vector4f Material::calculateStretchingSample(const Matrix2x2f& G, const Vector4f
         Q(1, 1) = -Q(1, 1);
     }
 
-    float strainWeight = (std::sqrt(l(0) + 1.0f) - 1.0f) * 6.0f;
-    strainWeight = std::clamp(strainWeight, 0.0f, 1.0f - 1e-6f);
+    float strainWeight = (sqrt(l(0) + 1.0f) - 1.0f) * 6.0f;
+    strainWeight = clamp(strainWeight, 0.0f, 1.0f - 1e-6f);
     int strainId = static_cast<int>(strainWeight);
     strainWeight -= strainId;
 
-    float angleWeight = std::abs(std::atan2(Q(1, 0), Q(0, 0))) / M_PI * 8.0f;
-    angleWeight = std::clamp(angleWeight, 0.0f, 4.0f - 1e-6f);
+    float angleWeight = abs(atan2(Q(1, 0), Q(0, 0))) / M_PI * 8.0f;
+    angleWeight = clamp(angleWeight, 0.0f, 4.0f - 1e-6f);
     int angleId = static_cast<int>(angleWeight);
     angleWeight -= angleId;
 
@@ -75,7 +75,7 @@ Vector4f Material::calculateStretchingSample(const Matrix2x2f& G, const Vector4f
         for (int j = 0; j < 2; j++)
             ans += data[strainId + i][angleId + j] * weights[i][j];
     for (int i = 0; i < 4; i++)
-        ans(i) = std::max(ans(i), 0.0f);
+        ans(i) = max(ans(i), 0.0f);
     ans *= 2.0f;
 
     return ans;
@@ -91,17 +91,17 @@ float Material::getThicken() const {
 
 Vector4f Material::stretchingStiffness(const Matrix2x2f& G) const {
     float x = (G(0, 0) + 0.25f) * N;
-    x = std::clamp(x, 0.0f, N - 1 - 1e-6f);
+    x = clamp(x, 0.0f, N - 1 - 1e-6f);
     int xi = static_cast<int>(x);
     x -= xi;
 
     float y = (G(1, 1) + 0.25f) * N;
-    y = std::clamp(y, 0.0f, N - 1 - 1e-6f);
+    y = clamp(y, 0.0f, N - 1 - 1e-6f);
     int yi = static_cast<int>(y);
     y -= yi;
 
-    float z = std::abs(G(0, 1)) * N;
-    z = std::clamp(z, 0.0f, N - 1 - 1e-6f);
+    float z = abs(G(0, 1)) * N;
+    z = clamp(z, 0.0f, N - 1 - 1e-6f);
     int zi = static_cast<int>(z);
     z -= zi;
 
@@ -128,17 +128,17 @@ float Material::bendingStiffness(float length, float angle, float area, const Ve
     float curv = length * angle / area;
     float alpha = 0.5f * curv;
 
-    float biasWeight = std::abs(std::atan2(d(1), d(0))) * 4.0f / M_PI;
+    float biasWeight = abs(atan2(d(1), d(0))) * 4.0f / M_PI;
     if (biasWeight > 2.0f)
         biasWeight = 4.0f - biasWeight;
-    biasWeight = std::clamp(biasWeight, 0.0f, 2.0f - 1e-6f);
+    biasWeight = clamp(biasWeight, 0.0f, 2.0f - 1e-6f);
     int biasId = static_cast<int>(biasWeight);
     biasWeight -= biasId;
 
     float valueWeight = 0.2f * alpha;
-    valueWeight = std::min(valueWeight, 4.0f - 1e-6f);
+    valueWeight = min(valueWeight, 4.0f - 1e-6f);
     int valueId = static_cast<int>(valueWeight);
-    valueId = std::max(valueId, 0);
+    valueId = max(valueId, 0);
     valueWeight -= valueId;
 
     float weights[2][2];
@@ -151,7 +151,7 @@ float Material::bendingStiffness(float length, float angle, float area, const Ve
     for (int i = 0; i < 2; i++)
         for (int j = 0; j < 2; j++)
             ans += bendingSamples[biasId + i][valueId + j] * weights[i][j];
-    ans = std::max(ans, 0.0f);
+    ans = max(ans, 0.0f);
 
     return ans;
 }

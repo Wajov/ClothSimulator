@@ -74,7 +74,7 @@ void Renderer::cursorPosCallback(double x, double y) {
         Vector3f b = (Vector3f(static_cast<float>(x) / width - 0.5f, 0.5f - static_cast<float>(y) / height, 1.0f)).normalized();
         Vector3f axis = a.cross(b);
         float angle = a.dot(b);
-        rotation = Transform::rotate(axis, 10.0f * std::acos(angle)) * rotation;
+        rotation = Transform::rotate(axis, 10.0f * acos(angle)) * rotation;
     }
 
     lastX = x;
@@ -83,7 +83,7 @@ void Renderer::cursorPosCallback(double x, double y) {
 
 void Renderer::scrollCallback(double x, double y) {
     scaling += 0.1 * y;
-    scaling = std::max(scaling, 0.01);
+    scaling = max(scaling, 0.01);
 }
 
 void Renderer::keyCallback(int key, int scancode, int action, int mods) {

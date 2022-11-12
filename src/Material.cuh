@@ -2,7 +2,6 @@
 #define MATERIAL_CUH
 
 #include <cmath>
-#include <algorithm>
 #include <fstream>
 #include <iostream>
 

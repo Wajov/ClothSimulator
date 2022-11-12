@@ -87,7 +87,7 @@ void Edge::update() {
         Vector3f n1 = adjacents[1]->getNormal();
         float sine = e.dot(n0.cross(n1));
         float cosine = n0.dot(n1);
-        angle = std::atan2(sine, cosine);
+        angle = atan2(sine, cosine);
     } else
         angle = 0.0f;
 }

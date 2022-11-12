@@ -7,6 +7,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "MathHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Transform.hpp"

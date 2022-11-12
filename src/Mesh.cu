@@ -60,11 +60,11 @@ Mesh::~Mesh() {
         delete face;
 
     if (gpu) {
-        deleteVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), thrust::raw_pointer_cast(verticesGpu.data()));
+        deleteVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
         CUDA_CHECK_LAST();
-        deleteEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), thrust::raw_pointer_cast(edgesGpu.data()));
+        deleteEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
         CUDA_CHECK_LAST();
-        deleteFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), thrust::raw_pointer_cast(facesGpu.data()));
+        deleteFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -83,7 +83,7 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
 
 Edge* Mesh::findEdge(int index0, int index1, std::map<std::pair<int, int>, int>& edgeMap) {
     if (index0 > index1)
-        std::swap(index0, index1);
+        mySwap(index0, index1);
     std::pair<int, int> pair = std::make_pair(index0, index1);
     std::map<std::pair<int, int>, int>::const_iterator iter = edgeMap.find(pair);
     if (iter != edgeMap.end())
@@ -137,22 +137,22 @@ void Mesh::initialize(const std::vector<Vertex>& vertexArray, const std::vector<
         thrust::device_vector<unsigned int> indicesGpu = indices;
         
         verticesGpu.resize(nVertices);
-        Vertex** verticesPointer = thrust::raw_pointer_cast(verticesGpu.data());
-        initializeVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, thrust::raw_pointer_cast(vertexArrayGpu.data()), verticesPointer);
+        Vertex** verticesPointer = pointer(verticesGpu);
+        initializeVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(vertexArrayGpu), verticesPointer);
         CUDA_CHECK_LAST();
 
         facesGpu.resize(nFaces);
-        Face** facesPointer = thrust::raw_pointer_cast(facesGpu.data());
-        thrust::device_vector<thrust::pair<int, int>> edgeIndices(nEdges);
-        thrust::pair<int, int>* edgeIndicesPointer = thrust::raw_pointer_cast(edgeIndices.data());
+        Face** facesPointer = pointer(facesGpu);
+        thrust::device_vector<PairIndex> edgeIndices(nEdges);
+        PairIndex* edgeIndicesPointer = pointer(edgeIndices);
         thrust::device_vector<EdgeData> edgeData(nEdges);
-        EdgeData* edgeDataPointer = thrust::raw_pointer_cast(edgeData.data());
-        initializeFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, thrust::raw_pointer_cast(indicesGpu.data()), verticesPointer, material, facesPointer, edgeIndicesPointer, edgeDataPointer);
+        EdgeData* edgeDataPointer = pointer(edgeData);
+        initializeFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(indicesGpu), verticesPointer, material, facesPointer, edgeIndicesPointer, edgeDataPointer);
         CUDA_CHECK_LAST();
         thrust::sort_by_key(edgeIndices.begin(), edgeIndices.end(), edgeData.begin());
 
         edgesGpu.resize(nEdges);
-        Edge** edgesPointer = thrust::raw_pointer_cast(edgesGpu.data());
+        Edge** edgesPointer = pointer(edgesGpu);
         initializeEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, verticesPointer, edgesPointer);
         CUDA_CHECK_LAST();
         setupEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, edgesPointer);
@@ -248,16 +248,16 @@ void Mesh::updateGeometries() {
         thrust::device_vector<int> indices(3 * facesGpu.size());
         thrust::device_vector<VertexData> vertexData(3 * facesGpu.size());
 
-        updateGeometriesFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), thrust::raw_pointer_cast(facesGpu.data()), thrust::raw_pointer_cast(indices.data()), thrust::raw_pointer_cast(vertexData.data()));
+        updateGeometriesFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(indices), pointer(vertexData));
         CUDA_CHECK_LAST();
-        updateGeometriesEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), thrust::raw_pointer_cast(edgesGpu.data()));
+        updateGeometriesEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
         CUDA_CHECK_LAST();
         
         thrust::sort_by_key(indices.begin(), indices.end(), vertexData.begin());
         thrust::device_vector<int> outputIndices(3 * facesGpu.size());
         thrust::device_vector<VertexData> outputVertexData(3 * facesGpu.size());
-        thrust::pair<thrust::device_vector<int>::iterator, thrust::device_vector<VertexData>::iterator> iter = thrust::reduce_by_key(indices.begin(), indices.end(), vertexData.begin(), outputIndices.begin(), outputVertexData.begin());
-        updateGeometriesVertices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), thrust::raw_pointer_cast(outputIndices.data()), thrust::raw_pointer_cast(outputVertexData.data()), thrust::raw_pointer_cast(verticesGpu.data()));
+        auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), vertexData.begin(), outputIndices.begin(), outputVertexData.begin());
+        updateGeometriesVertices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputVertexData), pointer(verticesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -267,7 +267,7 @@ void Mesh::updateIndices() {
         for (int i = 0; i < vertices.size(); i++)
             vertices[i]->index = i;
     else {
-        updateIndicesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), thrust::raw_pointer_cast(verticesGpu.data()));
+        updateIndicesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -309,7 +309,7 @@ void Mesh::updateRenderingData(bool rebind) {
         Vertex* vertexArray;
         size_t sizeVertexArray;
         CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&vertexArray), &sizeVertexArray, vboCuda));
-        updateRenderingDataVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), thrust::raw_pointer_cast(verticesGpu.data()), vertexArray);
+        updateRenderingDataVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu), vertexArray);
         CUDA_CHECK_LAST();
 
         CUDA_CHECK(cudaGraphicsUnmapResources(1, &vboCuda));
@@ -329,21 +329,21 @@ void Mesh::updateRenderingData(bool rebind) {
         Vertex* vertexArray;
         size_t sizeVertexArray;
         CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&vertexArray), &sizeVertexArray, vboCuda));
-        updateRenderingDataVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), thrust::raw_pointer_cast(verticesGpu.data()), vertexArray);
+        updateRenderingDataVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu), vertexArray);
         CUDA_CHECK_LAST();
 
         CUDA_CHECK(cudaGraphicsMapResources(1, &edgeEboCuda));
         unsigned int* edgeIndices;
         size_t sizeEdgeIndices;
         CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&edgeIndices), &sizeEdgeIndices, edgeEboCuda));
-        updateRenderingDataEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), thrust::raw_pointer_cast(edgesGpu.data()), edgeIndices);
+        updateRenderingDataEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu), edgeIndices);
         CUDA_CHECK_LAST();
 
         CUDA_CHECK(cudaGraphicsMapResources(1, &faceEboCuda));
         unsigned int* faceIndices;
         size_t sizeFaceIndices;
         CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&faceIndices), &sizeFaceIndices, faceEboCuda));
-        updateRenderingDataFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), thrust::raw_pointer_cast(facesGpu.data()), faceIndices);
+        updateRenderingDataFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), faceIndices);
         CUDA_CHECK_LAST();
 
         CUDA_CHECK(cudaGraphicsUnmapResources(1, &vboCuda));

@@ -25,9 +25,9 @@ BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::
                 if (centers[i](index) > center(index))
                     lt++;
                 else {
-                    std::swap(faces[lt], faces[rt]);
-                    std::swap(bounds[lt], bounds[rt]);
-                    std::swap(centers[lt], centers[rt]);
+                    mySwap(faces[lt], faces[rt]);
+                    mySwap(bounds[lt], bounds[rt]);
+                    mySwap(centers[lt], centers[rt]);
                     rt--;
                 }
 
@@ -70,9 +70,9 @@ float BVHNode::signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, co
         Vector3f e0 = (x1 - x0).normalized(), e1 = (y1 - y0).normalized();
         float p0min = x0.dot(e0), p0max = x1.dot(e0), p1min = y0.dot(e0), p1max = y1.dot(e0);
         if (p1max < p1min)
-            std::swap(p1max, p1min);
+            mySwap(p1max, p1min);
         
-        float a = std::max(p0min, p1min), b = std::min(p0max, p1max), c = 0.5f * (a + b);
+        float a = max(p0min, p1min), b = min(p0max, p1max), c = 0.5f * (a + b);
         if (a > b)
             return INFINITY;
         
@@ -98,7 +98,7 @@ float BVHNode::signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, co
 }
 
 float BVHNode::unsignedVertexEdgeDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float& wx, float& wy0, float& wy1) const {
-    float t = std::clamp((x - y0).dot(y1 - y0)/(y1 - y0).dot(y1 - y0), 0.0f, 1.0f);
+    float t = clamp((x - y0).dot(y1 - y0)/(y1 - y0).dot(y1 - y0), 0.0f, 1.0f);
     Vector3f y = y0 + t * (y1 - y0);
     float d = (x - y).norm();
     n = (x - y).normalized();
@@ -110,7 +110,7 @@ float BVHNode::unsignedVertexEdgeDistance(const Vector3f& x, const Vector3f& y0,
 
 float BVHNode::unsignedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w) const {
     Vector3f nt = (y1 - y0).cross(y2 - y0).normalized();
-    float d = std::abs((x - y0).dot(nt));
+    float d = abs((x - y0).dot(nt));
     float b0 = mixed(y1 - x, y2 - x, nt);
     float b1 = mixed(y2 - x, y0 - x, nt);
     float b2 = mixed(y0 - x, y1 - x, nt);
@@ -166,7 +166,7 @@ bool BVHNode::checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* 
     float a2 = mixed(x1, v2, v3) + mixed(v1, x2, v3) + mixed(v1, v2, x3);
     float a3 = mixed(v1, v2, v3);
 
-    if (std::abs(a0) < 1e-6f * x1.norm() * x2.norm() * x3.norm())
+    if (abs(a0) < 1e-6f * x1.norm() * x2.norm() * x3.norm())
         return false;
 
     float t[3];
@@ -193,7 +193,7 @@ bool BVHNode::checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* 
         }
         if (n.dot(w[1] * v1 + w[2] * v2 + w[3] * v3) > 0.0f)
             n = -n;
-        if (std::abs(d) < 1e-6f && inside)
+        if (abs(d) < 1e-6f && inside)
             return true;
     }
     return false;

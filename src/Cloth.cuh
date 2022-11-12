@@ -11,16 +11,22 @@
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <cuda_runtime.h>
+#include <thrust/device_vector.h>
+#include <thrust/sort.h>
+#include <thrust/reduce.h>
+#include <cusparse.h>
+#include <cusolverSp.h>
 
 #include "MathHelper.cuh"
 #include "CudaHelper.cuh"
+#include "ClothHelper.cuh"
 #include "PhysicsHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Transform.hpp"
 #include "Mesh.cuh"
 #include "Material.cuh"
-#include "Handle.hpp"
+#include "Handle.cuh"
 #include "Remeshing.hpp"
 #include "Wind.cuh"
 #include "Shader.hpp"
@@ -30,21 +36,20 @@
 #include "Disk.hpp"
 #include "Operator.hpp"
 
+extern bool gpu;
+
 class Cloth {
 private:
     Mesh* mesh;
     Material* material, * materialGpu;
     std::vector<Handle*> handles;
+    thrust::device_vector<Handle*> handlesGpu;
     Remeshing* remeshing;
     Shader* edgeShader, * faceShader;
     void addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::SparseMatrix<float>& A) const;
     void addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::SparseMatrix<float>& A) const;
     void addSubVector(const Vector9f& b, const Vector3i& indices, Eigen::VectorXf& a) const;
     void addSubVector(const Vector12f& b, const Vector4i& indices, Eigen::VectorXf& a) const;
-    float distance(const Vector3f& x, const Vector3f& a, const Vector3f& b) const;
-    Vector2f barycentricWeights(const Vector3f& x, const Vector3f& a, const Vector3f& b) const;
-    std::pair<Vector9f, Matrix9x9f> stretchingForce(const Face* face) const;
-    std::pair<Vector12f, Matrix12x12f> bendingForce(const Edge* edge) const;
     void init(Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;

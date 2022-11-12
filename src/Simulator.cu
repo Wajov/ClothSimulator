@@ -149,7 +149,7 @@ void Simulator::resetObstacles() {
 
 void Simulator::physicsStep() {
     for (Cloth* cloth : cloths)
-        cloth->physicsStep(dt, magic->handleStiffness, gravity, wind);
+        cloth->physicsStep(dt, magic->handleStiffness, gravity, !gpu ? wind : windGpu);
     updateGeometries();
 }
 
