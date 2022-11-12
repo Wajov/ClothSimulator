@@ -1,5 +1,5 @@
-#ifndef SIMULATOR_HPP
-#define SIMULATOR_HPP
+#ifndef SIMULATOR_CUH
+#define SIMULATOR_CUH
 
 #include <string>
 #include <vector>
@@ -9,12 +9,13 @@
 #include <chrono>
 
 #include <json/json.h>
+#include <cuda_runtime.h>
 
 #include "JsonHelper.hpp"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Magic.hpp"
-#include "Wind.hpp"
+#include "Wind.cuh"
 #include "Cloth.cuh"
 #include "Obstacle.hpp"
 #include "BVH.hpp"
@@ -29,7 +30,7 @@ private:
     int frameSteps, nSteps;
     float frameTime, dt;
     Vector3f gravity;
-    Wind* wind;
+    Wind* wind, * windGpu;
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
@@ -41,9 +42,9 @@ private:
     void physicsStep();
     void collisionStep();
     void remeshingStep();
+    void updateIndices();
     void updateGeometries();
     void updateVelocities();
-    void updateIndices();
     void updateRenderingData(bool rebind);
 
 public:

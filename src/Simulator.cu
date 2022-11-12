@@ -1,4 +1,4 @@
-#include "Simulator.hpp"
+#include "Simulator.cuh"
 
 Simulator::Simulator(const std::string& path) :
     MAX_ITERATION(30),
@@ -32,6 +32,11 @@ Simulator::Simulator(const std::string& path) :
     // cloths[0]->readDataFromFile("input.txt");
     remeshingStep();
     bind();
+
+    if (gpu) {
+        CUDA_CHECK(cudaMalloc(&windGpu, sizeof(Wind)));
+        CUDA_CHECK(cudaMemcpy(windGpu, wind, sizeof(Wind), cudaMemcpyHostToDevice));
+    }
 }
 
 Simulator::~Simulator() {
@@ -41,6 +46,9 @@ Simulator::~Simulator() {
         delete cloth;
     for (const Obstacle* obstacle : obstacles)
         delete obstacle;
+
+    if (gpu)
+        CUDA_CHECK(cudaFree(windGpu));
 }
 
 void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const {
@@ -146,72 +154,80 @@ void Simulator::physicsStep() {
 }
 
 void Simulator::collisionStep() {
-    std::vector<BVH*> clothBvhs, obstacleBvhs;
-    for (const Cloth* cloth : cloths)
-        clothBvhs.push_back(new BVH(cloth->getMesh(), true));
-    for (const Obstacle* obstacle: obstacles)
-        obstacleBvhs.push_back(new BVH(obstacle->getMesh(), true));
-    
-    std::vector<ImpactZone*> zones;
-    float obstacleMass = 1e3f;
-    for (int deform = 0; deform < 2; deform++) {
-        zones.clear();
-        bool success = false;
-        for (int i = 0; i < MAX_ITERATION; i++) {
-            if (!zones.empty())
-                updateActive(clothBvhs, obstacleBvhs, zones);
-            
-            std::vector<Impact> impacts;
-            findImpacts(clothBvhs, obstacleBvhs, impacts);
-            impacts = std::move(independentImpacts(impacts));
-            if (impacts.empty()) {
-                success = true;
-                break;
-            }
-
-            addImpacts(impacts, zones, deform == 1);
-            for (const ImpactZone* zone : zones)
-                if (zone->getActive()) {
-                    Optimization* optimization = new ImpactZoneOptimization(zone, magic->collisionThickness, obstacleMass);
-                    augmentedLagrangianMethod(optimization);
-                    delete optimization;
+    if (!gpu) {
+        std::vector<BVH*> clothBvhs, obstacleBvhs;
+        for (const Cloth* cloth : cloths)
+            clothBvhs.push_back(new BVH(cloth->getMesh(), true));
+        for (const Obstacle* obstacle: obstacles)
+            obstacleBvhs.push_back(new BVH(obstacle->getMesh(), true));
+        
+        std::vector<ImpactZone*> zones;
+        float obstacleMass = 1e3f;
+        for (int deform = 0; deform < 2; deform++) {
+            zones.clear();
+            bool success = false;
+            for (int i = 0; i < MAX_ITERATION; i++) {
+                if (!zones.empty())
+                    updateActive(clothBvhs, obstacleBvhs, zones);
+                
+                std::vector<Impact> impacts;
+                findImpacts(clothBvhs, obstacleBvhs, impacts);
+                impacts = std::move(independentImpacts(impacts));
+                if (impacts.empty()) {
+                    success = true;
+                    break;
                 }
 
-            for (BVH* clothBvh : clothBvhs)
-                clothBvh->update();
-            for (BVH* obstacleBvh : obstacleBvhs)
-                obstacleBvh->update();
-            if (deform == 1)
-                obstacleMass *= 0.5f;
+                addImpacts(impacts, zones, deform == 1);
+                for (const ImpactZone* zone : zones)
+                    if (zone->getActive()) {
+                        Optimization* optimization = new ImpactZoneOptimization(zone, magic->collisionThickness, obstacleMass);
+                        augmentedLagrangianMethod(optimization);
+                        delete optimization;
+                    }
+
+                for (BVH* clothBvh : clothBvhs)
+                    clothBvh->update();
+                for (BVH* obstacleBvh : obstacleBvhs)
+                    obstacleBvh->update();
+                if (deform == 1)
+                    obstacleMass *= 0.5f;
+            }
+            if (success)
+                break;
         }
-        if (success)
-            break;
+
+        updateGeometries();
+        updateVelocities();
+
+        for (const BVH* clothBvh : clothBvhs)
+            delete clothBvh;
+        for (const BVH* obstacleBvh : obstacleBvhs)
+            delete obstacleBvh;
+        for (const ImpactZone* zone : zones)
+            delete zone;
+    } else {
+        // TODO
     }
-
-    updateGeometries();
-    updateVelocities();
-
-    for (const BVH* clothBvh : clothBvhs)
-        delete clothBvh;
-    for (const BVH* obstacleBvh : obstacleBvhs)
-        delete obstacleBvh;
-    for (const ImpactZone* zone : zones)
-        delete zone;
 }
 
 void Simulator::remeshingStep() {
-    std::vector<BVH*> obstacleBvhs;
-    for (const Obstacle* obstacle: obstacles)
-        obstacleBvhs.push_back(new BVH(obstacle->getMesh(), false));
+    if (!gpu) {
+        std::vector<BVH*> obstacleBvhs;
+        for (const Obstacle* obstacle: obstacles)
+            obstacleBvhs.push_back(new BVH(obstacle->getMesh(), false));
 
-    for (Cloth* cloth : cloths)
-        cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness);
+        for (Cloth* cloth : cloths)
+            cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness);
 
-    updateGeometries();
-    updateIndices();
+        updateIndices();
+        updateGeometries();
 
-    for (const BVH* obstacleBvh : obstacleBvhs)
-        delete obstacleBvh;
+        for (const BVH* obstacleBvh : obstacleBvhs)
+            delete obstacleBvh;
+    } else {
+        // TODO
+    }
 }
 
 void Simulator::updateGeometries() {
@@ -255,32 +271,27 @@ void Simulator::step() {
 
     resetObstacles();
     
-    if (!gpu) {
-        std::chrono::duration<float> d;
-        auto t0 = std::chrono::high_resolution_clock::now();
-        
-        physicsStep();
-        auto t1 = std::chrono::high_resolution_clock::now();
-        d = t1 - t0;
-        std::cout << "Physics Step: " << d.count() << "s";
-        
-        collisionStep();
-        auto t2 = std::chrono::high_resolution_clock::now();
-        d = t2 - t1;
-        std::cout << ", Collision Step: " << d.count() << "s";
-        
-        if (nSteps % frameSteps == 0) {
-            remeshingStep();
-            auto t3 = std::chrono::high_resolution_clock::now();
-            d = t3 - t2;
-            std::cout << ", Remeshing Step: " << d.count() << "s";
-            updateRenderingData(true);
-        } else
-            updateRenderingData(false);
+    std::chrono::duration<float> d;
+    auto t0 = std::chrono::high_resolution_clock::now();
+    
+    physicsStep();
+    auto t1 = std::chrono::high_resolution_clock::now();
+    d = t1 - t0;
+    std::cout << "Physics Step: " << d.count() << "s";
+    
+    collisionStep();
+    auto t2 = std::chrono::high_resolution_clock::now();
+    d = t2 - t1;
+    std::cout << ", Collision Step: " << d.count() << "s";
+    
+    if (nSteps % frameSteps == 0) {
+        remeshingStep();
+        auto t3 = std::chrono::high_resolution_clock::now();
+        d = t3 - t2;
+        std::cout << ", Remeshing Step: " << d.count() << "s";
+        updateRenderingData(true);
+    } else
+        updateRenderingData(false);
 
-        std::cout << std::endl;
-    } else {
-        // for (Cloth* cloth : cloths)
-            // cloth->getMesh()->initializeGpu();
-    }
+    std::cout << std::endl;
 }

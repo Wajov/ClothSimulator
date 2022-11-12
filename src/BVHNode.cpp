@@ -1,6 +1,6 @@
 #include "BVHNode.hpp"
 
-BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::vector<BVHNode*>& leaves) : 
+BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Face*, BVHNode*>& leaves) : 
     parent(parent) {
     face = nullptr;
     active = true;
@@ -9,7 +9,7 @@ BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::
         this->bounds = bounds[l];
         left = nullptr;
         right = nullptr;
-        leaves[face->getIndex()] = this;
+        leaves[face] = this;
     } else {
         for (int i = l; i <= r; i++)
             this->bounds += bounds[i];

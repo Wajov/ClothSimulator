@@ -16,7 +16,6 @@ class Edge;
 
 class Face {
 private:
-    int index;
     Vertex* vertices[3];
     Edge* edges[3];
     Vector3f normal;
@@ -27,8 +26,6 @@ public:
     __host__ __device__ Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Material* material);
     __host__ __device__ ~Face();
     __host__ __device__ void initialize(const Material* material);
-    __host__ __device__ int getIndex() const;
-    __host__ __device__ void setIndex(int index);
     __host__ __device__ Vertex* getVertex(int index) const;
     __host__ __device__ void replaceVertex(const Vertex* v, const Vertex* vertex);
     __host__ __device__ Edge* getEdge(int index) const;

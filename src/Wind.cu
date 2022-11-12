@@ -1,4 +1,4 @@
-#include "Wind.hpp"
+#include "Wind.cuh"
 
 Wind::Wind() : 
     density(1.0f),

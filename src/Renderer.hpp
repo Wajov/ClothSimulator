@@ -10,7 +10,7 @@
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Transform.hpp"
-#include "Simulator.hpp"
+#include "Simulator.cuh"
 
 class Renderer {
 private:

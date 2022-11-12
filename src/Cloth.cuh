@@ -14,6 +14,7 @@
 
 #include "MathHelper.cuh"
 #include "CudaHelper.cuh"
+#include "PhysicsHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Transform.hpp"
@@ -21,15 +22,13 @@
 #include "Material.cuh"
 #include "Handle.hpp"
 #include "Remeshing.hpp"
-#include "Wind.hpp"
+#include "Wind.cuh"
 #include "Shader.hpp"
 #include "BVH.hpp"
 #include "NearPoint.hpp"
 #include "Plane.hpp"
 #include "Disk.hpp"
 #include "Operator.hpp"
-
-extern bool gpu;
 
 class Cloth {
 private:
@@ -74,9 +73,9 @@ public:
     void readDataFromFile(const std::string& path);
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
+    void updateIndices();
     void updateGeometries();
     void updateVelocities(float dt);
-    void updateIndices();
     void updateRenderingData(bool rebind);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;

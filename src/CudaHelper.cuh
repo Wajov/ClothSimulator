@@ -8,6 +8,11 @@
 #define CUDA_CHECK(val) cudaCheck((val), #val, __FILE__, __LINE__)
 #define CUDA_CHECK_LAST() cudaCheckLast(__FILE__, __LINE__)
 
+static const int GRID_SIZE = 32;
+static const int BLOCK_SIZE = 256;
+
+static bool gpu = true;
+
 template <typename T> static void cudaCheck(T err, const char* const func, const char* const file, const int line) {
     if (err != cudaSuccess) {
         std::cerr << "CUDA Runtime Error at: " << file << ":" << line << std::endl;

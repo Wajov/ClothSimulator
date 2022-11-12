@@ -11,7 +11,6 @@ class Face;
 
 class Edge {
 private:
-    int index;
     Vertex* vertices[2], * opposites[2];
     Face* adjacents[2];
     float length, angle;
@@ -19,8 +18,6 @@ private:
 public:
     __host__ __device__ Edge(const Vertex* vertex0, const Vertex* vertex1);
     __host__ __device__ ~Edge();
-    __host__ __device__ int getIndex() const;
-    __host__ __device__ void setIndex(int index);
     __host__ __device__ Vertex* getVertex(int index) const;
     __host__ __device__ void replaceVertex(const Vertex* v, const Vertex* vertex);
     __host__ __device__ Vertex* getOpposite(int index) const;

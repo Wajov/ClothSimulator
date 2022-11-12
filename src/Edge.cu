@@ -1,20 +1,11 @@
 #include "Edge.cuh"
 
 Edge::Edge(const Vertex* vertex0, const Vertex* vertex1) :
-    index(0),
     vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1)},
     opposites{nullptr, nullptr},
     adjacents{nullptr, nullptr} {}
 
 Edge::~Edge() {}
-
-int Edge::getIndex() const {
-    return index;
-}
-
-void Edge::setIndex(int index) {
-    this->index = index;
-}
 
 Vertex* Edge::getVertex(int index) const {
     return vertices[index];

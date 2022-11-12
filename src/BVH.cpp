@@ -18,14 +18,12 @@ BVH::BVH(const Mesh* mesh, bool ccd) :
         } else
             centers[i] = bounds[i].center();
     }
-    leaves.resize(faces.size());
     root = new BVHNode(nullptr, 0, n - 1, faces, bounds, centers, leaves);
 
     vertices = const_cast<Mesh*>(mesh)->getVertices();
-    adjacents.resize(vertices.size());
     for (Face* face : faces)
         for (int i = 0; i < 3; i++)
-            adjacents[face->getVertex(i)->index].push_back(face);
+            adjacents[face->getVertex(i)].push_back(face);
 }
 
 BVH::~BVH() {
@@ -33,7 +31,7 @@ BVH::~BVH() {
 }
 
 bool BVH::contain(const Vertex* vertex) const {
-    return vertex->index < vertices.size() && vertices[vertex->index] == vertex;
+    return vertices[vertex->index] == vertex;
 }
 
 void BVH::setAllActive(bool active) {
@@ -41,9 +39,9 @@ void BVH::setAllActive(bool active) {
 }
 
 void BVH::setActive(const Vertex* vertex, bool active) {
-    std::vector<Face*>& adjacents = this->adjacents[vertex->index];
+    std::vector<Face*>& adjacents = this->adjacents[const_cast<Vertex*>(vertex)];
     for (Face* face : adjacents)
-        leaves[face->getIndex()]->setActiveUp(active);
+        leaves[face]->setActiveUp(active);
 }
 
 void BVH::findImpacts(float thickness, std::vector<Impact>& impacts) const {
