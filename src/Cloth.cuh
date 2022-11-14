@@ -46,6 +46,8 @@ private:
     thrust::device_vector<Handle*> handlesGpu;
     Remeshing* remeshing;
     Shader* edgeShader, * faceShader;
+    cusparseHandle_t cusparseHandle;
+    cusolverSpHandle_t cusolverHandle;
     void addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::SparseMatrix<float>& A) const;
     void addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::SparseMatrix<float>& A) const;
     void addSubVector(const Vector9f& b, const Vector3i& indices, Eigen::VectorXf& a) const;

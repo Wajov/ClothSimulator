@@ -28,6 +28,9 @@ Cloth::Cloth(const Json::Value& json) {
         handlesGpu.resize(handleIndicesGpu.size());
         initializeHandles<<<GRID_SIZE, BLOCK_SIZE>>>(handleIndicesGpu.size(), pointer(handleIndicesGpu), pointer(vertices), pointer(handlesGpu));
         CUDA_CHECK_LAST();
+
+        CUSPARSE_CHECK(cusparseCreate(&cusparseHandle));
+        CUSOLVER_CHECK(cusolverSpCreate(&cusolverHandle));
     }
 
     remeshing = new Remeshing(json["remeshing"]);
@@ -49,6 +52,9 @@ Cloth::~Cloth() {
         CUDA_CHECK(cudaFree(materialGpu));
         deleteHandles<<<GRID_SIZE, BLOCK_SIZE>>>(handlesGpu.size(), pointer(handlesGpu));
         CUDA_CHECK_LAST();
+
+        CUSPARSE_CHECK(cusparseDestroy(cusparseHandle));
+        CUSOLVER_CHECK(cusolverSpDestroy(cusolverHandle));
     }
 }
 
@@ -553,42 +559,19 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
         setupVector<<<GRID_SIZE, BLOCK_SIZE>>>(outputBSize, pointer(outputBIndices), pointer(outputBValues), pointer(b));
         CUDA_CHECK_LAST();
 
-        cusparseHandle_t cusparseHandle;
-        cusparseStatus_t cusparseStatus;
-        cusparseStatus = cusparseCreate(&cusparseHandle);
-        if (cusparseStatus != 0)
-            std::cerr << "status create cusparse handle: " << cusparseStatus << std::endl;
-
-        cusolverSpHandle_t cusolverHandle;
-        cusolverStatus_t cusolverStatus;
-        cusolverStatus = cusolverSpCreate(&cusolverHandle);
-        if (cusolverStatus != 0)
-            std::cerr << "status create cusolver handle: " << cusolverStatus << std::endl;
-
         thrust::device_vector<int> rowPointer(n + 1);
-        cusparseStatus = cusparseXcoo2csr(cusparseHandle, pointer(rowIndices), nNonZero, n, pointer(rowPointer), CUSPARSE_INDEX_BASE_ZERO);
-        if (cusparseStatus != 0)
-            std::cerr << "coo2csr error" << std::endl;
+        CUSPARSE_CHECK(cusparseXcoo2csr(cusparseHandle, pointer(rowIndices), nNonZero, n, pointer(rowPointer), CUSPARSE_INDEX_BASE_ZERO));
 
         cusparseMatDescr_t descr;
-        cusparseCreateMatDescr(&descr);
+        CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
         thrust::device_vector<float> dv(n);
         int singularity;
-        cusolverStatus = cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, pointer(values), pointer(rowPointer), pointer(colIndies), pointer(b), 1e-5f, 0, pointer(dv), &singularity);
-        if (cusolverStatus != 0)
-            std::cerr << "solve error" << std::endl;
+        CUSOLVER_CHECK(cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, pointer(values), pointer(rowPointer), pointer(colIndies), pointer(b), 1e-5f, 0, pointer(dv), &singularity));
         if (singularity != -1)
             std::cerr << "Not SPD! " << std::endl;
 
         updateVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, dt, pointer(dv), verticesPointer);
-
-        cusparseStatus = cusparseDestroy(cusparseHandle);
-        if (cusparseStatus != 0)
-            std::cerr << "cusparse destroy error" << std::endl;
-
-        cusolverStatus = cusolverSpDestroy(cusolverHandle);
-        if (cusolverStatus != 0)
-            std::cerr << "cusolve destroy error" << std::endl;
+        CUDA_CHECK_LAST();
     }
 }
 

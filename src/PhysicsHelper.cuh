@@ -103,9 +103,9 @@ __global__ static void addStretchingForces(int nFaces, const Face* const* faces,
         Vector9f f;
         Matrix9x9f J;
         stretchingForce(face, material, f, J);
-
-        J = -dt * dt * J;
+        
         f = dt * (f + dt * J * v);
+        J = -dt * dt * J;
         Vector3i indices(vertex0->index, vertex1->index, vertex2->index);
         
         for (int j = 0; j < 3; j++) {
@@ -189,8 +189,8 @@ __global__ static void addBendingForces(int nEdges, const Edge* const* edges, fl
             
             bendingForce(edge, material, f, J);
 
-            J = -dt * dt * J;
             f = dt * (f + dt * J * v);
+            J = -dt * dt * J;
         }
 
         Vector4i indices(vertex0->index, vertex1->index, vertex2 != nullptr ? vertex2->index : 0, vertex3 != nullptr ? vertex3->index : 0);
