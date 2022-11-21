@@ -31,7 +31,7 @@ BVH::~BVH() {
 }
 
 bool BVH::contain(const Vertex* vertex) const {
-    return vertices[vertex->index] == vertex;
+    return vertex->index < vertices.size() && vertices[vertex->index] == vertex;
 }
 
 void BVH::setAllActive(bool active) {
@@ -44,12 +44,12 @@ void BVH::setActive(const Vertex* vertex, bool active) {
         leaves[face]->setActiveUp(active);
 }
 
-void BVH::findImpacts(float thickness, std::vector<Impact>& impacts) const {
-    root->findImpacts(thickness, impacts);
+void BVH::traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback) {
+    root->traverse(thickness, callback);
 }
 
-void BVH::findImpacts(const BVH* bvh, float thickness, std::vector<Impact>& impacts) const {
-    root->findImpacts(bvh->root, thickness, impacts);
+void BVH::traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
+    root->traverse(bvh->root, thickness, callback);
 }
 
 void BVH::findNearestPoint(const Vector3f& x, NearPoint& point) const {

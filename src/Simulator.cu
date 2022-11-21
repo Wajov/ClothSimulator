@@ -72,14 +72,14 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
     }
 }
 
-void Simulator::findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, std::vector<Impact>& impacts) const {
+void Simulator::traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
     for (int i = 0; i < clothBvhs.size(); i++) {
-        clothBvhs[i]->findImpacts(magic->collisionThickness, impacts);
+        clothBvhs[i]->traverse(thickness, callback);
         for (int j = 0; j < i; j++)
-            clothBvhs[i]->findImpacts(clothBvhs[j], magic->collisionThickness, impacts);
+            clothBvhs[i]->traverse(clothBvhs[j], thickness, callback);
         
         for (int j = 0; j < obstacleBvhs.size(); j++)
-            clothBvhs[i]->findImpacts(obstacleBvhs[j], magic->collisionThickness, impacts);
+            clothBvhs[i]->traverse(obstacleBvhs[j], thickness, callback);
     }
 }
 
@@ -171,7 +171,9 @@ void Simulator::collisionStep() {
                     updateActive(clothBvhs, obstacleBvhs, zones);
                 
                 std::vector<Impact> impacts;
-                findImpacts(clothBvhs, obstacleBvhs, impacts);
+                traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
+                    checkImpacts(face0, face1, thickness, impacts);
+                });
                 impacts = std::move(independentImpacts(impacts));
                 if (impacts.empty()) {
                     success = true;
