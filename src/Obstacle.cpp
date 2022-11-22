@@ -3,7 +3,7 @@
 Obstacle::Obstacle(const Json::Value& json) {
     Transform* transform = new Transform(json["transform"]);
     mesh = new Mesh(json["mesh"], transform, nullptr);
-    shader = new Shader("shader/VertexShader.glsl", "shader/FaceFragmentShader.glsl");
+    shader = new Shader("shader/Vertex.glsl", "shader/FaceFragment.glsl");
     delete transform;
 }
 

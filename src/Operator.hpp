@@ -1,6 +1,7 @@
 #ifndef OPERATOR_HPP
 #define OPERATOR_HPP
 
+#include <algorithm>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
@@ -24,7 +25,7 @@ public:
     ~Operator();
     bool empty() const;
     void flip(const Edge* edge, const Material* material);
-    void split(const Edge* edge, const Material* material);
+    void split(const Edge* edge, const Material* material, int index);
     void collapse(const Edge* edge, bool reverse, const Material* material, std::unordered_map<Vertex*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces);
     void update(std::vector<Edge*>& edges) const;
     void setNull(std::vector<Edge*>& edges) const;

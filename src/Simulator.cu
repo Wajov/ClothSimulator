@@ -2,7 +2,8 @@
 
 Simulator::Simulator(const std::string& path) :
     MAX_ITERATION(30),
-    nSteps(0) {
+    nSteps(0),
+    selectedCloth(-1) {
     std::ifstream fin(path);
     if (!fin.is_open()) {
         std::cerr << "Failed to open configuration file: " << path << std::endl;
@@ -33,6 +34,14 @@ Simulator::Simulator(const std::string& path) :
     remeshingStep();
     bind();
 
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glGenTextures(1, &indexTexture);
+    glGenRenderbuffers(1, &rbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    indexShader = new Shader("shader/Vertex.glsl", "shader/IndexFragment.glsl");
+
     if (gpu) {
         CUDA_CHECK(cudaMalloc(&windGpu, sizeof(Wind)));
         CUDA_CHECK(cudaMemcpy(windGpu, wind, sizeof(Wind), cudaMemcpyHostToDevice));
@@ -46,6 +55,7 @@ Simulator::~Simulator() {
         delete cloth;
     for (const Obstacle* obstacle : obstacles)
         delete obstacle;
+    delete indexShader;
 
     if (gpu)
         CUDA_CHECK(cudaFree(windGpu));
@@ -259,17 +269,41 @@ void Simulator::bind() {
         obstacle->bind();
 }
 
-void Simulator::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
-    for (const Cloth* cloth : cloths)
-        cloth->render(model, view, projection, cameraPosition, lightDirection);
+void Simulator::render(int width, int height, const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+    glBindTexture(GL_TEXTURE_2D, indexTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32I, width, height, 0, GL_RG_INTEGER, GL_INT, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, indexTexture, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, width, height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
+    int color[2] = {-1, -1};
+    glClearBufferiv(GL_COLOR, 0, color);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    indexShader->use();
+    indexShader->setMat4("model", model);
+    indexShader->setMat4("view", view);
+    indexShader->setMat4("projection", projection);
+    for (int i = 0; i < cloths.size(); i++) {
+        indexShader->setInt("clothIndex", i);
+        cloths[i]->getMesh()->renderFaces();
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    for (const Obstacle* obstacle : obstacles)
-        obstacle->render(model, view, projection, cameraPosition, lightDirection);
+    for (int i = 0; i < cloths.size(); i++)
+        cloths[i]->render(model, view, projection, cameraPosition, lightDirection, selectedCloth == i ? selectedFace : -1);
+    
+    // for (const Obstacle* obstacle : obstacles)
+    //     obstacle->render(model, view, projection, cameraPosition, lightDirection);
 }
 
 void Simulator::step() {
     nSteps++;
     std::cout << "Step [" << nSteps << "]:" << std::endl;
+
+    selectedCloth = -1;
 
     resetObstacles();
     
@@ -296,4 +330,19 @@ void Simulator::step() {
         updateRenderingData(false);
 
     std::cout << std::endl;
+}
+
+void Simulator::printDebugInfo(int x, int y) {
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+    Pixel pixel;
+    glReadPixels(x, y, 1, 1, GL_RG_INTEGER, GL_INT, &pixel);
+    selectedCloth = pixel.clothIndex;
+    selectedFace = pixel.faceInedx;
+    if (selectedCloth != -1 && selectedFace != -1)
+        cloths[selectedCloth]->printDebugInfo(selectedFace);
+
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

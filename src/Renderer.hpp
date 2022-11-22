@@ -16,7 +16,7 @@
 class Renderer {
 private:
     bool press, pause;
-    int width, height;
+    int width, height, pressX, pressY;
     double lastX, lastY, scaling;
     Matrix4x4f rotation;
     GLFWwindow* window;

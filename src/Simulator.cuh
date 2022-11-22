@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <chrono>
 
+#include <glad/glad.h>
 #include <json/json.h>
 #include <cuda_runtime.h>
 
@@ -27,16 +28,22 @@
 
 extern bool gpu;
 
+struct Pixel {
+    int clothIndex, faceInedx;
+};
+
 class Simulator {
 private:
     const int MAX_ITERATION;
     Magic* magic;
-    int frameSteps, nSteps;
+    int frameSteps, nSteps, selectedCloth, selectedFace;
     float frameTime, dt;
     Vector3f gravity;
     Wind* wind, * windGpu;
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
+    unsigned int fbo, indexTexture, rbo;
+    Shader* indexShader;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
     void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback);
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;
@@ -55,8 +62,9 @@ public:
     Simulator(const std::string& path);
     ~Simulator();
     void bind();
-    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;
+    void render(int width, int height, const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;
     void step();
+    void printDebugInfo(int x, int y);
 };
 
 #endif

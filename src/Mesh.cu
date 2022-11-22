@@ -221,6 +221,16 @@ void Mesh::reset() {
         vertex->x = vertex->x0;
 }
 
+void Mesh::updateIndices() {
+    if (!gpu)
+        for (int i = 0; i < vertices.size(); i++)
+            vertices[i]->index = i;
+    else {
+        updateIndicesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
+        CUDA_CHECK_LAST();
+    }
+}
+
 void Mesh::updateGeometries() {
     if (!gpu) {
         for (Face* face : faces)
@@ -258,16 +268,6 @@ void Mesh::updateGeometries() {
         thrust::device_vector<VertexData> outputVertexData(3 * facesGpu.size());
         auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), vertexData.begin(), outputIndices.begin(), outputVertexData.begin());
         updateGeometriesVertices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputVertexData), pointer(verticesGpu));
-        CUDA_CHECK_LAST();
-    }
-}
-
-void Mesh::updateIndices() {
-    if (!gpu)
-        for (int i = 0; i < vertices.size(); i++)
-            vertices[i]->index = i;
-    else {
-        updateIndicesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -393,4 +393,9 @@ void Mesh::renderFaces() const {
     glBindVertexArray(faceVao);
     glDrawElements(GL_TRIANGLES, 3 * (!gpu ? faces.size() : facesGpu.size()), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+}
+
+void Mesh::printDebugInfo(int selectedFace) const {
+    Face* face = faces[selectedFace];
+    std::cout << "V=[" << face->getVertex(0)->index << ", " << face->getVertex(1)->index << ", " << face->getVertex(2)->index << "]" << std::endl;
 }

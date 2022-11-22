@@ -60,6 +60,7 @@ public:
     void bind(const Material* material);
     void renderEdges() const;
     void renderFaces() const;
+    void printDebugInfo(int selectedFace) const;
 };
 
 #endif

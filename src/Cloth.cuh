@@ -85,7 +85,8 @@ public:
     void updateVelocities(float dt);
     void updateRenderingData(bool rebind);
     void bind();
-    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;
+    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const;
+    void printDebugInfo(int selectedFace) const;
 };
 
 #endif

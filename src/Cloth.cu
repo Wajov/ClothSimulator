@@ -35,8 +35,8 @@ Cloth::Cloth(const Json::Value& json) {
 
     remeshing = new Remeshing(json["remeshing"]);
 
-    edgeShader = new Shader("shader/VertexShader.glsl", "shader/EdgeFragmentShader.glsl");
-    faceShader = new Shader("shader/VertexShader.glsl", "shader/FaceFragmentShader.glsl");
+    edgeShader = new Shader("shader/Vertex.glsl", "shader/EdgeFragment.glsl");
+    faceShader = new Shader("shader/Vertex.glsl", "shader/FaceFragment.glsl");
     delete transform;
 }
 
@@ -374,7 +374,7 @@ bool Cloth::splitSomeEdges() const {
     for (const Edge* edge : edgesToSplit)
         if (edge != nullptr) {
             Operator op;
-            op.split(edge, material);
+            op.split(edge, material, mesh->getVertices().size());
             mesh->apply(op);
             flipEdges(op.activeEdges, &edgesToSplit, nullptr, nullptr);
         }
@@ -409,7 +409,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Vertex*, std::vector<Edge*>>& adja
         Vertex* v0 = face->getVertex(0);
         Vertex* v1 = face->getVertex(1);
         Vertex* v2 = face->getVertex(2);
-        if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1 )
+        if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
             continue;
         
         if (v0 == vertex0)
@@ -611,7 +611,7 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
     std::vector<Edge*> edges = mesh->getEdges();
     flipEdges(edges, nullptr, nullptr, nullptr);
     splitEdges();
-    collapseEdges();
+    // collapseEdges();
 }
 
 void Cloth::updateIndices() {
@@ -634,7 +634,7 @@ void Cloth::bind() {
     mesh->bind(materialGpu);
 }
 
-void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
+void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const {
     edgeShader->use();
     edgeShader->setMat4("model", model);
     edgeShader->setMat4("view", view);
@@ -648,5 +648,10 @@ void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix
     faceShader->setVec3("color", Vector3f(0.6f, 0.7f, 1.0f));
     faceShader->setVec3("cameraPosition", cameraPosition);
     faceShader->setVec3("lightDirection", lightDirection);
+    faceShader->setInt("selectedFace", selectedFace);
     mesh->renderFaces();
+}
+
+void Cloth::printDebugInfo(int selectedFace) const {
+    mesh->printDebugInfo(selectedFace);
 }
