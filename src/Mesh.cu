@@ -51,6 +51,27 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
     initialize(vertexArray, indices, material);
 }
 
+Mesh::Mesh(const Mesh* mesh) {
+    vertices.resize(mesh->vertices.size());
+    for (int i = 0; i < mesh->vertices.size(); i++) {
+        Vertex* vertex = mesh->vertices[i];
+        vertices[i] = new Vertex(vertex->x, vertex->isFree);
+        vertices[i]->u = vertex->u;
+    }
+    
+    edges.resize(mesh->edges.size());
+    for (int i = 0; i < mesh->edges.size(); i++) {
+        Edge* edge = mesh->edges[i];
+        edges[i] = new Edge(vertices[edge->getVertex(0)->index], vertices[edge->getVertex(1)->index]);
+    }
+    
+    faces.resize(mesh->faces.size());
+    for (int i = 0; i < mesh->faces.size(); i++) {
+        Face* face = mesh->faces[i];
+        faces[i] = new Face(vertices[face->getVertex(0)->index], vertices[face->getVertex(1)->index], vertices[face->getVertex(2)->index], nullptr);
+    }
+}
+
 Mesh::~Mesh() {
     for (const Vertex* vertex : vertices)
         delete vertex;
@@ -98,6 +119,7 @@ Edge* Mesh::findEdge(int index0, int index1, std::map<std::pair<int, int>, int>&
 void Mesh::initialize(const std::vector<Vertex>& vertexArray, const std::vector<unsigned int>& indices, const Material* material) {
     if (!gpu) {
         vertices.resize(vertexArray.size());
+        faces.resize(indices.size() / 3);
         for (int i = 0; i < vertexArray.size(); i++) {
             vertices[i] = new Vertex(vertexArray[i].x, vertexArray[i].isFree);
             *vertices[i] = vertexArray[i];
@@ -122,7 +144,7 @@ void Mesh::initialize(const std::vector<Vertex>& vertexArray, const std::vector<
             edge2->setOppositeAndAdjacent(vertex1, face);
             face->setEdges(edge0, edge1, edge2);
 
-            faces.push_back(face);
+            faces[i / 3] = face;
         }
 
         for (const Edge* edge : edges)
@@ -188,11 +210,22 @@ thrust::device_vector<Face*>& Mesh::getFacesGpu() {
     return facesGpu;
 }
 
-void Mesh::readDataFromFile(const std::string& path) {
-    std::ifstream fin("input.txt");
+bool Mesh::contain(const Face* face) const {
+    int index = face->getIndex();
+    return index < faces.size() && faces[index] == face;
+}
+
+void Mesh::reset() {
     for (Vertex* vertex : vertices)
-        fin >> vertex->x0(0) >> vertex->x0(1) >> vertex->x0(2) >> vertex->x(0) >> vertex->x(1) >> vertex->x(2) >> vertex->v(0) >> vertex->v(1) >> vertex->v(2);
-    fin.close();
+        vertex->x = vertex->x0;
+}
+
+Vector3f Mesh::oldPosition(const Vector2f& u) const {
+    for (const Face* face : faces) {
+        Vector3f b = face->barycentricCoordinates(u);
+        if (b(0) >= -1e-6f && b(1) >= -1e-6f && b(2) >= -1e-5f)
+            return face->position(b);
+    }
 }
 
 void Mesh::apply(const Operator& op) {
@@ -216,9 +249,18 @@ void Mesh::apply(const Operator& op) {
         delete face;
 }
 
-void Mesh::reset() {
-    for (Vertex* vertex : vertices)
-        vertex->x = vertex->x0;
+void Mesh::updateIndices() {
+    if (!gpu) {
+        for (int i = 0; i < vertices.size(); i++)
+            vertices[i]->index = i;
+        for (int i = 0; i < faces.size(); i++)
+            faces[i]->setIndex(i);
+    } else {
+        updateIndicesVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
+        CUDA_CHECK_LAST();
+        updateIndicesFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
+        CUDA_CHECK_LAST();
+    }
 }
 
 void Mesh::updateGeometries() {
@@ -229,16 +271,18 @@ void Mesh::updateGeometries() {
             edge->update();
         for (Vertex* vertex : vertices) {
             vertex->x1 = vertex->x;
-            vertex->m = 0.0f;
+            vertex->m = vertex->a = 0.0f;
             vertex->n = Vector3f();
         }
         for (const Face* face : faces) {
             float m = face->getMass() / 3.0f;
+            float a = face->getArea();
             for (int i = 0; i < 3; i++) {
                 Vertex* vertex = face->getVertex(i);
                 Vector3f e0 = face->getVertex((i + 1) % 3)->x - vertex->x;
                 Vector3f e1 = face->getVertex((i + 2) % 3)->x - vertex->x;
-                face->getVertex(i)->m += m;
+                vertex->m += m;
+                vertex->a += a;
                 vertex->n += e0.cross(e1) / (e0.norm2() * e1.norm2());
             }
         }
@@ -258,16 +302,6 @@ void Mesh::updateGeometries() {
         thrust::device_vector<VertexData> outputVertexData(3 * facesGpu.size());
         auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), vertexData.begin(), outputIndices.begin(), outputVertexData.begin());
         updateGeometriesVertices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputVertexData), pointer(verticesGpu));
-        CUDA_CHECK_LAST();
-    }
-}
-
-void Mesh::updateIndices() {
-    if (!gpu)
-        for (int i = 0; i < vertices.size(); i++)
-            vertices[i]->index = i;
-    else {
-        updateIndicesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -352,7 +386,7 @@ void Mesh::updateRenderingData(bool rebind) {
     }
 }
 
-void Mesh::bind(const Material* material) {
+void Mesh::bind() {
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
@@ -393,4 +427,37 @@ void Mesh::renderFaces() const {
     glBindVertexArray(faceVao);
     glDrawElements(GL_TRIANGLES, 3 * (!gpu ? faces.size() : facesGpu.size()), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+}
+
+void Mesh::readDataFromFile(const std::string& path) {
+    std::ifstream fin(path);
+    for (Vertex* vertex : vertices)
+        fin >> vertex->x0(0) >> vertex->x0(1) >> vertex->x0(2) >> vertex->x(0) >> vertex->x(1) >> vertex->x(2) >> vertex->v(0) >> vertex->v(1) >> vertex->v(2);
+    fin.close();
+}
+
+void Mesh::writeDataToFile(const std::string& path) {
+    std::ofstream fout(path);
+    for (const Vertex* vertex : vertices) {
+        fout << "vt " << vertex->u(0) << " " << vertex->u(1) << std::endl;
+        fout << "v " << vertex->x(0) << " " << vertex->x(1) << " " << vertex->x(2) << " " << std::endl;
+        fout << "nv " << vertex->v(0) << " " << vertex->v(1) << " " << vertex->v(2) << " " << std::endl;
+    }
+    for (const Face* face : faces) {
+        fout << "f";
+        for (int i = 0; i < 3; i++) {
+            int index = face->getVertex(i)->index + 1;
+            fout << " " << index << "/" << index;
+        }
+        fout << std::endl;
+    }
+}
+
+void Mesh::printDebugInfo(int selectedFace) {
+    if (!gpu) {
+        Face* face = faces[selectedFace];
+        std::cout << "V=[" << face->getVertex(0)->index << ", " << face->getVertex(1)->index << ", " << face->getVertex(2)->index << "]" << std::endl;
+    } else {
+        printDebugInfoGpu<<<1, 1>>>(pointer(facesGpu), selectedFace);
+    }
 }

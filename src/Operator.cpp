@@ -5,13 +5,18 @@ Operator::Operator() {}
 Operator::~Operator() {}
 
 void Operator::updateActive(const std::vector<Face*>& activeFaces) {
-    std::unordered_set<Edge*> edges;
-    for (const Face* face : activeFaces)
-        for (int i = 0; i < 3; i++)
-            edges.insert(face->getEdge(i));
+    std::vector<Edge*> edges(3 * activeFaces.size());
+    for (int i = 0; i < activeFaces.size(); i++) {
+        Face* face = activeFaces[i];
+        for (int j = 0; j < 3; j++)
+            edges[3 * i + j] = face->getEdge(j);
+    }
     
-    for (Edge* edge : edges)
-        activeEdges.push_back(edge);
+    std::sort(edges.begin(), edges.end(), [](const Edge* edge0, const Edge* edge1) {
+        return edge0->getVertex(0)->index < edge1->getVertex(0)->index || edge0->getVertex(0)->index == edge1->getVertex(0)->index && edge0->getVertex(1)->index < edge1->getVertex(1)->index;
+    });
+    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+    activeEdges.insert(activeEdges.end(), edges.begin(), edges.end());
 }
 
 bool Operator::empty() const {
@@ -55,13 +60,14 @@ void Operator::flip(const Edge* edge, const Material* material) {
     updateActive(addedFaces);
 }
 
-void Operator::split(const Edge* edge, const Material* material) {
+void Operator::split(const Edge* edge, const Material* material, int index) {
     Vertex* vertex0 = edge->getVertex(0);
     Vertex* vertex1 = edge->getVertex(1);
     Vertex* vertex2 = edge->getOpposite(0);
     Vertex* vertex3 = edge->getOpposite(1);
     
     Vertex* newVertex = new Vertex(0.5f * (vertex0->x + vertex1->x), true);
+    newVertex->index = index;
     newVertex->u = 0.5f * (vertex0->u + vertex1->u);
     newVertex->v = 0.5f * (vertex0->v + vertex1->v);
     newVertex->sizing = 0.5f * (vertex0->sizing + vertex1->sizing);

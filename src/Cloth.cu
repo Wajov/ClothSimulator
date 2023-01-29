@@ -2,18 +2,27 @@
 
 Cloth::Cloth(const Json::Value& json) {
     Transform* transform = new Transform(json["transform"]);
-    material = new Material(json["materials"]);
-    if (gpu) {
-        CUDA_CHECK(cudaMalloc(&materialGpu, sizeof(Material)));
-        CUDA_CHECK(cudaMemcpy(materialGpu, material, sizeof(Material), cudaMemcpyHostToDevice));
+    Material* materialTemp = new Material(json["materials"]);
+    if (!gpu)
+        material = materialTemp;
+    else {
+        CUDA_CHECK(cudaMalloc(&material, sizeof(Material)));
+        CUDA_CHECK(cudaMemcpy(material, materialTemp, sizeof(Material), cudaMemcpyHostToDevice));
+        delete materialTemp;
     }
-    
-    mesh = new Mesh(json["mesh"], transform, !gpu ? material : materialGpu);
+    mesh = new Mesh(json["mesh"], transform, material);
 
     std::vector<int> handleIndices;
     for (const Json::Value& handleJson : json["handles"])
         for (const Json::Value& nodeJson : handleJson["nodes"])
             handleIndices.push_back(parseInt(nodeJson));
+    
+    remeshing = new Remeshing(json["remeshing"]);
+
+    edgeShader = new Shader("shader/Vertex.glsl", "shader/EdgeFragment.glsl");
+    faceShader = new Shader("shader/Vertex.glsl", "shader/FaceFragment.glsl");
+    delete transform;
+
     if (!gpu) {
         std::vector<Vertex*>& vertices = mesh->getVertices();
         handles.resize(handleIndices.size());
@@ -32,24 +41,19 @@ Cloth::Cloth(const Json::Value& json) {
         CUSPARSE_CHECK(cusparseCreate(&cusparseHandle));
         CUSOLVER_CHECK(cusolverSpCreate(&cusolverHandle));
     }
-
-    remeshing = new Remeshing(json["remeshing"]);
-
-    edgeShader = new Shader("shader/VertexShader.glsl", "shader/EdgeFragmentShader.glsl");
-    faceShader = new Shader("shader/VertexShader.glsl", "shader/FaceFragmentShader.glsl");
-    delete transform;
 }
 
 Cloth::~Cloth() {
     delete mesh;
-    delete material;
     for (const Handle* handle : handles)
         delete handle;
     delete edgeShader;
     delete faceShader;
     
-    if (gpu) {
-        CUDA_CHECK(cudaFree(materialGpu));
+    if (!gpu)
+        delete material;
+    else {
+        CUDA_CHECK(cudaFree(material));
         deleteHandles<<<GRID_SIZE, BLOCK_SIZE>>>(handlesGpu.size(), pointer(handlesGpu));
         CUDA_CHECK_LAST();
 
@@ -362,9 +366,9 @@ std::vector<Edge*> Cloth::findEdgesToSplit() const {
         return a.first > b.first;
     });
 
-    std::vector<Edge*> ans;
-    for (const std::pair<float, Edge*>& p : sorted)
-        ans.push_back(p.second);
+    std::vector<Edge*> ans(sorted.size());
+    for (int i = 0; i < sorted.size(); i++)
+        ans[i] = sorted[i].second;
 
     return ans;
 }
@@ -374,7 +378,7 @@ bool Cloth::splitSomeEdges() const {
     for (const Edge* edge : edgesToSplit)
         if (edge != nullptr) {
             Operator op;
-            op.split(edge, material);
+            op.split(edge, material, mesh->getVertices().size());
             mesh->apply(op);
             flipEdges(op.activeEdges, &edgesToSplit, nullptr, nullptr);
         }
@@ -409,7 +413,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Vertex*, std::vector<Edge*>>& adja
         Vertex* v0 = face->getVertex(0);
         Vertex* v1 = face->getVertex(1);
         Vertex* v2 = face->getVertex(2);
-        if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1 )
+        if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
             continue;
         
         if (v0 == vertex0)
@@ -530,10 +534,10 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
         addWindForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, wind, pointer(bIndices, 3 * nVertices), pointer(bValues, 3 * nVertices));
         CUDA_CHECK_LAST();
 
-        addStretchingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, materialGpu, pointer(aIndices, 3 * nVertices), pointer(aValues, 3 * nVertices), pointer(bIndices, 3 * nVertices + 9 * nFaces), pointer(bValues, 3 * nVertices + 9 * nFaces));
+        addStretchingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, material, pointer(aIndices, 3 * nVertices), pointer(aValues, 3 * nVertices), pointer(bIndices, 3 * nVertices + 9 * nFaces), pointer(bValues, 3 * nVertices + 9 * nFaces));
         CUDA_CHECK_LAST();
 
-        addBendingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, dt, materialGpu, pointer(aIndices, 3 * nVertices + 81 * nFaces), pointer(aValues, 3 * nVertices + 81 * nFaces), pointer(bIndices, 3 * nVertices + 18 * nFaces), pointer(bValues, 3 * nVertices + 18 * nFaces));
+        addBendingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, dt, material, pointer(aIndices, 3 * nVertices + 81 * nFaces), pointer(aValues, 3 * nVertices + 81 * nFaces), pointer(bIndices, 3 * nVertices + 18 * nFaces), pointer(bValues, 3 * nVertices + 18 * nFaces));
         CUDA_CHECK_LAST();
 
         addHandleForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), dt, handleStiffness, pointer(aIndices, 3 * nVertices + 144 * nEdges + 81 * nFaces), pointer(aValues, 3 * nVertices + 144 * nEdges + 81 * nFaces), pointer(bIndices, 3 * nVertices + 12 * nEdges + 18 * nFaces), pointer(bValues, 3 * nVertices + 12 * nEdges + 18 * nFaces));
@@ -589,20 +593,15 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
         }
     }
 
-    for (Vertex* vertex : vertices) {
-        vertex->a = 0.0f;
+    for (Vertex* vertex : vertices)
         vertex->sizing = Matrix2x2f();
-    }
 
     std::vector<Face*>& faces = mesh->getFaces();
     for (Face* face : faces) {
         float area = face->getArea();
         Matrix2x2f sizing = faceSizing(face, planes);
-        for (int i = 0; i < 3; i++) {
-            Vertex* vertex = face->getVertex(i);
-            vertex->a += area;
-            vertex->sizing += area * sizing;
-        }
+        for (int i = 0; i < 3; i++)
+            face->getVertex(i)->sizing += area * sizing;
     }
 
     for (Vertex* vertex : vertices)
@@ -631,10 +630,10 @@ void Cloth::updateRenderingData(bool rebind) {
 }
 
 void Cloth::bind() {
-    mesh->bind(materialGpu);
+    mesh->bind();
 }
 
-void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
+void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const {
     edgeShader->use();
     edgeShader->setMat4("model", model);
     edgeShader->setMat4("view", view);
@@ -648,5 +647,10 @@ void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix
     faceShader->setVec3("color", Vector3f(0.6f, 0.7f, 1.0f));
     faceShader->setVec3("cameraPosition", cameraPosition);
     faceShader->setVec3("lightDirection", lightDirection);
+    faceShader->setInt("selectedFace", selectedFace);
     mesh->renderFaces();
+}
+
+void Cloth::printDebugInfo(int selectedFace) {
+    mesh->printDebugInfo(selectedFace);
 }

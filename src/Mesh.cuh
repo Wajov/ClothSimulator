@@ -43,6 +43,7 @@ private:
 
 public:
     Mesh(const Json::Value& json, const Transform* transform, const Material* material);
+    Mesh(const Mesh* mesh);
     ~Mesh();
     std::vector<Vertex*>& getVertices();
     thrust::device_vector<Vertex*>& getVerticesGpu();
@@ -50,16 +51,20 @@ public:
     thrust::device_vector<Edge*>& getEdgesGpu();
     std::vector<Face*>& getFaces();
     thrust::device_vector<Face*>& getFacesGpu();
-    void readDataFromFile(const std::string& path);
-    void apply(const Operator& op);
+    bool contain(const Face* face) const;
     void reset();
+    Vector3f oldPosition(const Vector2f& u) const;
+    void apply(const Operator& op);
     void updateIndices();
     void updateGeometries();
     void updateVelocities(float dt);
     void updateRenderingData(bool rebind);
-    void bind(const Material* material);
+    void bind();
     void renderEdges() const;
     void renderFaces() const;
+    void readDataFromFile(const std::string& path);
+    void writeDataToFile(const std::string& path);
+    void printDebugInfo(int selectedFace);
 };
 
 #endif

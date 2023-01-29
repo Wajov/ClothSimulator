@@ -5,7 +5,7 @@
     "frame_steps": 8,
     "end_time": 10,
     "cloths": [{
-        "mesh": "mesh.obj",
+        "mesh": "meshes/pants3.obj",
         "transform": {"translate": [0.0, 0.0, 0.0]},
         // "transform": {"translate": [0.5, 0, 0.5]},
         "materials": {"data": "materials/gray-interlock.json",

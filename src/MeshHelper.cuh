@@ -16,11 +16,12 @@ struct EdgeData {
 };
 
 struct VertexData {
-    float m;
+    float m, a;
     Vector3f n;
 
     __device__ VertexData& operator=(const VertexData& v) {
         m = v.m;
+        a = v.a;
         n = v.n;
         return *this;
     };
@@ -28,6 +29,7 @@ struct VertexData {
     __device__ VertexData operator+(const VertexData& v) const {
         VertexData ans;
         ans.m = m + v.m;
+        ans.a = a + v.a;
         ans.n = n + v.n;
         return ans;
     };
@@ -102,11 +104,18 @@ __global__ static void setupEdges(int nEdges, const PairIndex* indices, const Ed
         }
 }
 
-__global__ static void updateIndicesGpu(int nVertices, Vertex** vertices) {
+__global__ static void updateIndicesVertices(int nVertices, Vertex** vertices) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads)
         vertices[i]->index = i;
+}
+
+__global__ static void updateIndicesFaces(int nFaces, Face** faces) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads)
+        faces[i]->setIndex(i);
 }
 
 __global__ static void updateGeometriesVertices(int nVertices, const int* indices, const VertexData* vertexData, Vertex** vertices) {
@@ -116,6 +125,7 @@ __global__ static void updateGeometriesVertices(int nVertices, const int* indice
         Vertex* vertex = vertices[indices[i]];
         vertex->x1 = vertex->x;
         vertex->m = vertexData[i].m;
+        vertex->a = vertexData[i].a;
         vertex->n = vertexData[i].n.normalized();
     }
 }
@@ -134,6 +144,7 @@ __global__ static void updateGeometriesFaces(int nFaces, Face** faces, int* indi
         Face* face = faces[i];
         face->update();
         float m = face->getMass() / 3.0f;
+        float a = face->getArea();
         for (int j = 0; j < 3; j++) {
             Vertex* vertex = face->getVertex(j);
             Vector3f e0 = face->getVertex((j + 1) % 3)->x - vertex->x;
@@ -142,6 +153,7 @@ __global__ static void updateGeometriesFaces(int nFaces, Face** faces, int* indi
             int index = 3 * i + j;
             indices[index] = vertex->index;
             vertexData[index].m = m;
+            vertexData[index].a = a;
             vertexData[index].n = e0.cross(e1) / (e0.norm2() * e1.norm2());
         }
     }
@@ -168,6 +180,11 @@ __global__ static void updateRenderingDataFaces(int nFaces, const Face* const* f
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads)
         for (int j = 0; j < 3; j++)
             indices[3 * i + j] = faces[i]->getVertex(j)->index;
+}
+
+__global__ static void printDebugInfoGpu(const Face* const* faces, int index) {
+    const Face* face = faces[index];
+    printf("V=[%d, %d, %d]\n", face->getVertex(0)->index, face->getVertex(1)->index, face->getVertex(2)->index);
 }
 
 __global__ static void deleteVertices(int nVertices, const Vertex* const* vertices) {

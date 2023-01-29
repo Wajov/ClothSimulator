@@ -16,17 +16,17 @@
 
 typedef thrust::pair<int, int> PairIndex;
 
-static const int GRID_SIZE = 32;
-static const int BLOCK_SIZE = 256;
+const int GRID_SIZE = 32;
+const int BLOCK_SIZE = 256;
 
-static void cudaCheck(cudaError_t err, const char* const func, const char* const file, const int line) {
+static void cudaCheck(cudaError_t err, const char* func, const char* file, int line) {
     if (err != cudaSuccess) {
         std::cerr << "CUDA Runtime Error at: " << file << ":" << line << std::endl;
         std::cerr << cudaGetErrorString(err) << " " << func << std::endl;
     }
 }
 
-static void cudaCheckLast(const char* const file, const int line) {
+static void cudaCheckLast(const char* file, int line) {
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
         std::cerr << "CUDA Runtime Error at: " << file << ":" << line << std::endl;
@@ -34,14 +34,14 @@ static void cudaCheckLast(const char* const file, const int line) {
     }
 }
 
-static void cusparseCheck(cusparseStatus_t err, const char* const func, const char* const file, const int line) {
+static void cusparseCheck(cusparseStatus_t err, const char* func, const char* file, int line) {
     if (err != CUSPARSE_STATUS_SUCCESS) {
         std::cerr << "CuSPARSE Runtime Error at: " << file << ":" << line << std::endl;
         std::cerr << cusparseGetErrorString(err) << " " << func << std::endl;
     }
 }
 
-static void cusolverCheck(cusolverStatus_t err, const char* const func, const char* const file, const int line) {
+static void cusolverCheck(cusolverStatus_t err, const char* func, const char* file, int line) {
     if (err != CUSOLVER_STATUS_SUCCESS)
         std::cerr << "CuSOLVER Runtime Error at: " << file << ":" << line << std::endl;
 }

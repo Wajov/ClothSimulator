@@ -2,6 +2,7 @@
 #define BVH_HPP
 
 #include <vector>
+#include <functional>
 #include <unordered_map>
 
 #include "BVHNode.hpp"
@@ -25,8 +26,8 @@ public:
     bool contain(const Vertex* vertex) const;
     void setAllActive(bool active);
     void setActive(const Vertex* vertex, bool active);
-    void findImpacts(float thickness, std::vector<Impact>& impacts) const;
-    void findImpacts(const BVH* bvh, float thickness, std::vector<Impact>& impacts) const;
+    void traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback);
+    void traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback);
     void findNearestPoint(const Vector3f& x, NearPoint& point) const;
     void update();
 };

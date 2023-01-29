@@ -62,10 +62,18 @@ void Renderer::framebufferSizeCallback(int width, int height) {
 }
 
 void Renderer::mouseButtonCallback(int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    double x, y;
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         press = true;
-    else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+        glfwGetCursorPos(window, &x, &y);
+        pressX = (int)x;
+        pressY = (int)y;
+    } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
         press = false;
+        glfwGetCursorPos(window, &x, &y);
+        if (pressX == (int)x && pressY == (int)y)
+            simulator->printDebugInfo(pressX, height - pressY);
+    }
 }
 
 void Renderer::cursorPosCallback(double x, double y) {
@@ -104,7 +112,7 @@ void Renderer::render() const {
         view = Transform::lookAt(cameraPosition, Vector3f(0.0f, -0.25f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
         projection = Transform::perspective(45.0f, static_cast<float>(width) / height, 0.1f, 100.0f);
 
-        simulator->render(model, view, projection, cameraPosition, lightDirection);
+        simulator->render(width, height, model, view, projection, cameraPosition, lightDirection);
         if (!pause)
             simulator->step();
 

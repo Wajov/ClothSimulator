@@ -20,7 +20,7 @@ public:
     void operator+=(const Vector3f& v);
     void operator+=(const Bounds& b);
     Vector3f center() const;
-    int longestIndex() const;
+    int majorAxis() const;
     Bounds dilate(float thickness) const;
     float distance(const Vector3f& x) const;
     bool overlap(const Bounds& b) const;
