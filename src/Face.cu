@@ -16,6 +16,14 @@ void Face::initialize(const Material* material) {
         mass = material->getDensity() * material->getThicken() * area;
 }
 
+int Face::getIndex() const {
+    return index;
+}
+
+void Face::setIndex(int index) {
+    this->index = index;
+}
+
 Vertex* Face::getVertex(int index) const {
     return vertices[index];
 }
@@ -80,9 +88,23 @@ int Face::sequence(const Edge* edge) const {
     return vertices[2] == vertex0 && vertices[0] == vertex1 ? 0 : 1;
 }
 
+bool Face::contain(const Vertex* vertex) const {
+    for (int i = 0; i < 3; i++)
+        if (vertices[i] == vertex)
+            return true;
+    return false;
+}
+
 bool Face::contain(const Edge* edge) const {
     for (int i = 0; i < 3; i++)
         if (edges[i] == edge)
+            return true;
+    return false;
+}
+
+bool Face::adjacent(const Face* face) const {
+    for (int i = 0; i < 3; i++)
+        if (contain(face->vertices[i]))
             return true;
     return false;
 }
@@ -114,6 +136,15 @@ Bounds Face::bounds(bool ccd) const {
             ans += vertex->x0;
     }
     return ans;
+}
+
+Vector3f Face::barycentricCoordinates(const Vector2f& u) const {
+    Vector2f x = Matrix2x2f(vertices[0]->u - vertices[2]->u, vertices[1]->u - vertices[2]->u).inverse() * (u - vertices[2]->u);
+    return Vector3f(x(0), x(1), 1.0f - x(0) - x(1));
+}
+
+Vector3f Face::position(const Vector3f& b) const {
+    return b(0) * vertices[0]->x + b(1) * vertices[1]->x + b(2) * vertices[2]->x;
 }
 
 Matrix3x2f Face::derivative(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2) const {

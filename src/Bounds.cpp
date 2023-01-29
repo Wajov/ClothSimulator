@@ -44,7 +44,7 @@ Vector3f Bounds::center() const {
     return 0.5f * (pMin + pMax);
 }
 
-int Bounds::longestIndex() const {
+int Bounds::majorAxis() const {
     Vector3f d = pMax - pMin;
     if (d(0) >= d(1) && d(0) >= d(2))
         return 0;

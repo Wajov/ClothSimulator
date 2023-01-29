@@ -19,10 +19,10 @@ BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::
             right = new BVHNode(this, r, r, faces, bounds, centers, leaves);
         } else {
             Vector3f center = this->bounds.center();
-            int index = this->bounds.longestIndex();
+            int axis = this->bounds.majorAxis();
             int lt = l, rt = r;
             for (int i = l; i <= r; i++)
-                if (centers[i](index) > center(index))
+                if (centers[i](axis) > center(axis))
                     lt++;
                 else {
                     mySwap(faces[lt], faces[rt]);

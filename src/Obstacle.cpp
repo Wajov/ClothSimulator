@@ -21,7 +21,7 @@ void Obstacle::reset() const {
 }
 
 void Obstacle::bind() {
-    mesh->bind(nullptr);
+    mesh->bind();
 }
 
 void Obstacle::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
@@ -32,5 +32,6 @@ void Obstacle::render(const Matrix4x4f& model, const Matrix4x4f& view, const Mat
     shader->setVec3("color", Vector3f(0.8f, 0.8f, 0.8f));
     shader->setVec3("cameraPosition", cameraPosition);
     shader->setVec3("lightDirection", lightDirection);
+    shader->setInt("selectedFace", -1);
     mesh->renderFaces();
 }

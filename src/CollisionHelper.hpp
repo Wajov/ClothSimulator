@@ -1,10 +1,14 @@
 #ifndef COLLISION_HELPER_HPP
 #define COLLISION_HELPER_HPP
 
+#include <vector>
+
 #include "MathHelper.cuh"
 #include "Vector.cuh"
 #include "Face.cuh"
 #include "Impact.hpp"
+
+const int MAX_COLLISION_ITERATION = 100;
 
 static float signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w) {
     n = (y1 - y0).normalized().cross((y2 - y0).normalized());

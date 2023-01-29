@@ -5,10 +5,12 @@ Operator::Operator() {}
 Operator::~Operator() {}
 
 void Operator::updateActive(const std::vector<Face*>& activeFaces) {
-    std::vector<Edge*> edges;
-    for (const Face* face : activeFaces)
-        for (int i = 0; i < 3; i++)
-            edges.push_back(face->getEdge(i));
+    std::vector<Edge*> edges(3 * activeFaces.size());
+    for (int i = 0; i < activeFaces.size(); i++) {
+        Face* face = activeFaces[i];
+        for (int j = 0; j < 3; j++)
+            edges[3 * i + j] = face->getEdge(j);
+    }
     
     std::sort(edges.begin(), edges.end(), [](const Edge* edge0, const Edge* edge1) {
         return edge0->getVertex(0)->index < edge1->getVertex(0)->index || edge0->getVertex(0)->index == edge1->getVertex(0)->index && edge0->getVertex(1)->index < edge1->getVertex(1)->index;

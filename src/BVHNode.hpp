@@ -6,7 +6,6 @@
 #include <unordered_map>
 
 #include "MathHelper.cuh"
-#include "CollisionHelper.hpp"
 #include "Bounds.hpp"
 #include "Face.cuh"
 #include "NearPoint.hpp"

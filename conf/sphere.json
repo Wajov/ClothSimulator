@@ -19,20 +19,9 @@
             "aspect_min": 0.2
         }
     }],
-    "motions": [[
-        {"time": 0, "transform": {"scale": 0.1, "translate": [0,0,0]}},
-        {"time": 1, "transform": {"scale": 0.1, "translate": [0,0,0]}},
-        {"time": 2, "transform": {"scale": 0.1, "translate": [0,0,0]}},
-        {"time": 3, "transform": {"scale": 0.1, "translate": [0,-1.5,0]}},
-        {"time": 4, "transform": {"scale": 0.1, "translate": [0,0,0]}},
-        {"time": 5, "transform": {"scale": 0.1, "translate": [0,1.5,0]}},
-        {"time": 6, "transform": {"scale": 0.1, "translate": [0,0,0]}},
-        {"time": 7, "transform": {"scale": 0.1, "translate": [0,-0.4,0]}}
-    ]],
     "obstacles": [{
         "mesh": "meshes/sphere.obj",
-        "transform": {"scale": 0.1},
-        "motion": 0
+        "transform": {"scale": 0.1}
     }],
     "gravity": [0, 0, -9.8],
     "disable": ["popfilter" ],

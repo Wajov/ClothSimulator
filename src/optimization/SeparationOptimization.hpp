@@ -1,24 +1,22 @@
-#ifndef IMPACT_ZONE_OPTIMIZATION_HPP
-#define IMPACT_ZONE_OPTIMIZATION_HPP
+#ifndef SEPARATION_OPTIMIZATION_HPP
+#define SEPARATION_OPTIMIZATION_HPP
 
 #include <vector>
 
-#include "MathHelper.cuh"
-#include "Vector.cuh"
 #include "Optimization.hpp"
-#include "Impact.hpp"
-#include "ImpactZone.hpp"
+#include "Intersection.hpp"
 
-class ImpactZoneOptimization : public Optimization {
+class SeparationOptimization : public Optimization {
 private:
-    double invMass, thickness, obstacleMass;
+    double invArea, thickness;
     std::vector<Vertex*> vertices;
-    std::vector<Impact> impacts;
+    std::vector<Intersection> intersections;
     std::vector<std::vector<int>> indices;
+    int addVertex(const Vertex* vertex);
 
 public:
-    ImpactZoneOptimization(const ImpactZone* zone, double thickness, double obstacleMass);
-    ~ImpactZoneOptimization();
+    SeparationOptimization(const std::vector<Intersection>& intersections, double thickness);
+    ~SeparationOptimization();
     void initialize(double* x) const override;
     void precompute(const double *x) override;
     void finalize(const double* x) override;

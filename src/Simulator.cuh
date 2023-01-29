@@ -15,6 +15,8 @@
 
 #include "JsonHelper.hpp"
 #include "CudaHelper.cuh"
+#include "CollisionHelper.hpp"
+#include "SeparationHelper.hpp"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Magic.hpp"
@@ -24,7 +26,9 @@
 #include "BVH.hpp"
 #include "Impact.hpp"
 #include "ImpactZone.hpp"
+#include "Intersection.hpp"
 #include "optimization/ImpactZoneOptimization.hpp"
+#include "optimization/SeparationOptimization.hpp"
 
 extern bool gpu;
 
@@ -34,25 +38,30 @@ struct Pixel {
 
 class Simulator {
 private:
-    const int MAX_ITERATION;
     Magic* magic;
     int frameSteps, nSteps, selectedCloth, selectedFace;
     float frameTime, dt;
     Vector3f gravity;
-    Wind* wind, * windGpu;
+    Wind* wind;
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
     unsigned int fbo, indexTexture, rbo;
     Shader* indexShader;
-    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
+    std::vector<BVH*> buildClothBvhs(bool ccd) const;
+    std::vector<BVH*> buildObstacleBvhs(bool ccd) const;
+    void updateBvhs(std::vector<BVH*>& bvhs) const;
+    void destroyBvhs(const std::vector<BVH*>& bvhs) const;
     void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback);
+    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;
     ImpactZone* findImpactZone(const Vertex* vertex, std::vector<ImpactZone*>& zones) const;
     void addImpacts(const std::vector<Impact>& impacts, std::vector<ImpactZone*>& zones, bool deformObstacles) const;
+    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const;
     void resetObstacles();
     void physicsStep();
     void collisionStep();
     void remeshingStep();
+    void separationStep(const std::vector<Mesh*>& oldMeshes);
     void updateIndices();
     void updateGeometries();
     void updateVelocities();
