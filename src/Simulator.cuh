@@ -56,7 +56,7 @@ private:
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;
     ImpactZone* findImpactZone(const Vertex* vertex, std::vector<ImpactZone*>& zones) const;
     void addImpacts(const std::vector<Impact>& impacts, std::vector<ImpactZone*>& zones, bool deformObstacles) const;
-    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const;
+    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<Intersection>& intersections) const;
     void resetObstacles();
     void physicsStep();
     void collisionStep();

@@ -181,8 +181,22 @@ void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<Impac
     }
 }
 
-void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const {
-    // TODO
+void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<Intersection>& intersections) const {
+    for (BVH* clothBvh : clothBvhs)
+        clothBvh->setAllActive(false);
+    
+    for (const Intersection& intersection : intersections)
+        for (int i = 0; i < 3; i++) {
+            Vertex* vertex0 = intersection.face0->getVertex(i);
+            for (BVH* clothBvh : clothBvhs)
+                if (clothBvh->contain(vertex0))
+                    clothBvh->setActive(vertex0, true);
+            
+            Vertex* vertex1 = intersection.face1->getVertex(i);
+            for (BVH* clothBvh : clothBvhs)
+                if (clothBvh->contain(vertex1))
+                    clothBvh->setActive(vertex1, true);
+        }
 }
 
 void Simulator::resetObstacles() {
@@ -271,7 +285,7 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
         
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
             if (!intersections.empty())
-                updateActive(clothBvhs, obstacleBvhs, intersections);
+                updateActive(clothBvhs, intersections);
             
             std::vector<Intersection> newIntersections;
             traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
