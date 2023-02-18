@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "MathHelper.cuh"
+#include "Node.cuh"
+#include "Face.cuh"
 #include "Intersection.hpp"
 #include "Cloth.cuh"
 
@@ -14,12 +16,12 @@ static int majorAxis(const Vector3f& v) {
 }
 
 static bool facePlaneIntersection(const Face* face, const Face* plane, Vector3f& b0, Vector3f& b1) {
-    Vector3f x0 = plane->getVertex(0)->x;
-    Vector3f n = plane->getNormal();
+    Vector3f x0 = plane->vertices[0]->node->x;
+    Vector3f n = plane->n;
     float h[3];
     int signSum = 0;
     for (int i = 0; i < 3; i++) {
-        h[i] = (face->getVertex(i)->x - x0).dot(n);
+        h[i] = (face->vertices[i]->node->x - x0).dot(n);
         signSum += sign(h[i]);
     }
     if (signSum == -3 || signSum == 3)
@@ -46,7 +48,7 @@ static bool intersectionMidpoint(const Face* face0, const Face* face1, Vector3f&
     if (face0->adjacent(face1))
         return false;
     
-    Vector3f c = face0->getNormal().cross(face1->getNormal());
+    Vector3f c = face0->n.cross(face1->n);
     if (c.norm2() < 1e-10f)
         return false;
     
@@ -73,22 +75,22 @@ static bool intersectionMidpoint(const Face* face0, const Face* face1, Vector3f&
 }
 
 static Vector3f oldPosition(const Face* face, const Vector3f& b, const std::vector<Cloth*>& cloths, const std::vector<Mesh*>& oldMeshes) {
-    if (!(face->getVertex(0)->isFree && face->getVertex(1)->isFree && face->getVertex(2)->isFree))
+    if (!face->isFree())
         return face->position(b);
     
-    Vector2f u = b(0) * face->getVertex(0)->u + b(1) * face->getVertex(1)->u + b(2) * face->getVertex(2)->u;
+    Vector2f u = b(0) * face->vertices[0]->u + b(1) * face->vertices[1]->u + b(2) * face->vertices[2]->u;
     for (int i = 0; i < cloths.size(); i++)
         if (cloths[i]->getMesh()->contain(face))
             return oldMeshes[i]->oldPosition(u);
 }
 
 static void clearVertexFaceDistance(const Face* face0, const Face* face1, const Vector3f& d, float& maxDist, Vector3f& b0, Vector3f& b1) {
-    Vector3f x0 = face1->getVertex(0)->x;
-    Vector3f x1 = face1->getVertex(1)->x;
-    Vector3f x2 = face1->getVertex(2)->x;
-    Vector3f n = face1->getNormal();
+    Vector3f x0 = face1->vertices[0]->node->x;
+    Vector3f x1 = face1->vertices[1]->node->x;
+    Vector3f x2 = face1->vertices[2]->node->x;
+    Vector3f n = face1->n;
     for (int i = 0; i < 3; i++) {
-        Vector3f x = face0->getVertex(i)->x;
+        Vector3f x = face0->vertices[i]->node->x;
         
         float h = (x - x0).dot(n);
         float dh = d.dot(n);
@@ -116,10 +118,10 @@ static void clearVertexFaceDistance(const Face* face0, const Face* face1, const 
 static void clearEdgeEdgeDistance(const Face* face0, const Face* face1, const Vector3f& d, float& maxDist, Vector3f& b0, Vector3f& b1) {
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++) {
-            Vector3f x00 = face0->getVertex(i)->x;
-            Vector3f x01 = face0->getVertex((i + 1) % 3)->x;
-            Vector3f x10 = face1->getVertex(j)->x;
-            Vector3f x11 = face1->getVertex((j + 1) % 3)->x;
+            Vector3f x00 = face0->vertices[i]->node->x;
+            Vector3f x01 = face0->vertices[(i + 1) % 3]->node->x;
+            Vector3f x10 = face1->vertices[j]->node->x;
+            Vector3f x11 = face1->vertices[(j + 1) % 3]->node->x;
             Vector3f n = (x01 - x00).cross(x11 - x10).normalized();
             
             float h = (x00 - x10).dot(n);

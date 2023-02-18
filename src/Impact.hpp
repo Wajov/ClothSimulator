@@ -1,7 +1,8 @@
 #ifndef IMPACT_HPP
 #define IMPACT_HPP
 
-#include "Vertex.cuh"
+#include "Vector.cuh"
+#include "Node.cuh"
 
 enum ImpactType {
     VertexFace,
@@ -10,7 +11,7 @@ enum ImpactType {
 
 class Impact {
 public:
-    Vertex* vertices[4];
+    Node* nodes[4];
     float t, w[4];
     Vector3f n;
     Impact();

@@ -21,7 +21,7 @@ private:
     void checkNearestPoint(const Vector3f& x, const Face* face, NearPoint& point) const;
 
 public:
-    BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Face*, BVHNode*>& leaves);
+    BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Node*, std::vector<BVHNode*>>& adjacents);
     ~BVHNode();
     inline bool isLeaf() const;
     void setActiveUp(bool active);

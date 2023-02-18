@@ -5,20 +5,17 @@
 
 #include "Vector.cuh"
 #include "Matrix.cuh"
-#include "Bounds.hpp"
+#include "Node.cuh"
 
 class Vertex {
 public:
     int index;
-    Vector3f x0, x1, x, n, v;
     Vector2f u;
+    float area;
+    Node* node;
     Matrix2x2f sizing;
-    float m, a;
-    bool isFree, preserve;
-    __host__ __device__ Vertex(const Vector3f& x, bool isFree);
+    __host__ __device__ Vertex(const Vector2f& u);
     __host__ __device__ ~Vertex();
-    __host__ __device__ Bounds bounds(bool ccd) const;
-    __host__ __device__ Vector3f position(float t) const;
 };
 
 #endif

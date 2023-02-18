@@ -7,80 +7,73 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
         exit(1);
     }
 
-    bool isFree = (material != nullptr);
     std::string line;
+    std::vector<Vector3f> x;
     std::vector<Vector2f> u;
-    std::vector<Vertex> vertexArray;
-    std::vector<unsigned int> indices;
+    std::vector<int> xIndices, uIndices;
     while (getline(fin, line)) {
-        std::vector<std::string> s = split(line, ' ');
-        if (s[0] == "v") {
-            Vector3f x(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]));
-            x = transform->applyTo(x);
-            vertexArray.emplace_back(x, isFree);
-        } else if (s[0] == "vt")
+        std::vector<std::string> s = std::move(split(line, ' '));
+        if (s[0] == "v")
+            x.push_back(transform->applyTo(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
+        else if (s[0] == "vt")
             u.emplace_back(std::stof(s[1]), std::stof(s[2]));
-        else if (s[0] == "f") {
-            int index0, index1, index2, uIndex0, uIndex1, uIndex2;
-            if (line.find('/') != std::string::npos) {
-                std::vector<std::string> t;
-                t = split(s[1], '/');
-                index0 = std::stoi(t[0]) - 1;
-                uIndex0 = std::stoi(t[1]) - 1;
-                t = split(s[2], '/');
-                index1 = std::stoi(t[0]) - 1;
-                uIndex1 = std::stoi(t[1]) - 1;
-                t = split(s[3], '/');
-                index2 = std::stoi(t[0]) - 1;
-                uIndex2 = std::stoi(t[1]) - 1;
-                vertexArray[index0].u = u[uIndex0];
-                vertexArray[index1].u = u[uIndex1];
-                vertexArray[index2].u = u[uIndex2];
-            } else {
-                index0 = std::stoi(s[1]) - 1;
-                index1 = std::stoi(s[2]) - 1;
-                index2 = std::stoi(s[3]) - 1;
-            }
-            indices.push_back(index0);
-            indices.push_back(index1);
-            indices.push_back(index2);
-        }
+        else if (s[0] == "f")
+            for (int i = 1; i < 4; i++)
+                if (line.find('/') != std::string::npos) {
+                    std::vector<std::string> t = std::move(split(s[i], '/'));
+                    xIndices.push_back(std::stoi(t[0]) - 1);
+                    uIndices.push_back(std::stoi(t[1]) - 1);
+                } else {
+                    u.emplace_back(0.0f, 0.0f);
+                    xIndices.push_back(std::stoi(s[i]) - 1);
+                    uIndices.push_back(u.size() - 1);
+                }
     }
     fin.close();
 
-    initialize(vertexArray, indices, material);
+    initialize(x, u, xIndices, uIndices, material);
 }
 
 Mesh::Mesh(const Mesh* mesh) {
+    nodes.resize(mesh->nodes.size());
+    for (int i = 0; i < mesh->nodes.size(); i++) {
+        Node* node = mesh->nodes[i];
+        nodes[i] = new Node(node->x, node->isFree);
+    }
+
     vertices.resize(mesh->vertices.size());
     for (int i = 0; i < mesh->vertices.size(); i++) {
         Vertex* vertex = mesh->vertices[i];
-        vertices[i] = new Vertex(vertex->x, vertex->isFree);
-        vertices[i]->u = vertex->u;
+        vertices[i] = new Vertex(vertex->u);
+        vertices[i]->node = nodes[vertex->node->index];
     }
     
     edges.resize(mesh->edges.size());
     for (int i = 0; i < mesh->edges.size(); i++) {
         Edge* edge = mesh->edges[i];
-        edges[i] = new Edge(vertices[edge->getVertex(0)->index], vertices[edge->getVertex(1)->index]);
+        edges[i] = new Edge(nodes[edge->nodes[0]->index], nodes[edge->nodes[1]->index]);
     }
     
     faces.resize(mesh->faces.size());
     for (int i = 0; i < mesh->faces.size(); i++) {
         Face* face = mesh->faces[i];
-        faces[i] = new Face(vertices[face->getVertex(0)->index], vertices[face->getVertex(1)->index], vertices[face->getVertex(2)->index], nullptr);
+        faces[i] = new Face(vertices[face->vertices[0]->index], vertices[face->vertices[1]->index], vertices[face->vertices[2]->index], nullptr);
     }
 }
 
 Mesh::~Mesh() {
-    for (const Vertex* vertex : vertices)
-        delete vertex;
-    for (const Edge* edge : edges)
-        delete edge;
-    for (const Face* face : faces)
-        delete face;
-
-    if (gpu) {
+    if (!gpu) {
+        for (const Node* node : nodes)
+            delete node;
+        for (const Vertex* vertex : vertices)
+            delete vertex;
+        for (const Edge* edge : edges)
+            delete edge;
+        for (const Face* face : faces)
+            delete face;
+    } else {
+        deleteNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
+        CUDA_CHECK_LAST();
         deleteVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
         CUDA_CHECK_LAST();
         deleteEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
@@ -111,56 +104,73 @@ Edge* Mesh::findEdge(int index0, int index1, std::map<std::pair<int, int>, int>&
         return edges[iter->second];
     else {
         edgeMap[pair] = edges.size();
-        edges.push_back(new Edge(vertices[index0], vertices[index1]));
+        edges.push_back(new Edge(nodes[index0], nodes[index1]));
         return edges.back();
     }
 }
 
-void Mesh::initialize(const std::vector<Vertex>& vertexArray, const std::vector<unsigned int>& indices, const Material* material) {
+void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material) {
+    bool isFree = (material != nullptr);
     if (!gpu) {
-        vertices.resize(vertexArray.size());
-        faces.resize(indices.size() / 3);
-        for (int i = 0; i < vertexArray.size(); i++) {
-            vertices[i] = new Vertex(vertexArray[i].x, vertexArray[i].isFree);
-            *vertices[i] = vertexArray[i];
-        }
+        nodes.resize(x.size());
+        vertices.resize(u.size());
+        faces.resize(xIndices.size() / 3);
+        for (int i = 0; i < x.size(); i++)
+            nodes[i] = new Node(x[i], isFree);
+        for (int i = 0; i < u.size(); i++)
+            vertices[i] = new Vertex(u[i]);
 
         std::map<std::pair<int, int>, int> edgeMap;
-        for (int i = 0; i < indices.size(); i += 3) {
-            int index0 = indices[i];
-            int index1 = indices[i + 1];
-            int index2 = indices[i + 2];
+        for (int i = 0; i < xIndices.size(); i += 3) {
+            int xIndex0 = xIndices[i];
+            int xIndex1 = xIndices[i + 1];
+            int xIndex2 = xIndices[i + 2];
+            int uIndex0 = uIndices[i];
+            int uIndex1 = uIndices[i + 1];
+            int uIndex2 = uIndices[i + 2];
 
-            Vertex* vertex0 = vertices[index0];
-            Vertex* vertex1 = vertices[index1];
-            Vertex* vertex2 = vertices[index2];
-            Edge* edge0 = findEdge(index0, index1, edgeMap);
-            Edge* edge1 = findEdge(index1, index2, edgeMap);
-            Edge* edge2 = findEdge(index2, index0, edgeMap);
+            Vertex* vertex0 = vertices[uIndex0];
+            Vertex* vertex1 = vertices[uIndex1];
+            Vertex* vertex2 = vertices[uIndex2];
+            
+            Edge* edge0 = findEdge(xIndex0, xIndex1, edgeMap);
+            Edge* edge1 = findEdge(xIndex1, xIndex2, edgeMap);
+            Edge* edge2 = findEdge(xIndex2, xIndex0, edgeMap);
             Face* face = new Face(vertex0, vertex1, vertex2, material);
 
-            edge0->setOppositeAndAdjacent(vertex2, face);
-            edge1->setOppositeAndAdjacent(vertex0, face);
-            edge2->setOppositeAndAdjacent(vertex1, face);
+            vertex0->node = nodes[xIndex0];
+            vertex1->node = nodes[xIndex1];
+            vertex2->node = nodes[xIndex2];
+            edge0->initialize(vertex2, face);
+            edge1->initialize(vertex0, face);
+            edge2->initialize(vertex1, face);
             face->setEdges(edge0, edge1, edge2);
 
             faces[i / 3] = face;
         }
 
         for (const Edge* edge : edges)
-            if (edge->isBoundary())
+            if (edge->isBoundary() || edge->isSeam())
                 for (int i = 0; i < 2; i++)
-                    edge->getVertex(i)->preserve = true;
+                    edge->nodes[i]->preserve = true;
     } else {
-        int nVertices = vertexArray.size();
-        int nFaces = indices.size() / 3;
-        int nEdges = 3 * nFaces;
-        thrust::device_vector<Vertex> vertexArrayGpu = vertexArray;
-        thrust::device_vector<unsigned int> indicesGpu = indices;
-        
+        int nNodes = x.size();
+        int nVertices = u.size();
+        int nFaces = xIndices.size() / 3;
+        int nEdges = xIndices.size();
+        thrust::device_vector<Vector3f> xGpu = x;
+        thrust::device_vector<Vector2f> uGpu = u;
+        thrust::device_vector<int> xIndicesGpu = xIndices;
+        thrust::device_vector<int> uIndicesGpu = uIndices;
+
+        nodesGpu.resize(nNodes);
+        Node** nodesPointer = pointer(nodesGpu);
+        initializeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(xGpu), isFree, nodesPointer);
+        CUDA_CHECK_LAST();
+
         verticesGpu.resize(nVertices);
         Vertex** verticesPointer = pointer(verticesGpu);
-        initializeVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(vertexArrayGpu), verticesPointer);
+        initializeVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(uGpu), verticesPointer);
         CUDA_CHECK_LAST();
 
         facesGpu.resize(nFaces);
@@ -169,21 +179,39 @@ void Mesh::initialize(const std::vector<Vertex>& vertexArray, const std::vector<
         PairIndex* edgeIndicesPointer = pointer(edgeIndices);
         thrust::device_vector<EdgeData> edgeData(nEdges);
         EdgeData* edgeDataPointer = pointer(edgeData);
-        initializeFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(indicesGpu), verticesPointer, material, facesPointer, edgeIndicesPointer, edgeDataPointer);
+        initializeFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(xIndicesGpu), pointer(uIndicesGpu), nodesPointer, material, verticesPointer, facesPointer, edgeIndicesPointer, edgeDataPointer);
         CUDA_CHECK_LAST();
         thrust::sort_by_key(edgeIndices.begin(), edgeIndices.end(), edgeData.begin());
 
         edgesGpu.resize(nEdges);
         Edge** edgesPointer = pointer(edgesGpu);
-        initializeEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, verticesPointer, edgesPointer);
+        initializeEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, nodesPointer, edgesPointer);
         CUDA_CHECK_LAST();
-        setupEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, edgesPointer);
+        setEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, edgesPointer);
         CUDA_CHECK_LAST();
         edgesGpu.erase(thrust::remove_if(edgesGpu.begin(), edgesGpu.end(), IsNull()), edgesGpu.end());
+
+        nEdges = edgesGpu.size();
+        thrust::device_vector<int> nodeIndices(2 * nEdges);
+        int* nodeIndicesPointer = pointer(nodeIndices);
+        collectPreservedNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, nodeIndicesPointer);
+        CUDA_CHECK_LAST();
+        thrust::sort(nodeIndices.begin(), nodeIndices.end());
+        auto iter = thrust::unique(nodeIndices.begin(), nodeIndices.end());
+        setPreservedNodes<<<GRID_SIZE, BLOCK_SIZE>>>(iter - nodeIndices.begin(), nodeIndicesPointer, nodesPointer);
+        CUDA_CHECK_LAST();
     }
 
-    updateIndices();
-    updateGeometries();
+    updateStructures();
+    updateGeometries(0.0f);
+}
+
+std::vector<Node*>& Mesh::getNodes() {
+    return nodes;
+}
+
+thrust::device_vector<Node*>& Mesh::getNodesGpu() {
+    return nodesGpu;
 }
 
 std::vector<Vertex*>& Mesh::getVertices() {
@@ -210,14 +238,23 @@ thrust::device_vector<Face*>& Mesh::getFacesGpu() {
     return facesGpu;
 }
 
+bool Mesh::contain(const Vertex* vertex) const {
+    int index = vertex->index;
+    return index < vertices.size() && vertices[index] == vertex;
+}
+
 bool Mesh::contain(const Face* face) const {
-    int index = face->getIndex();
-    return index < faces.size() && faces[index] == face;
+    return contain(face->vertices[0]) && contain(face->vertices[1]) && contain(face->vertices[2]);
 }
 
 void Mesh::reset() {
-    for (Vertex* vertex : vertices)
-        vertex->x = vertex->x0;
+    if (!gpu)
+        for (Node* node : nodes)
+            node->x = node->x0;
+    else {
+        resetGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
+        CUDA_CHECK_LAST();
+    }
 }
 
 Vector3f Mesh::oldPosition(const Vector2f& u) const {
@@ -229,6 +266,10 @@ Vector3f Mesh::oldPosition(const Vector2f& u) const {
 }
 
 void Mesh::apply(const Operator& op) {
+    for (const Node* node : op.removedNodes)
+        nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end());
+    nodes.insert(nodes.end(), op.addedNodes.begin(), op.addedNodes.end());
+
     for (const Vertex* vertex : op.removedVertices)
         vertices.erase(std::remove(vertices.begin(), vertices.end(), vertex), vertices.end());
     vertices.insert(vertices.end(), op.addedVertices.begin(), op.addedVertices.end());
@@ -241,6 +282,8 @@ void Mesh::apply(const Operator& op) {
         faces.erase(std::remove(faces.begin(), faces.end(), face), faces.end());
     faces.insert(faces.end(), op.addedFaces.begin(), op.addedFaces.end());
 
+    for (const Node* node : op.removedNodes)
+        delete node;
     for (const Vertex* vertex : op.removedVertices)
         delete vertex;
     for (const Edge* edge : op.removedEdges)
@@ -249,205 +292,167 @@ void Mesh::apply(const Operator& op) {
         delete face;
 }
 
-void Mesh::updateIndices() {
+void Mesh::updateStructures() {
     if (!gpu) {
+        for (int i = 0; i < nodes.size(); i++) {
+            Node* node = nodes[i];
+            node->index = i;
+            node->mass = 0.0f;
+            node->area = 0.0f;
+        }
         for (int i = 0; i < vertices.size(); i++)
             vertices[i]->index = i;
-        for (int i = 0; i < faces.size(); i++)
-            faces[i]->setIndex(i);
+        for (const Face* face : faces) {
+            float mass = face->mass / 3.0f;
+            float area = face->area;
+            for (int i = 0; i < 3; i++) {
+                Node* node = face->vertices[i]->node;
+                node->mass += mass;
+                node->area += area;
+            }
+        }
     } else {
-        updateIndicesVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
+        updateNodeIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
-        updateIndicesFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
+        updateVertexIndices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
+        CUDA_CHECK_LAST();
+
+        thrust::device_vector<int> indices(3 * facesGpu.size());
+        thrust::device_vector<NodeData> nodeData(3 * facesGpu.size());
+        collectNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(indices), pointer(nodeData));
+        CUDA_CHECK_LAST();
+        
+        thrust::sort_by_key(indices.begin(), indices.end(), nodeData.begin());
+        thrust::device_vector<int> outputIndices(3 * facesGpu.size());
+        thrust::device_vector<NodeData> outputNodeData(3 * facesGpu.size());
+        auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), nodeData.begin(), outputIndices.begin(), outputNodeData.begin());
+        setNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputNodeData), pointer(nodesGpu));
         CUDA_CHECK_LAST();
     }
 }
 
-void Mesh::updateGeometries() {
+void Mesh::updateGeometries(float dt) {
+    float invDt = dt == 0.0f ? 0.0f : 1.0f / dt;
     if (!gpu) {
         for (Face* face : faces)
             face->update();
         for (Edge* edge : edges)
             edge->update();
-        for (Vertex* vertex : vertices) {
-            vertex->x1 = vertex->x;
-            vertex->m = vertex->a = 0.0f;
-            vertex->n = Vector3f();
+        for (Node* node : nodes) {
+            node->x1 = node->x;
+            node->v = (node->x - node->x0) * invDt;
+            node->n = Vector3f();
         }
-        for (const Face* face : faces) {
-            float m = face->getMass() / 3.0f;
-            float a = face->getArea();
+        for (const Face* face : faces)
             for (int i = 0; i < 3; i++) {
-                Vertex* vertex = face->getVertex(i);
-                Vector3f e0 = face->getVertex((i + 1) % 3)->x - vertex->x;
-                Vector3f e1 = face->getVertex((i + 2) % 3)->x - vertex->x;
-                vertex->m += m;
-                vertex->a += a;
-                vertex->n += e0.cross(e1) / (e0.norm2() * e1.norm2());
+                Node* node = face->vertices[i]->node;
+                Vector3f e0 = face->vertices[(i + 1) % 3]->node->x - node->x;
+                Vector3f e1 = face->vertices[(i + 2) % 3]->node->x - node->x;
+                node->n += e0.cross(e1) / (e0.norm2() * e1.norm2());
             }
-        }
-        for (Vertex* vertex : vertices)
-            vertex->n.normalize();
+        for (Node* node : nodes)
+            node->n.normalize();
     } else {
-        thrust::device_vector<int> indices(3 * facesGpu.size());
-        thrust::device_vector<VertexData> vertexData(3 * facesGpu.size());
+        updateFaceGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
+        CUDA_CHECK_LAST();
+        updateEdgeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
+        CUDA_CHECK_LAST();
+        updateNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), invDt, pointer(nodesGpu));
+        CUDA_CHECK_LAST();
 
-        updateGeometriesFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(indices), pointer(vertexData));
+        thrust::device_vector<int> indices(3 * facesGpu.size());
+        thrust::device_vector<Vector3f> nodeData(3 * facesGpu.size());
+        collectNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(indices), pointer(nodeData));
         CUDA_CHECK_LAST();
-        updateGeometriesEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
-        CUDA_CHECK_LAST();
-        
-        thrust::sort_by_key(indices.begin(), indices.end(), vertexData.begin());
+
+        thrust::sort_by_key(indices.begin(), indices.end(), nodeData.begin());
         thrust::device_vector<int> outputIndices(3 * facesGpu.size());
-        thrust::device_vector<VertexData> outputVertexData(3 * facesGpu.size());
-        auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), vertexData.begin(), outputIndices.begin(), outputVertexData.begin());
-        updateGeometriesVertices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputVertexData), pointer(verticesGpu));
+        thrust::device_vector<Vector3f> outputNodeData(3 * facesGpu.size());
+        auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), nodeData.begin(), outputIndices.begin(), outputNodeData.begin());
+        setNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputNodeData), pointer(nodesGpu));
         CUDA_CHECK_LAST();
     }
-}
-
-void Mesh::updateVelocities(float dt) {
-    float invDt = 1.0f / dt;
-    for (Vertex* vertex : vertices)
-        vertex->v = (vertex->x - vertex->x0) * invDt;
 }
 
 void Mesh::updateRenderingData(bool rebind) {
     if (!gpu) {
-        std::vector<Vertex> vertexArray(vertices.size(), Vertex(Vector3f(), true));
-        for (int i = 0; i < vertices.size(); i++)
-            vertexArray[i] = *vertices[i];
-
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, vertexArray.size() * sizeof(Vertex), vertexArray.data(), GL_DYNAMIC_DRAW);  
-
-        if (rebind) {
-            std::vector<unsigned int> edgeIndices(2 * edges.size());
-            for (int i = 0; i < edges.size(); i++)
-                for (int j = 0; j < 2; j++)
-                    edgeIndices[2 * i + j] = edges[i]->getVertex(j)->index;
-
-            std::vector<unsigned int> faceIndices(3 * faces.size());
-            for (int i = 0; i < faces.size(); i++)
-                for (int j = 0; j < 3; j++)
-                    faceIndices[3 * i + j] = faces[i]->getVertex(j)->index;
-
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, edgeIndices.size() * sizeof(unsigned int), edgeIndices.data(), GL_DYNAMIC_DRAW);
-
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, faceEbo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, faceIndices.size() * sizeof(unsigned int), faceIndices.data(), GL_DYNAMIC_DRAW);
+        std::vector<Renderable> renderables(3 * faces.size());
+        for (int i = 0; i < faces.size(); i++) {
+            Face* face = faces[i];
+            for (int j = 0; j < 3; j++) {
+                Vertex* vertex = face->vertices[j];
+                Node* node = vertex->node;
+                int index = 3 * i + j;
+                renderables[index].x = node->x;
+                renderables[index].n = node->n;
+                renderables[index].u = vertex->u;
+            }
         }
-    } else if (!rebind) {
-        CUDA_CHECK(cudaGraphicsMapResources(1, &vboCuda));
-        Vertex* vertexArray;
-        size_t sizeVertexArray;
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&vertexArray), &sizeVertexArray, vboCuda));
-        updateRenderingDataVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu), vertexArray);
-        CUDA_CHECK_LAST();
 
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &vboCuda));
-    } else {
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, verticesGpu.size() * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, 2 * edgesGpu.size() * sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, faceEbo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3 * facesGpu.size() * sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, renderables.size() * sizeof(Renderable), renderables.data(), GL_DYNAMIC_DRAW);
+    } else {
+        if (rebind) {
+            glBindBuffer(GL_ARRAY_BUFFER, vbo);
+            glBufferData(GL_ARRAY_BUFFER, 3 * facesGpu.size() * sizeof(Renderable), nullptr, GL_DYNAMIC_DRAW);
 
-        CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&vboCuda, vbo, cudaGraphicsRegisterFlagsWriteDiscard));
-        CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&edgeEboCuda, edgeEbo, cudaGraphicsRegisterFlagsWriteDiscard));
-        CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&faceEboCuda, faceEbo, cudaGraphicsRegisterFlagsWriteDiscard));
+            CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&vboCuda, vbo, cudaGraphicsRegisterFlagsWriteDiscard));
+        }
 
         CUDA_CHECK(cudaGraphicsMapResources(1, &vboCuda));
-        Vertex* vertexArray;
-        size_t sizeVertexArray;
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&vertexArray), &sizeVertexArray, vboCuda));
-        updateRenderingDataVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu), vertexArray);
-        CUDA_CHECK_LAST();
-
-        CUDA_CHECK(cudaGraphicsMapResources(1, &edgeEboCuda));
-        unsigned int* edgeIndices;
-        size_t sizeEdgeIndices;
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&edgeIndices), &sizeEdgeIndices, edgeEboCuda));
-        updateRenderingDataEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu), edgeIndices);
-        CUDA_CHECK_LAST();
-
-        CUDA_CHECK(cudaGraphicsMapResources(1, &faceEboCuda));
-        unsigned int* faceIndices;
-        size_t sizeFaceIndices;
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&faceIndices), &sizeFaceIndices, faceEboCuda));
-        updateRenderingDataFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), faceIndices);
+        Renderable* renderables;
+        size_t nRenderanles;
+        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&renderables), &nRenderanles, vboCuda));
+        updateRenderingDataGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), renderables);
         CUDA_CHECK_LAST();
 
         CUDA_CHECK(cudaGraphicsUnmapResources(1, &vboCuda));
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &edgeEboCuda));
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &faceEboCuda));
     }
 }
 
 void Mesh::bind() {
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-    glGenVertexArrays(1, &edgeVao);
-    glGenBuffers(1, &edgeEbo);
-    glBindVertexArray(edgeVao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, x)));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Renderable), reinterpret_cast<void*>(offsetof(Renderable, x)));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, n)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Renderable), reinterpret_cast<void*>(offsetof(Renderable, n)));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, u)));
-
-    glGenVertexArrays(1, &faceVao);
-    glGenBuffers(1, &faceEbo);
-    glBindVertexArray(faceVao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, faceEbo);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, n)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, u)));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Renderable), reinterpret_cast<void*>(offsetof(Renderable, u)));
 
     updateRenderingData(true);
 }
 
-void Mesh::renderEdges() const {
-    glBindVertexArray(edgeVao);
-    glDrawElements(GL_LINES, 2 * (!gpu ? edges.size() : edgesGpu.size()), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}
-
-void Mesh::renderFaces() const {
-    glBindVertexArray(faceVao);
-    glDrawElements(GL_TRIANGLES, 3 * (!gpu ? faces.size() : facesGpu.size()), GL_UNSIGNED_INT, 0);
+void Mesh::render() const {
+    glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 3 * (!gpu ? faces.size() : facesGpu.size()));
     glBindVertexArray(0);
 }
 
 void Mesh::readDataFromFile(const std::string& path) {
     std::ifstream fin(path);
-    for (Vertex* vertex : vertices)
-        fin >> vertex->x0(0) >> vertex->x0(1) >> vertex->x0(2) >> vertex->x(0) >> vertex->x(1) >> vertex->x(2) >> vertex->v(0) >> vertex->v(1) >> vertex->v(2);
+    for (Node* node : nodes)
+        fin >> node->x0(0) >> node->x0(1) >> node->x0(2) >> node->x(0) >> node->x(1) >> node->x(2) >> node->v(0) >> node->v(1) >> node->v(2);
     fin.close();
 }
 
 void Mesh::writeDataToFile(const std::string& path) {
     std::ofstream fout(path);
-    for (const Vertex* vertex : vertices) {
-        fout << "vt " << vertex->u(0) << " " << vertex->u(1) << std::endl;
-        fout << "v " << vertex->x(0) << " " << vertex->x(1) << " " << vertex->x(2) << " " << std::endl;
-        fout << "nv " << vertex->v(0) << " " << vertex->v(1) << " " << vertex->v(2) << " " << std::endl;
+    for (const Node* node : nodes) {
+        fout << "v " << node->x(0) << " " << node->x(1) << " " << node->x(2) << " " << std::endl;
+        fout << "nv " << node->v(0) << " " << node->v(1) << " " << node->v(2) << " " << std::endl;
     }
+    for (const Vertex* vertex : vertices)
+        fout << "vt " << vertex->u(0) << " " << vertex->u(1) << std::endl;
     for (const Face* face : faces) {
         fout << "f";
         for (int i = 0; i < 3; i++) {
-            int index = face->getVertex(i)->index + 1;
-            fout << " " << index << "/" << index;
+            Vertex* vertex = face->vertices[i];
+            int xIndex = vertex->node->index + 1;
+            int uIndex = vertex->index + 1;
+            fout << " " << xIndex << "/" << uIndex;
         }
         fout << std::endl;
     }
@@ -456,8 +461,7 @@ void Mesh::writeDataToFile(const std::string& path) {
 void Mesh::printDebugInfo(int selectedFace) {
     if (!gpu) {
         Face* face = faces[selectedFace];
-        std::cout << "V=[" << face->getVertex(0)->index << ", " << face->getVertex(1)->index << ", " << face->getVertex(2)->index << "]" << std::endl;
-    } else {
+        std::cout << "Nodes=[" << face->vertices[0]->node->index << ", " << face->vertices[1]->node->index << ", " << face->vertices[2]->node->index << "]" << std::endl;
+    } else
         printDebugInfoGpu<<<1, 1>>>(pointer(facesGpu), selectedFace);
-    }
 }

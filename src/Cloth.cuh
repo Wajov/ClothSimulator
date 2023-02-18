@@ -61,16 +61,17 @@ private:
     Matrix2x2f maxTensor(const Matrix2x2f M[]) const;
     Matrix2x2f faceSizing(const Face* face, const std::vector<Plane>& planes) const;
     float edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const;
+    float edgeMetric(const Edge* edge) const;
     bool shouldFlip(const Edge* edge) const;
     std::vector<Edge*> findEdgesToFlip(const std::vector<Edge*>& edges) const;
     std::vector<Edge*> independentEdges(const std::vector<Edge*>& edges) const;
-    bool flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Vertex*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const;
-    void flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Vertex*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const;
+    bool flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const;
+    void flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const;
     std::vector<Edge*> findEdgesToSplit() const;
     bool splitSomeEdges() const;
     void splitEdges();
-    bool shouldCollapse(std::unordered_map<Vertex*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces, const Edge* edge, bool reverse) const;
-    bool collapseSomeEdges(std::unordered_map<Vertex*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
+    bool shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces, const Edge* edge, int side) const;
+    bool collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
     void collapseEdges() const;
 
 public:
@@ -80,9 +81,8 @@ public:
     void readDataFromFile(const std::string& path);
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
-    void updateIndices();
-    void updateGeometries();
-    void updateVelocities(float dt);
+    void updateStructures();
+    void updateGeometries(float dt);
     void updateRenderingData(bool rebind);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const;

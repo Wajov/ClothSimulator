@@ -39,6 +39,11 @@ public:
         data[3] = w;
     };
 
+    __host__ __device__ Vector(const Vector<T, n>& v) {
+        for (int i = 0; i < n; i++)
+            data[i] = v.data[i];
+    }
+
     template<int m> __host__ __device__ Vector(const Vector<T, m>& v0, const Vector<T, m>& v1, const Vector<T, m>& v2) {
         static_assert(n == 3 * m);
         for (int i = 0; i < m; i++) {

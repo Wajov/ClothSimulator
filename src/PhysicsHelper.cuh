@@ -6,29 +6,30 @@
 
 #include "MathHelper.cuh"
 #include "Vector.cuh"
+#include "Node.cuh"
 #include "Vertex.cuh"
 #include "Edge.cuh"
 #include "Face.cuh"
 #include "Wind.cuh"
 
-__global__ static void addMass(int nVertices, const Vertex* const* vertices, PairIndex* aIndices, float* aValues) {
+__global__ static void addMass(int nNodes, const Node* const* nodes, PairIndex* aIndices, float* aValues) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads) {
-        float m = vertices[i]->m;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        float mass = nodes[i]->mass;
         for (int j = 0; j < 3; j++) {
             int index = 3 * i + j;
             aIndices[index] = thrust::make_pair(index, index);
-            aValues[index] = m;
+            aValues[index] = mass;
         }
     }
 }
 
-__global__ static void addGravity(int nVertices, const Vertex* const* vertices, float dt, const Vector3f gravity, int* bIndices, float* bValues) {
+__global__ static void addGravity(int nNodes, const Node* const* nodes, float dt, const Vector3f gravity, int* bIndices, float* bValues) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads) {
-        Vector3f g = dt * vertices[i]->m * gravity;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Vector3f g = dt * nodes[i]->mass * gravity;
         for (int j = 0; j < 3; j++) {
             int index = 3 * i + j;
             bIndices[index] = index;
@@ -42,19 +43,19 @@ __global__ static void addWindForces(int nFaces, const Face* const* faces, float
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
         const Face* face = faces[i];
-        float area = face->getArea();
-        Vector3f normal = face->getNormal();
-        Vector3f average = (face->getVertex(0)->v + face->getVertex(1)->v + face->getVertex(2)->v) / 3.0f;
+        Vector3f n = face->n;
+        float area = face->area;
+        Vector3f average = (face->vertices[0]->node->v + face->vertices[1]->node->v + face->vertices[2]->node->v) / 3.0f;
         Vector3f relative = wind->getVelocity() - average;
-        float vn = normal.dot(relative);
-        Vector3f vt = relative - vn * normal;
-        Vector3f force = area * (wind->getDensity() * abs(vn) * vn * normal + wind->getDrag() * vt) / 3.0f;
+        float vn = n.dot(relative);
+        Vector3f vt = relative - vn * n;
+        Vector3f force = area * (wind->getDensity() * abs(vn) * vn * n + wind->getDrag() * vt) / 3.0f;
         Vector3f f = dt * force;
         for (int j = 0; j < 3; j++) {
-            int vertexIndex = face->getVertex(j)->index;
+            int nodeIndex = face->vertices[j]->node->index;
             for (int k = 0; k < 3; k++) {
                 int index = 9 * i + 3 * j + k;
-                bIndices[index] = 3 * vertexIndex + k;
+                bIndices[index] = 3 * nodeIndex + k;
                 bValues[index] = f(k);
             }
         }
@@ -62,10 +63,10 @@ __global__ static void addWindForces(int nFaces, const Face* const* faces, float
 }
 
 __host__ __device__ static void stretchingForce(const Face* face, const Material* material, Vector9f& f, Matrix9x9f& J) {
-    Matrix3x2f F = face->derivative(face->getVertex(0)->x, face->getVertex(1)->x, face->getVertex(2)->x);
+    Matrix3x2f F = face->derivative(face->vertices[0]->node->x, face->vertices[1]->node->x, face->vertices[2]->node->x);
     Matrix2x2f G = 0.5f * (F.transpose() * F - Matrix2x2f(1.0f));
 
-    Matrix2x2f Y = face->getInverse();
+    Matrix2x2f Y = face->inverse;
     Matrix2x3f D(-Y.row(0) - Y.row(1), Y.row(0), Y.row(1));
     Matrix3x9f Du(Matrix3x3f(D(0, 0)), Matrix3x3f(D(0, 1)), Matrix3x3f(D(0, 2)));
     Matrix3x9f Dv(Matrix3x3f(D(1, 0)), Matrix3x3f(D(1, 1)), Matrix3x3f(D(1, 2)));
@@ -85,7 +86,7 @@ __host__ __device__ static void stretchingForce(const Face* face, const Material
                     + k(1) * (fuu.outer(fvv) + max(G(0, 0), 0.0f) * Dv.transpose() * Dv + fvv.outer(fuu) + max(G(1, 1), 0.0f) * Du.transpose() * Du)
                     + 2.0f * k(3) * fuv.outer(fuv);
 
-    float area = face->getArea();
+    float area = face->area;
     f = -area * grad;
     J = -area * hess;
 }
@@ -95,10 +96,10 @@ __global__ static void addStretchingForces(int nFaces, const Face* const* faces,
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
         const Face* face = faces[i];
-        Vertex* vertex0 = face->getVertex(0);
-        Vertex* vertex1 = face->getVertex(1);
-        Vertex* vertex2 = face->getVertex(2);
-        Vector9f v(vertex0->v, vertex1->v, vertex2->v);
+        Node* node0 = face->vertices[0]->node;
+        Node* node1 = face->vertices[1]->node;
+        Node* node2 = face->vertices[2]->node;
+        Vector9f v(node0->v, node1->v, node2->v);
 
         Vector9f f;
         Matrix9x9f J;
@@ -106,7 +107,7 @@ __global__ static void addStretchingForces(int nFaces, const Face* const* faces,
         
         f = dt * (f + dt * J * v);
         J = -dt * dt * J;
-        Vector3i indices(vertex0->index, vertex1->index, vertex2->index);
+        Vector3i indices(node0->index, node1->index, node2->index);
         
         for (int j = 0; j < 3; j++) {
             int x = indices(j);
@@ -146,17 +147,17 @@ __host__ __device__ static Vector2f barycentricWeights(const Vector3f& x, const 
 }
 
 __host__ __device__ static void bendingForce(const Edge* edge, const Material* material, Vector12f& f, Matrix12x12f& J) {
-    Vector3f x0 = edge->getVertex(0)->x;
-    Vector3f x1 = edge->getVertex(1)->x;
-    Vector3f x2 = edge->getOpposite(0)->x;
-    Vector3f x3 = edge->getOpposite(1)->x;
-    Face* adjacent0 = edge->getAdjacent(0);
-    Face* adjacent1 = edge->getAdjacent(1);
-    Vector3f n0 = adjacent0->getNormal();
-    Vector3f n1 = adjacent1->getNormal();
-    float length = edge->getLength();
-    float angle = edge->getAngle();
-    float area = adjacent0->getArea() + adjacent1->getArea();
+    Vector3f x0 = edge->nodes[0]->x;
+    Vector3f x1 = edge->nodes[1]->x;
+    Vector3f x2 = edge->opposites[0]->node->x;
+    Vector3f x3 = edge->opposites[1]->node->x;
+    Face* adjacent0 = edge->adjacents[0];
+    Face* adjacent1 = edge->adjacents[1];
+    Vector3f n0 = adjacent0->n;
+    Vector3f n1 = adjacent1->n;
+    float length = edge->length;
+    float angle = edge->angle;
+    float area = adjacent0->area + adjacent1->area;
 
     float h0 = distance(x2, x0, x1);
     float h1 = distance(x3, x0, x1);
@@ -165,8 +166,9 @@ __host__ __device__ static void bendingForce(const Edge* edge, const Material* m
 
     Vector12f dtheta(-w0(0) * n0 / h0 - w1(0) * n1 / h1, -w0(1) * n0 / h0 - w1(1) * n1 / h1, n0 / h0, n1 / h1);
 
-    float k = material->bendingStiffness(length, angle, area, edge->getVertex(1)->u - edge->getVertex(0)->u);
-    float coefficient = -0.25f * k * sqr(length) / area;
+    float k0 = material->bendingStiffness(length, angle, area, edge->vertices[0][1]->u - edge->vertices[0][0]->u);
+    float k1 = material->bendingStiffness(length, angle, area, edge->vertices[1][1]->u - edge->vertices[1][0]->u);
+    float coefficient = -0.25f * min(k0, k1) * sqr(length) / area;
 
     f = coefficient * angle * dtheta;
     J = coefficient * dtheta.outer(dtheta);
@@ -177,23 +179,25 @@ __global__ static void addBendingForces(int nEdges, const Edge* const* edges, fl
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
         const Edge* edge = edges[i];
-        Vertex* vertex0 = edge->getVertex(0);
-        Vertex* vertex1 = edge->getVertex(1);
-        Vertex* vertex2 = edge->getOpposite(0);
-        Vertex* vertex3 = edge->getOpposite(1);
-
         Vector12f f;
         Matrix12x12f J;
-        if (!edge->isBoundary()) {
-            Vector12f v(vertex0->v, vertex1->v, vertex2->v, vertex3->v);
-            
-            bendingForce(edge, material, f, J);
+        Vector4i indices;
 
+        if (!edge->isBoundary()) {
+            Node* node0 = edge->nodes[0];
+            Node* node1 = edge->nodes[1];
+            Node* node2 = edge->opposites[0]->node;
+            Node* node3 = edge->opposites[1]->node;
+            Vector12f v(node0->v, node1->v, node2->v, node3->v);
+
+            bendingForce(edge, material, f, J);
             f = dt * (f + dt * J * v);
             J = -dt * dt * J;
+            indices(0) = node0->index;
+            indices(1) = node1->index;
+            indices(2) = node2->index;
+            indices(3) = node3->index;
         }
-
-        Vector4i indices(vertex0->index, vertex1->index, vertex2 != nullptr ? vertex2->index : 0, vertex3 != nullptr ? vertex3->index : 0);
         
         for (int j = 0; j < 4; j++) {
             int x = indices(j);
@@ -224,15 +228,15 @@ __global__ static void addHandleForcesGpu(int nHandles, const Handle* const* han
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nHandles; i += nThreads) {
         const Handle* handle = handles[i];
-        Vertex* vertex = handle->getVertex();
+        Node* node = handle->getNode();
         Vector3f position = handle->getPosition();
-        int vertexIndex = vertex->index;
-        Vector3f f = dt * ((position - vertex->x) - dt * vertex->v) * stiffness;
+        int nodeIndex = node->index;
+        Vector3f f = dt * ((position - node->x) - dt * node->v) * stiffness;
         for (int j = 0; j < 3; j++) {
             int index = 3 * i + j;
-            aIndices[index] = thrust::make_pair(3 * vertexIndex + j, 3 * vertexIndex + j);
+            aIndices[index] = thrust::make_pair(3 * nodeIndex + j, 3 * nodeIndex + j);
             aValues[index] = dt * dt * stiffness;
-            bIndices[index] = 3 * vertexIndex + j;
+            bIndices[index] = 3 * nodeIndex + j;
             bValues[index] = f(j);
         }
     }
@@ -247,20 +251,21 @@ __global__ static void splitIndices(int nIndices, const PairIndex* indices, int*
     }
 }
 
-__global__ static void setupVector(int nIndices, const int* indices, const float* values, float* v) {
+__global__ static void setVector(int nIndices, const int* indices, const float* values, float* v) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads)
         v[indices[i]] = values[i];
 }
 
-__global__ static void updateVertices(int nVertices, float dt, const float* dv, Vertex** vertices) {
+__global__ static void updateNodes(int nNodes, float dt, const float* dv, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads) {
-        vertices[i]->x0 = vertices[i]->x;
-        vertices[i]->v += Vector3f(dv[3 * i], dv[3 * i + 1], dv[3 * i + 2]);
-        vertices[i]->x += vertices[i]->v * dt;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Node* node = nodes[i];
+        node->x0 = node->x;
+        node->v += Vector3f(dv[3 * i], dv[3 * i + 1], dv[3 * i + 2]);
+        node->x += node->v * dt;
     }
 }
 

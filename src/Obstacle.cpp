@@ -33,5 +33,5 @@ void Obstacle::render(const Matrix4x4f& model, const Matrix4x4f& view, const Mat
     shader->setVec3("cameraPosition", cameraPosition);
     shader->setVec3("lightDirection", lightDirection);
     shader->setInt("selectedFace", -1);
-    mesh->renderFaces();
+    mesh->render();
 }

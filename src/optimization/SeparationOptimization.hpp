@@ -3,16 +3,18 @@
 
 #include <vector>
 
+#include "MathHelper.cuh"
 #include "Optimization.hpp"
+#include "Node.cuh"
 #include "Intersection.hpp"
 
 class SeparationOptimization : public Optimization {
 private:
     double invArea, thickness;
-    std::vector<Vertex*> vertices;
+    std::vector<Node*> nodes;
     std::vector<Intersection> intersections;
     std::vector<std::vector<int>> indices;
-    int addVertex(const Vertex* vertex);
+    int addNode(const Node* node);
 
 public:
     SeparationOptimization(const std::vector<Intersection>& intersections, double thickness);

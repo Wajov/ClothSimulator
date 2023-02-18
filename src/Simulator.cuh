@@ -54,7 +54,7 @@ private:
     void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback);
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;
-    ImpactZone* findImpactZone(const Vertex* vertex, std::vector<ImpactZone*>& zones) const;
+    ImpactZone* findImpactZone(const Node* node, std::vector<ImpactZone*>& zones) const;
     void addImpacts(const std::vector<Impact>& impacts, std::vector<ImpactZone*>& zones, bool deformObstacles) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<Intersection>& intersections) const;
     void resetObstacles();
@@ -62,9 +62,8 @@ private:
     void collisionStep();
     void remeshingStep();
     void separationStep(const std::vector<Mesh*>& oldMeshes);
-    void updateIndices();
+    void updateStructures();
     void updateGeometries();
-    void updateVelocities();
     void updateRenderingData(bool rebind);
 
 public:

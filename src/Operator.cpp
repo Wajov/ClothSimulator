@@ -9,11 +9,13 @@ void Operator::updateActive(const std::vector<Face*>& activeFaces) {
     for (int i = 0; i < activeFaces.size(); i++) {
         Face* face = activeFaces[i];
         for (int j = 0; j < 3; j++)
-            edges[3 * i + j] = face->getEdge(j);
+
+
+            edges[3 * i + j] = face->edges[j];
     }
     
     std::sort(edges.begin(), edges.end(), [](const Edge* edge0, const Edge* edge1) {
-        return edge0->getVertex(0)->index < edge1->getVertex(0)->index || edge0->getVertex(0)->index == edge1->getVertex(0)->index && edge0->getVertex(1)->index < edge1->getVertex(1)->index;
+        return edge0->nodes[0]->index < edge1->nodes[0]->index || edge0->nodes[0]->index == edge1->nodes[0]->index && edge0->nodes[1]->index < edge1->nodes[1]->index;
     });
     edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
     activeEdges.insert(activeEdges.end(), edges.begin(), edges.end());
@@ -24,31 +26,31 @@ bool Operator::empty() const {
 }
 
 void Operator::flip(const Edge* edge, const Material* material) {
-    Vertex* vertex0 = edge->getVertex(0);
-    Vertex* vertex1 = edge->getVertex(1);
-    Vertex* vertex2 = edge->getOpposite(0);
-    Vertex* vertex3 = edge->getOpposite(1);
+    Vertex* vertex0 = edge->vertices[0][0];
+    Vertex* vertex1 = edge->vertices[1][1];
+    Vertex* vertex2 = edge->opposites[0];
+    Vertex* vertex3 = edge->opposites[1];
 
-    Face* face0 = edge->getAdjacent(0);
-    Face* face1 = edge->getAdjacent(1);
+    Face* face0 = edge->adjacents[0];
+    Face* face1 = edge->adjacents[1];
 
     Edge* edge0 = face0->findEdge(vertex1, vertex2);
     Edge* edge1 = face0->findEdge(vertex2, vertex0);
     Edge* edge2 = face1->findEdge(vertex0, vertex3);
     Edge* edge3 = face1->findEdge(vertex3, vertex1);
 
-    Edge* newEdge = new Edge(vertex2, vertex3);
+    Edge* newEdge = new Edge(vertex2->node, vertex3->node);
     Face* newFace0 = new Face(vertex0, vertex3, vertex2, material);
     Face* newFace1 = new Face(vertex1, vertex2, vertex3, material);
-    newEdge->setOppositeAndAdjacent(vertex0, newFace0);
-    newEdge->setOppositeAndAdjacent(vertex1, newFace1);
+    newEdge->initialize(vertex0, newFace0);
+    newEdge->initialize(vertex1, newFace1);
     newFace0->setEdges(edge2, newEdge, edge1);
     newFace1->setEdges(edge0, newEdge, edge3);
 
-    edge0->setOppositeAndAdjacent(vertex3, newFace1);
-    edge1->setOppositeAndAdjacent(vertex3, newFace0);
-    edge2->setOppositeAndAdjacent(vertex2, newFace0);
-    edge3->setOppositeAndAdjacent(vertex2, newFace1);
+    edge0->initialize(vertex3, newFace1);
+    edge1->initialize(vertex3, newFace0);
+    edge2->initialize(vertex2, newFace0);
+    edge3->initialize(vertex2, newFace1);
 
     addedEdges.push_back(newEdge);
     removedEdges.push_back(const_cast<Edge*>(edge));
@@ -61,154 +63,155 @@ void Operator::flip(const Edge* edge, const Material* material) {
 }
 
 void Operator::split(const Edge* edge, const Material* material, int index) {
-    Vertex* vertex0 = edge->getVertex(0);
-    Vertex* vertex1 = edge->getVertex(1);
-    Vertex* vertex2 = edge->getOpposite(0);
-    Vertex* vertex3 = edge->getOpposite(1);
+    Node* node0 = edge->nodes[0];
+    Node* node1 = edge->nodes[1];
+
+    Node* newNode = new Node(0.5f * (node0->x + node1->x), node0->isFree && node1->isFree);
+    newNode->index = index;
+    newNode->x0 = 0.5f * (node0->x0 + node1->x0);
+    Edge* newEdges[2];
+    newEdges[0] = new Edge(newNode, node0);
+    newEdges[1] = new Edge(newNode, node1);
     
-    Vertex* newVertex = new Vertex(0.5f * (vertex0->x + vertex1->x), true);
-    newVertex->index = index;
-    newVertex->u = 0.5f * (vertex0->u + vertex1->u);
-    newVertex->v = 0.5f * (vertex0->v + vertex1->v);
-    newVertex->sizing = 0.5f * (vertex0->sizing + vertex1->sizing);
-    Edge* newEdge0 = new Edge(newVertex, vertex0);
-    Edge* newEdge1 = new Edge(newVertex, vertex1);
-    
-    addedVertices.push_back(newVertex);
-    addedEdges.push_back(newEdge0);
-    addedEdges.push_back(newEdge1);
+    addedNodes.push_back(newNode);
+    addedEdges.push_back(newEdges[0]);
+    addedEdges.push_back(newEdges[1]);
     removedEdges.push_back(const_cast<Edge*>(edge));
 
-    if (vertex2 != nullptr) {
-        Face* face0 = edge->getAdjacent(0);
-        Edge* edge0 = face0->findEdge(vertex1, vertex2);
-        Edge* edge1 = face0->findEdge(vertex2, vertex0);
-        
-        Edge* newEdge2 = new Edge(newVertex, vertex2);
-        Face* newFace0 = new Face(vertex0, newVertex, vertex2, material);
-        Face* newFace1 = new Face(vertex2, newVertex, vertex1, material);
-        newEdge0->setOppositeAndAdjacent(vertex2, newFace0);
-        newEdge1->setOppositeAndAdjacent(vertex2, newFace1);
-        newEdge2->setOppositeAndAdjacent(vertex0, newFace0);
-        newEdge2->setOppositeAndAdjacent(vertex1, newFace1);
-        newFace0->setEdges(newEdge0, newEdge2, edge1);
-        newFace1->setEdges(newEdge2, newEdge1, edge0);
-        edge0->setOppositeAndAdjacent(newVertex, newFace1);
-        edge1->setOppositeAndAdjacent(newVertex, newFace0);
-        
-        addedEdges.push_back(newEdge2);
-        addedFaces.push_back(newFace0);
-        addedFaces.push_back(newFace1);
-        removedFaces.push_back(face0);
+    Vertex* newVertices[2];
+    if (edge->isSeam()) {
+        newVertices[0] = new Vertex(0.5f * (edge->vertices[0][0]->u + edge->vertices[0][1]->u));
+        newVertices[0]->sizing = 0.5f * (edge->vertices[0][0]->sizing + edge->vertices[0][1]->sizing);
+        newVertices[1] = new Vertex(0.5f * (edge->vertices[1][0]->u + edge->vertices[1][1]->u));
+        newVertices[1]->sizing = 0.5f * (edge->vertices[1][0]->sizing + edge->vertices[1][1]->sizing);
+        newVertices[0]->node = newVertices[1]->node = newNode;
+        addedVertices.push_back(newVertices[0]);
+        addedVertices.push_back(newVertices[1]);
+    } else {
+        int i = edge->opposites[0] != nullptr ? 0 : 1;
+        newVertices[0] = newVertices[1] = new Vertex(0.5f * (edge->vertices[i][0]->u + edge->vertices[i][1]->u));
+        newVertices[0]->sizing = 0.5f * (edge->vertices[i][0]->sizing + edge->vertices[i][1]->sizing);
+        newVertices[0]->node = newNode;
+        addedVertices.push_back(newVertices[0]);
     }
 
-    if (vertex3 != nullptr) {
-        Face* face1 = edge->getAdjacent(1);
-        Edge* edge2 = face1->findEdge(vertex0, vertex3);
-        Edge* edge3 = face1->findEdge(vertex3, vertex1);
+    for (int i = 0; i < 2; i++)
+        if (edge->opposites[i] != nullptr) {
+            Vertex* vertex0 = edge->vertices[i][i];
+            Vertex* vertex1 = edge->vertices[i][1 - i];
+            Vertex* vertex2 = edge->opposites[i];
 
-        Edge* newEdge3 = new Edge(newVertex, vertex3);
-        Face* newFace2 = new Face(vertex0, vertex3, newVertex, material);
-        Face* newFace3 = new Face(vertex3, vertex1, newVertex, material);
-        newEdge0->setOppositeAndAdjacent(vertex3, newFace2);
-        newEdge1->setOppositeAndAdjacent(vertex3, newFace3);
-        newEdge3->setOppositeAndAdjacent(vertex0, newFace2);
-        newEdge3->setOppositeAndAdjacent(vertex1, newFace3);
-        newFace2->setEdges(edge2, newEdge3, newEdge0);
-        newFace3->setEdges(edge3, newEdge1, newEdge3);
-        edge2->setOppositeAndAdjacent(newVertex, newFace2);
-        edge3->setOppositeAndAdjacent(newVertex, newFace3);
-
-        addedEdges.push_back(newEdge3);
-        addedFaces.push_back(newFace2);
-        addedFaces.push_back(newFace3);
-        removedFaces.push_back(face1);
-    }
+            Face* face = edge->adjacents[i];
+            Edge* edge0 = face->findEdge(vertex1, vertex2);
+            Edge* edge1 = face->findEdge(vertex2, vertex0);
+            
+            Vertex* newVertex = newVertices[i];
+            Edge* newEdge0 = newEdges[i];
+            Edge* newEdge1 = newEdges[1 - i];
+            Edge* newEdge2 = new Edge(newNode, vertex2->node);
+            Face* newFace0 = new Face(vertex0, newVertex, vertex2, material);
+            Face* newFace1 = new Face(vertex2, newVertex, vertex1, material);
+            
+            newEdge0->initialize(vertex2, newFace0);
+            newEdge1->initialize(vertex2, newFace1);
+            newEdge2->initialize(vertex0, newFace0);
+            newEdge2->initialize(vertex1, newFace1);
+            newFace0->setEdges(newEdge0, newEdge2, edge1);
+            newFace1->setEdges(newEdge2, newEdge1, edge0);
+            edge0->initialize(newVertex, newFace1);
+            edge1->initialize(newVertex, newFace0);
+            
+            addedEdges.push_back(newEdge2);
+            addedFaces.push_back(newFace0);
+            addedFaces.push_back(newFace1);
+            removedFaces.push_back(face);
+        }
 
     updateActive(addedFaces);
 }
 
-void Operator::collapse(const Edge* edge, bool reverse, const Material* material, std::unordered_map<Vertex*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {
-    Vertex* vertex0 = edge->getVertex(0);
-    Vertex* vertex1 = edge->getVertex(1);
-    Vertex* vertex2 = edge->getOpposite(0);
-    Vertex* vertex3 = edge->getOpposite(1);
+void Operator::collapse(const Edge* edge, int side, const Material* material, std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {
+    Node* node0 = edge->nodes[side];
+    Node* node1 = edge->nodes[1 - side];
 
-    Face* face0 = edge->getAdjacent(0);
-    Face* face1 = edge->getAdjacent(1);
-    
-    if (reverse) {
-        mySwap(vertex0, vertex1);
-        mySwap(vertex2, vertex3);
-        mySwap(face0, face1);
-    }
-
-    removedVertices.push_back(vertex0);
+    removedNodes.push_back(node0);
     removedEdges.push_back(const_cast<Edge*>(edge));
 
-    if (vertex2 != nullptr) {
-        Edge* edge0 = face0->findEdge(vertex1, vertex2);
-        Edge* edge1 = face0->findEdge(vertex2, vertex0);
+    for (int i = 0; i < 2; i++)
+        if (edge->opposites[i] != nullptr) {
+            Vertex* vertex0 = edge->vertices[i][side];
+            Vertex* vertex1 = edge->vertices[i][1 - side];
+            Vertex* vertex2 = edge->opposites[i];
 
-        if (!edge1->isBoundary()) {
-            Vertex* v1 = edge1->getOpposite(0);
-            Face* f1 = edge1->getAdjacent(0);
-            if (f1 == face0) {
-                v1 = edge1->getOpposite(1);
-                f1 = edge1->getAdjacent(1);
-            }
-            
-            edge0->replaceOpposite(vertex0, v1);
-            edge0->replaceAdjacent(face0, f1);
-            f1->replaceEdge(edge1, edge0);
-        }
+            Face* face = edge->adjacents[i];
+            Edge* edge0 = face->findEdge(vertex1, vertex2);
+            Edge* edge1 = face->findEdge(vertex2, vertex0);
 
-        removedEdges.push_back(edge1);
-        removedFaces.push_back(face0);
-    }
+            if (!edge1->isBoundary()) {
+                Vertex* v = edge1->opposites[0];
+                Face* f = edge1->adjacents[0];
+                if (f == face) {
+                    v = edge1->opposites[1];
+                    f = edge1->adjacents[1];
+                }
 
-    if (vertex3 != nullptr) {
-        Edge* edge2 = face1->findEdge(vertex0, vertex3);
-        Edge* edge3 = face1->findEdge(vertex3, vertex1);
-
-        if (!edge2->isBoundary()) {
-            Vertex* v2 = edge2->getOpposite(0);
-            Face* f2 = edge2->getAdjacent(0);
-            if (f2 == face1) {
-                v2 = edge2->getOpposite(1);
-                f2 = edge2->getAdjacent(1);
+                edge0->replaceOpposite(vertex0, v);
+                edge0->replaceAdjacent(face, f);
+                f->replaceEdge(edge1, edge0);
             }
 
-            edge3->replaceOpposite(vertex0, v2);
-            edge3->replaceAdjacent(face1, f2);
-            f2->replaceEdge(edge2, edge3);
+            removedEdges.push_back(edge1);
+            removedFaces.push_back(face);
         }
 
-        removedEdges.push_back(edge2);
-        removedFaces.push_back(face1);
-    }
-
-    std::vector<Edge*>& edges0 = adjacentEdges[vertex0];
-    std::vector<Edge*>& edges1 = adjacentEdges[vertex1];
-    for (Edge* edge : edges0)
-        if (!edge->contain(vertex1)) {
-            edge->replaceVertex(vertex0, vertex1);
-            edges1.push_back(edge);
+    std::vector<Edge*>& adjacentEdges0 = adjacentEdges[node0];
+    std::vector<Edge*>& adjacentEdges1 = adjacentEdges[node1];
+    for (Edge* adjacentEdge : adjacentEdges0)
+        if (adjacentEdge != edge) {
+            adjacentEdge->replaceNode(node0, node1);
+            adjacentEdge->replaceVertex(edge->vertices[0][side], edge->vertices[0][1 - side]);
+            adjacentEdge->replaceVertex(edge->vertices[1][side], edge->vertices[1][1 - side]);
+            adjacentEdges1.push_back(adjacentEdge);
         }
-    adjacentEdges.erase(vertex0);
-    
-    std::vector<Face*>& faces0 = adjacentFaces[vertex0];
-    std::vector<Face*>& faces1 = adjacentFaces[vertex1];
+    adjacentEdges.erase(node0);
+
     std::vector<Face*> activeFaces;
-    for (Face* face : faces0)
-        if (!face->contain(edge)) {
-            face->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
-            face->replaceVertex(vertex0, vertex1);
-            face->initialize(material);
-            faces1.push_back(face);
-            activeFaces.push_back(face);
+    if (edge->isSeam())
+        for (int i = 0; i < 2; i++) {
+            Vertex* vertex0 = edge->vertices[i][side];
+            Vertex* vertex1 = edge->vertices[i][1 - side];
+            removedVertices.push_back(vertex0);
+
+            std::vector<Face*>& adjacentFaces0 = adjacentFaces[vertex0];
+            std::vector<Face*>& adjacentFaces1 = adjacentFaces[vertex1];
+            for (Face* adjacentFace : adjacentFaces0)
+                if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
+                    adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
+                    adjacentFace->replaceVertex(vertex0, vertex1);
+                    adjacentFace->initialize(material);
+                    adjacentFaces1.push_back(adjacentFace);
+                    activeFaces.push_back(adjacentFace);
+                }
+            adjacentFaces.erase(vertex0);
         }
-    adjacentFaces.erase(vertex0);
+    else {
+        int index = edge->opposites[0] != nullptr ? 0 : 1;
+        Vertex* vertex0 = edge->vertices[index][side];
+        Vertex* vertex1 = edge->vertices[index][1 - side];
+        removedVertices.push_back(vertex0);
+        
+        std::vector<Face*>& adjacentFaces0 = adjacentFaces[vertex0];
+        std::vector<Face*>& adjacentFaces1 = adjacentFaces[vertex1];
+        for (Face* adjacentFace : adjacentFaces0)
+            if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
+                adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
+                adjacentFace->replaceVertex(vertex0, vertex1);
+                adjacentFace->initialize(material);
+                adjacentFaces1.push_back(adjacentFace);
+                activeFaces.push_back(adjacentFace);
+            }
+        adjacentFaces.erase(vertex0);
+    }
 
     updateActive(activeFaces);
 }
@@ -227,22 +230,22 @@ void Operator::setNull(std::vector<Edge*>& edges) const {
     }
 }
 
-void Operator::updateAdjacents(std::unordered_map<Vertex*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
+void Operator::updateAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
     for (const Edge* edge : removedEdges)
         for (int i = 0; i < 2; i++) {
-            std::vector<Edge*>& edges = adjacentEdges[edge->getVertex(i)];
+            std::vector<Edge*>& edges = adjacentEdges[edge->nodes[i]];
             edges.erase(std::remove(edges.begin(), edges.end(), edge), edges.end());
         }
     for (Edge* edge : addedEdges)
         for (int i = 0; i < 2; i++)
-            adjacentEdges[edge->getVertex(i)].push_back(edge);
+            adjacentEdges[edge->nodes[i]].push_back(edge);
 
     for (const Face* face : removedFaces)
         for (int i = 0; i < 3; i++) {
-            std::vector<Face*>& faces = adjacentFaces[face->getVertex(i)];
+            std::vector<Face*>& faces = adjacentFaces[face->vertices[i]];
             faces.erase(std::remove(faces.begin(), faces.end(), face), faces.end());
         }
     for (Face* face : addedFaces)
         for (int i = 0; i < 3; i++)
-            adjacentFaces[face->getVertex(i)].push_back(face);
+            adjacentFaces[face->vertices[i]].push_back(face);
 }
