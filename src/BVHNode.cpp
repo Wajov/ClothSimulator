@@ -1,6 +1,6 @@
 #include "BVHNode.hpp"
 
-BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Face*, BVHNode*>& leaves) : 
+BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Node*, std::vector<BVHNode*>>& adjacents) : 
     parent(parent) {
     face = nullptr;
     active = true;
@@ -9,14 +9,15 @@ BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::
         this->bounds = bounds[l];
         left = nullptr;
         right = nullptr;
-        leaves[face] = this;
+        for (int i = 0; i < 3; i++)
+            adjacents[face->vertices[i]->node].push_back(this);
     } else {
         for (int i = l; i <= r; i++)
             this->bounds += bounds[i];
         
         if (r - l == 1) {
-            left = new BVHNode(this, l, l, faces, bounds, centers, leaves);
-            right = new BVHNode(this, r, r, faces, bounds, centers, leaves);
+            left = new BVHNode(this, l, l, faces, bounds, centers, adjacents);
+            right = new BVHNode(this, r, r, faces, bounds, centers, adjacents);
         } else {
             Vector3f center = this->bounds.center();
             int axis = this->bounds.majorAxis();
@@ -32,12 +33,12 @@ BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::
                 }
 
             if (lt > l && lt < r) {
-                left = new BVHNode(this, l, rt, faces, bounds, centers, leaves);
-                right = new BVHNode(this, lt, r, faces, bounds, centers, leaves);
+                left = new BVHNode(this, l, rt, faces, bounds, centers, adjacents);
+                right = new BVHNode(this, lt, r, faces, bounds, centers, adjacents);
             } else {
                 int mid = l + r >> 1;
-                left = new BVHNode(this, l, mid, faces, bounds, centers, leaves);
-                right = new BVHNode(this, mid + 1, r, faces, bounds, centers, leaves);
+                left = new BVHNode(this, l, mid, faces, bounds, centers, adjacents);
+                right = new BVHNode(this, mid + 1, r, faces, bounds, centers, adjacents);
             }
         }
     }
@@ -101,9 +102,9 @@ float BVHNode::unsignedVertexFaceDistance(const Vector3f& x, const Vector3f& y0,
 void BVHNode::checkNearestPoint(const Vector3f& x, const Face* face, NearPoint& point) const {
     Vector3f n;
     float w[4];
-    Vector3f x1 = face->getVertex(0)->x;
-    Vector3f x2 = face->getVertex(1)->x;
-    Vector3f x3 = face->getVertex(2)->x;
+    Vector3f x1 = face->vertices[0]->node->x;
+    Vector3f x2 = face->vertices[1]->node->x;
+    Vector3f x3 = face->vertices[2]->node->x;
     float d = unsignedVertexFaceDistance(x, x1, x2, x3, n, w);
 
     if (d < point.d) {

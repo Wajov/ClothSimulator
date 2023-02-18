@@ -26,6 +26,12 @@ public:
             data[i][i] = s;
     };
 
+    __host__ __device__ Matrix(const Matrix<T, n, p>& m) {
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < p; j++)
+                data[i][j] = m.data[i][j];
+    }
+
     __host__ __device__ Matrix(const Vector<T, n>& v0, const Vector<T, n>& v1) {
         static_assert(p == 2);
         for (int i = 0; i < n; i++) {

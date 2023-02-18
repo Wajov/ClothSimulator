@@ -4,15 +4,15 @@
 #include <vector>
 
 #include "MathHelper.cuh"
-#include "Vector.cuh"
 #include "Optimization.hpp"
+#include "Node.cuh"
 #include "Impact.hpp"
 #include "ImpactZone.hpp"
 
 class ImpactZoneOptimization : public Optimization {
 private:
     double invMass, thickness, obstacleMass;
-    std::vector<Vertex*> vertices;
+    std::vector<Node*> nodes;
     std::vector<Impact> impacts;
     std::vector<std::vector<int>> indices;
 

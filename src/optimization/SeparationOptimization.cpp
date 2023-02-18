@@ -8,65 +8,65 @@ SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& 
         indices[i].resize(6);
         const Intersection& intersection = intersections[i];
         for (int j = 0; j < 3; j++)
-            indices[i][j] = addVertex(intersection.face0->getVertex(j));
+            indices[i][j] = addNode(intersection.face0->vertices[j]->node);
 
         for (int j = 0; j < 3; j++)
-            indices[i][j + 3] = addVertex(intersection.face1->getVertex(j));
+            indices[i][j + 3] = addNode(intersection.face1->vertices[j]->node);
     }
 
-    variableSize = 3 * vertices.size();
+    variableSize = 3 * nodes.size();
     constraintSize = intersections.size();
     
     invArea = 0.0;
-    for (const Vertex* vertex : vertices)
-        invArea += 1.0 / vertex->a;
+    for (const Node* node : nodes)
+        invArea += 1.0 / node->area;
 }
 
 SeparationOptimization::~SeparationOptimization() {}
 
-int SeparationOptimization::addVertex(const Vertex* vertex) {
-    if (!vertex->isFree)
+int SeparationOptimization::addNode(const Node* node) {
+    if (!node->isFree)
         return -1;
     
-    for (int i = 0; i < vertices.size(); i++)
-        if (vertices[i] == vertex)
+    for (int i = 0; i < nodes.size(); i++)
+        if (nodes[i] == node)
             return i;
 
-    vertices.push_back(const_cast<Vertex*>(vertex));
-    return vertices.size() - 1;
+    nodes.push_back(const_cast<Node*>(node));
+    return nodes.size() - 1;
 }
 
 void SeparationOptimization::initialize(double* x) const {
-    for (int i = 0; i < vertices.size(); i++)
+    for (int i = 0; i < nodes.size(); i++)
         for (int j = 0; j < 3; j++)
-            x[3 * i + j] = vertices[i]->x(j);
+            x[3 * i + j] = nodes[i]->x(j);
 }
 
 void SeparationOptimization::precompute(const double *x) {}
 
 void SeparationOptimization::finalize(const double* x) {
-    for (int i = 0; i < vertices.size(); i++)
+    for (int i = 0; i < nodes.size(); i++)
         for (int j = 0; j < 3; j++)
-            vertices[i]->x(j) = static_cast<float>(x[3 * i + j]);
+            nodes[i]->x(j) = static_cast<float>(x[3 * i + j]);
 }
 
 double SeparationOptimization::objective(const double* x) const {
     double ans = 0.0;
-    for (int i = 0; i < vertices.size(); i++) {
-        Vertex* vertex = vertices[i];
+    for (int i = 0; i < nodes.size(); i++) {
+        Node* node = nodes[i];
         double norm2 = 0.0;
         for (int j = 0; j < 3; j++)
-            norm2 += sqr(x[3 * i + j] - vertex->x1(j));
-        ans += 0.5 * vertex->a * norm2;
+            norm2 += sqr(x[3 * i + j] - node->x1(j));
+        ans += 0.5 * node->area * norm2;
     }
     return ans * invArea;
 }
 
 void SeparationOptimization::objectiveGradient(const double* x, double* gradient) const {
-    for (int i = 0; i < vertices.size(); i++) {
-        Vertex* vertex = vertices[i];
+    for (int i = 0; i < nodes.size(); i++) {
+        Node* node = nodes[i];
         for (int j = 0; j < 3; j++)
-            gradient[3 * i + j] = invArea * vertex->a * (x[3 * i + j] - vertex->x1(j));
+            gradient[3 * i + j] = invArea * node->area * (x[3 * i + j] - node->x1(j));
     }
 }
 
@@ -82,7 +82,7 @@ double SeparationOptimization::constraint(const double* x, int index, int& sign)
                 dot += intersection.d(k) * x[3 * j0 + k];
             ans += intersection.b0(i) * dot;
         } else
-            ans += intersection.b0(i) * intersection.d.dot(intersection.face0->getVertex(i)->x);
+            ans += intersection.b0(i) * intersection.d.dot(intersection.face0->vertices[i]->node->x);
 
         int j1 = indices[index][i + 3];
         if (j1 > -1) {
@@ -91,7 +91,7 @@ double SeparationOptimization::constraint(const double* x, int index, int& sign)
                 dot += intersection.d(k) * x[3 * j1 + k];
             ans -= intersection.b1(i) * dot;
         } else
-            ans -= intersection.b1(i) * intersection.d.dot(intersection.face1->getVertex(i)->x);
+            ans -= intersection.b1(i) * intersection.d.dot(intersection.face1->vertices[i]->node->x);
     }
     return ans;
 }

@@ -110,14 +110,14 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
     for (ImpactZone* zone : zones) {
         if (!zone->getActive())
             continue;
-        std::vector<Vertex*>& vertices = zone->getVertices();
-        for (const Vertex* vertex : vertices) {
+        std::vector<Node*>& nodes = zone->getNodes();
+        for (const Node* node : nodes) {
             for (BVH* clothBvh : clothBvhs)
-                if (clothBvh->contain(vertex))
-                    clothBvh->setActive(vertex, true);
+                if (clothBvh->contain(node))
+                    clothBvh->setActive(node, true);
             for (BVH* obstacleBvh : obstacleBvhs)
-                if (obstacleBvh->contain(vertex))
-                    obstacleBvh->setActive(vertex, true);
+                if (obstacleBvh->contain(node))
+                    obstacleBvh->setActive(node, true);
         }
     }
 }
@@ -126,31 +126,31 @@ std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& imp
     std::vector<Impact> sorted = impacts;
     std::sort(sorted.begin(), sorted.end());
     
-    std::unordered_set<Vertex*> vertices;
+    std::unordered_set<Node*> nodes;
     std::vector<Impact> ans;
     for (const Impact& impact : sorted) {
         bool flag = true;
         for (int i = 0; i < 4; i++)
-            if (impact.vertices[i]->isFree && vertices.find(impact.vertices[i]) != vertices.end()) {
+            if (impact.nodes[i]->isFree && nodes.find(impact.nodes[i]) != nodes.end()) {
                 flag = false;
                 break;
             }
         if (flag) {
             ans.push_back(impact);
             for (int i = 0; i < 4; i++)
-                vertices.insert(impact.vertices[i]);
+                nodes.insert(impact.nodes[i]);
         }
     }
     return ans;
 }
 
-ImpactZone* Simulator::findImpactZone(const Vertex* vertex, std::vector<ImpactZone*>& zones) const {
+ImpactZone* Simulator::findImpactZone(const Node* node, std::vector<ImpactZone*>& zones) const {
     for (ImpactZone* zone : zones)
-        if (zone->contain(vertex))
+        if (zone->contain(node))
             return zone;
 
     ImpactZone* zone = new ImpactZone();
-    zone->addVertex(vertex);
+    zone->addNode(node);
     zones.push_back(zone);
     return zone;
 }
@@ -162,12 +162,12 @@ void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<Impac
     for (const Impact& impact : impacts) {
         ImpactZone* zone = nullptr;
         for (int i = 0; i < 4; i++) {
-            Vertex* vertex = impact.vertices[i];
-            if (vertex->isFree || deformObstacles) {
+            Node* node = impact.nodes[i];
+            if (node->isFree || deformObstacles) {
                 if (zone == nullptr)
-                    zone = findImpactZone(vertex, zones);
+                    zone = findImpactZone(node, zones);
                 else {
-                    ImpactZone* zoneTemp = findImpactZone(vertex, zones);
+                    ImpactZone* zoneTemp = findImpactZone(node, zones);
                     if (zone != zoneTemp) {
                         zone->merge(zoneTemp);
                         zones.erase(std::remove(zones.begin(), zones.end(), zoneTemp), zones.end());
@@ -187,15 +187,15 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
     
     for (const Intersection& intersection : intersections)
         for (int i = 0; i < 3; i++) {
-            Vertex* vertex0 = intersection.face0->getVertex(i);
+            Node* node0 = intersection.face0->vertices[i]->node;
             for (BVH* clothBvh : clothBvhs)
-                if (clothBvh->contain(vertex0))
-                    clothBvh->setActive(vertex0, true);
+                if (clothBvh->contain(node0))
+                    clothBvh->setActive(node0, true);
             
-            Vertex* vertex1 = intersection.face1->getVertex(i);
+            Node* node1 = intersection.face1->vertices[i]->node;
             for (BVH* clothBvh : clothBvhs)
-                if (clothBvh->contain(vertex1))
-                    clothBvh->setActive(vertex1, true);
+                if (clothBvh->contain(node1))
+                    clothBvh->setActive(node1, true);
         }
 }
 
@@ -259,7 +259,6 @@ void Simulator::collisionStep() {
     }
 
     updateGeometries();
-    updateVelocities();
 }
 
 void Simulator::remeshingStep() {
@@ -273,7 +272,7 @@ void Simulator::remeshingStep() {
         // TODO
     }
 
-    updateIndices();
+    updateStructures();
     updateGeometries();
 }
 
@@ -311,19 +310,14 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
     updateGeometries();
 }
 
+void Simulator::updateStructures() {
+    for (Cloth* cloth : cloths)
+        cloth->updateStructures();
+}
+
 void Simulator::updateGeometries() {
     for (Cloth* cloth : cloths)
-        cloth->updateGeometries();
-}
-
-void Simulator::updateVelocities() {
-    for (Cloth* cloth : cloths)
-        cloth->updateVelocities(dt);
-}
-
-void Simulator::updateIndices() {
-    for (Cloth* cloth : cloths)
-        cloth->updateIndices();
+        cloth->updateGeometries(dt);
 }
 
 void Simulator::updateRenderingData(bool rebind) {
@@ -357,7 +351,7 @@ void Simulator::render(int width, int height, const Matrix4x4f& model, const Mat
     indexShader->setMat4("projection", projection);
     for (int i = 0; i < cloths.size(); i++) {
         indexShader->setInt("clothIndex", i);
-        cloths[i]->getMesh()->renderFaces();
+        cloths[i]->getMesh()->render();
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 

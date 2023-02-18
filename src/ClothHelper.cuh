@@ -6,13 +6,13 @@
 #include "Vertex.cuh"
 #include "Handle.cuh"
 
-__global__ static void initializeHandles(int nHandles, const int* handleIndices, Vertex** vertices, Handle** handles) {
+__global__ static void initializeHandles(int nHandles, const int* handleIndices, Node** nodes, Handle** handles) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nHandles; i += nThreads) {
         int index = handleIndices[i];
-        vertices[index]->preserve = true;
-        handles[i] = new Handle(vertices[index], vertices[index]->x);
+        nodes[index]->preserve = true;
+        handles[i] = new Handle(nodes[index], nodes[index]->x);
     }
 }
 

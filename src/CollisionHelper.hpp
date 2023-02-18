@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "MathHelper.cuh"
+#include "Node.cuh"
 #include "Vector.cuh"
 #include "Face.cuh"
 #include "Impact.hpp"
@@ -59,20 +60,20 @@ static float signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, cons
     return h;
 }
 
-static bool checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Vertex* vertex3, Impact& impact) {
-    impact.vertices[0] = const_cast<Vertex*>(vertex0);
-    impact.vertices[1] = const_cast<Vertex*>(vertex1);
-    impact.vertices[2] = const_cast<Vertex*>(vertex2);
-    impact.vertices[3] = const_cast<Vertex*>(vertex3);
+static bool checkImpact(ImpactType type, const Node* node0, const Node* node1, const Node* node2, const Node* node3, Impact& impact) {
+    impact.nodes[0] = const_cast<Node*>(node0);
+    impact.nodes[1] = const_cast<Node*>(node1);
+    impact.nodes[2] = const_cast<Node*>(node2);
+    impact.nodes[3] = const_cast<Node*>(node3);
 
-    Vector3f x0 = vertex0->x0;
-    Vector3f v0 = vertex0->x - x0;
-    Vector3f x1 = vertex1->x0 - x0;
-    Vector3f x2 = vertex2->x0 - x0;
-    Vector3f x3 = vertex3->x0 - x0;
-    Vector3f v1 = (vertex1->x - vertex1->x0) - v0;
-    Vector3f v2 = (vertex2->x - vertex2->x0) - v0;
-    Vector3f v3 = (vertex3->x - vertex3->x0) - v0;
+    Vector3f x0 = node0->x0;
+    Vector3f v0 = node0->x - x0;
+    Vector3f x1 = node1->x0 - x0;
+    Vector3f x2 = node2->x0 - x0;
+    Vector3f x3 = node3->x0 - x0;
+    Vector3f v1 = (node1->x - node1->x0) - v0;
+    Vector3f v2 = (node2->x - node2->x0) - v0;
+    Vector3f v3 = (node3->x - node3->x0) - v0;
     float a0 = mixed(x1, x2, x3);
     float a1 = mixed(v1, x2, x3) + mixed(x1, v2, x3) + mixed(x1, x2, v3);
     float a2 = mixed(x1, v2, v3) + mixed(v1, x2, v3) + mixed(v1, v2, x3);
@@ -87,10 +88,10 @@ static bool checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* ve
         if (t[i] < 0.0f || t[i] > 1.0f)
             continue;
         impact.t = t[i];
-        Vector3f x0 = vertex0->position(t[i]);
-        Vector3f x1 = vertex1->position(t[i]);
-        Vector3f x2 = vertex2->position(t[i]);
-        Vector3f x3 = vertex3->position(t[i]);
+        Vector3f x0 = node0->position(t[i]);
+        Vector3f x1 = node1->position(t[i]);
+        Vector3f x2 = node2->position(t[i]);
+        Vector3f x3 = node3->position(t[i]);
 
         Vector3f& n = impact.n;
         float* w = impact.w;
@@ -112,41 +113,42 @@ static bool checkImpact(ImpactType type, const Vertex* vertex0, const Vertex* ve
 }
 
 static bool checkVertexFaceImpact(const Vertex* vertex, const Face* face, float thickness, Impact& impact) {
-    Vertex* vertex0 = face->getVertex(0);
-    Vertex* vertex1 = face->getVertex(1);
-    Vertex* vertex2 = face->getVertex(2);
-    if (vertex == vertex0 || vertex == vertex1 || vertex == vertex2)
+    Node* node = vertex->node;
+    Node* node0 = face->vertices[0]->node;
+    Node* node1 = face->vertices[1]->node;
+    Node* node2 = face->vertices[2]->node;
+    if (node == node0 || node == node1 || node == node2)
         return false;
-    if (!vertex->bounds(true).overlap(face->bounds(true), thickness))
+    if (!node->bounds(true).overlap(face->bounds(true), thickness))
         return false;
     
-    return checkImpact(VertexFace, vertex, vertex0, vertex1, vertex2, impact);
+    return checkImpact(VertexFace, node, node0, node1, node2, impact);
 }
 
 static bool checkEdgeEdgeImpact(const Edge* edge0, const Edge* edge1, float thickness, Impact& impact) {
-    Vertex* vertex0 = edge0->getVertex(0);
-    Vertex* vertex1 = edge0->getVertex(1);
-    Vertex* vertex2 = edge1->getVertex(0);
-    Vertex* vertex3 = edge1->getVertex(1);
-    if (vertex0 == vertex2 || vertex0 == vertex3 || vertex1 == vertex2 || vertex1 == vertex3)
+    Node* node0 = edge0->nodes[0];
+    Node* node1 = edge0->nodes[1];
+    Node* node2 = edge1->nodes[0];
+    Node* node3 = edge1->nodes[1];
+    if (node0 == node2 || node0 == node3 || node1 == node2 || node1 == node3)
         return false;
     if (!edge0->bounds(true).overlap(edge1->bounds(true), thickness))
         return false;
     
-    return checkImpact(EdgeEdge, vertex0, vertex1, vertex2, vertex3, impact);
+    return checkImpact(EdgeEdge, node0, node1, node2, node3, impact);
 }
 
 static void checkImpacts(const Face* face0, const Face* face1, float thickness, std::vector<Impact>& impacts) {
     Impact impact;
     for (int i = 0; i < 3; i++)
-        if (checkVertexFaceImpact(face0->getVertex(i), face1, thickness, impact))
+        if (checkVertexFaceImpact(face0->vertices[i], face1, thickness, impact))
             impacts.push_back(impact);
     for (int i = 0; i < 3; i++)
-        if (checkVertexFaceImpact(face1->getVertex(i), face0, thickness, impact))
+        if (checkVertexFaceImpact(face1->vertices[i], face0, thickness, impact))
             impacts.push_back(impact);
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
-            if (checkEdgeEdgeImpact(face0->getEdge(i), face1->getEdge(j), thickness, impact))
+            if (checkEdgeEdgeImpact(face0->edges[i], face1->edges[j], thickness, impact))
                 impacts.push_back(impact);
 }
 
