@@ -528,7 +528,7 @@ Mesh* Cloth::getMesh() const {
 
 void Cloth::readDataFromFile(const std::string& path) {
     mesh->readDataFromFile(path);
-    mesh->updateGeometries(0.0f);
+    mesh->updateGeometries();
 }
 
 void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind) {
@@ -671,8 +671,12 @@ void Cloth::updateStructures() {
     mesh->updateStructures();
 }
 
-void Cloth::updateGeometries(float dt) {
-    mesh->updateGeometries(dt);
+void Cloth::updateGeometries() {
+    mesh->updateGeometries();
+}
+
+void Cloth::updateVelocities(float dt) {
+    mesh->updateVelocities(dt);
 }
 
 void Cloth::updateRenderingData(bool rebind) {

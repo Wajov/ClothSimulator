@@ -192,13 +192,12 @@ __global__ static void setNodeStructures(int nNodes, const int* indices, const N
     }
 }
 
-__global__ static void updateNodeGeometries(int nNodes, float invDt, Node** nodes) {
+__global__ static void updateNodeGeometries(int nNodes, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
         Node* node = nodes[i];
         node->x1 = node->x;
-        node->v = (node->x - node->x0) * invDt;
     }
 }
 
@@ -237,6 +236,15 @@ __global__ static void setNodeGeometries(int nNodes, const int* indices, const V
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
         nodes[indices[i]]->n = nodeData[i].normalized();
+}
+
+__global__ static void updateVelocitiesGpu(int nNodes, float invDt, Node** nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Node* node = nodes[i];
+        node->v = (node->x - node->x0) * invDt;
+    }
 }
 
 __global__ static void updateRenderingDataGpu(int nFaces, const Face* const* faces, Renderable* renderables) {

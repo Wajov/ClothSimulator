@@ -82,7 +82,8 @@ public:
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
     void updateStructures();
-    void updateGeometries(float dt);
+    void updateGeometries();
+    void updateVelocities(float dt);
     void updateRenderingData(bool rebind);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const;

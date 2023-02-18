@@ -203,7 +203,7 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f
     }
 
     updateStructures();
-    updateGeometries(0.0f);
+    updateGeometries();
 }
 
 std::vector<Node*>& Mesh::getNodes() {
@@ -331,8 +331,7 @@ void Mesh::updateStructures() {
     }
 }
 
-void Mesh::updateGeometries(float dt) {
-    float invDt = dt == 0.0f ? 0.0f : 1.0f / dt;
+void Mesh::updateGeometries() {
     if (!gpu) {
         for (Face* face : faces)
             face->update();
@@ -340,7 +339,6 @@ void Mesh::updateGeometries(float dt) {
             edge->update();
         for (Node* node : nodes) {
             node->x1 = node->x;
-            node->v = (node->x - node->x0) * invDt;
             node->n = Vector3f();
         }
         for (const Face* face : faces)
@@ -357,7 +355,7 @@ void Mesh::updateGeometries(float dt) {
         CUDA_CHECK_LAST();
         updateEdgeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
         CUDA_CHECK_LAST();
-        updateNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), invDt, pointer(nodesGpu));
+        updateNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
 
         thrust::device_vector<int> indices(3 * facesGpu.size());
@@ -370,6 +368,17 @@ void Mesh::updateGeometries(float dt) {
         thrust::device_vector<Vector3f> outputNodeData(3 * facesGpu.size());
         auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), nodeData.begin(), outputIndices.begin(), outputNodeData.begin());
         setNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputNodeData), pointer(nodesGpu));
+        CUDA_CHECK_LAST();
+    }
+}
+
+void Mesh::updateVelocities(float dt) {
+    float invDt = 1.0f / dt;
+    if (!gpu)
+        for (Node* node : nodes)
+            node->v = (node->x - node->x0) * invDt;
+    else {
+        updateVelocitiesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), invDt, pointer(nodesGpu));
         CUDA_CHECK_LAST();
     }
 }

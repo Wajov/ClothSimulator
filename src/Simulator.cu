@@ -259,6 +259,7 @@ void Simulator::collisionStep() {
     }
 
     updateGeometries();
+    updateVelocities();
 }
 
 void Simulator::remeshingStep() {
@@ -308,6 +309,7 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
     }
 
     updateGeometries();
+    updateVelocities();
 }
 
 void Simulator::updateStructures() {
@@ -317,7 +319,12 @@ void Simulator::updateStructures() {
 
 void Simulator::updateGeometries() {
     for (Cloth* cloth : cloths)
-        cloth->updateGeometries(dt);
+        cloth->updateGeometries();
+}
+
+void Simulator::updateVelocities() {
+    for (Cloth* cloth : cloths)
+        cloth->updateVelocities(dt);
 }
 
 void Simulator::updateRenderingData(bool rebind) {

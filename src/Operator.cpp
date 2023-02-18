@@ -69,6 +69,7 @@ void Operator::split(const Edge* edge, const Material* material, int index) {
     Node* newNode = new Node(0.5f * (node0->x + node1->x), node0->isFree && node1->isFree);
     newNode->index = index;
     newNode->x0 = 0.5f * (node0->x0 + node1->x0);
+    newNode->v = 0.5f * (node0->v + node1->v);
     Edge* newEdges[2];
     newEdges[0] = new Edge(newNode, node0);
     newEdges[1] = new Edge(newNode, node1);

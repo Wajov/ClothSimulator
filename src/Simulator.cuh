@@ -64,6 +64,7 @@ private:
     void separationStep(const std::vector<Mesh*>& oldMeshes);
     void updateStructures();
     void updateGeometries();
+    void updateVelocities();
     void updateRenderingData(bool rebind);
 
 public:
