@@ -10,22 +10,21 @@
 
 class SeparationOptimization : public Optimization {
 private:
-    double invArea, thickness;
+    float invArea, thickness;
     std::vector<Node*> nodes;
     std::vector<Intersection> intersections;
     std::vector<std::vector<int>> indices;
     int addNode(const Node* node);
 
 public:
-    SeparationOptimization(const std::vector<Intersection>& intersections, double thickness);
+    SeparationOptimization(const std::vector<Intersection>& intersections, float thickness);
     ~SeparationOptimization();
-    void initialize(double* x) const override;
-    void precompute(const double *x) override;
-    void finalize(const double* x) override;
-    double objective(const double* x) const override;
-    void objectiveGradient(const double* x, double* gradient) const override;
-    double constraint(const double* x, int index, int& sign) const override;
-    void constraintGradient(const double* x, int index, double factor, double* gradient) const override;
+    void initialize(std::vector<Vector3f>& x) const override;
+    void finalize(const std::vector<Vector3f>& x) override;
+    float objective(const std::vector<Vector3f>& x) const override;
+    void objectiveGradient(const std::vector<Vector3f>& x, std::vector<Vector3f>& gradient) const override;
+    float constraint(const std::vector<Vector3f>& x, int index, int& sign) const override;
+    void constraintGradient(const std::vector<Vector3f>& x, int index, float factor, std::vector<Vector3f>& gradient) const override;
 };
 
 #endif

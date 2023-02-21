@@ -4,10 +4,10 @@ Optimization::Optimization() {}
 
 Optimization::~Optimization() {}
 
-int Optimization::getVariableSize() {
-    return variableSize;
+int Optimization::getNodeSize() const {
+    return nodeSize;
 }
 
-int Optimization::getConstraintSize() {
+int Optimization::getConstraintSize() const {
     return constraintSize;
 }

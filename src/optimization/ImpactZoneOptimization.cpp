@@ -1,11 +1,11 @@
 #include "ImpactZoneOptimization.hpp"
 
-ImpactZoneOptimization::ImpactZoneOptimization(const ImpactZone* zone, double thickness, double obstacleMass) :
+ImpactZoneOptimization::ImpactZoneOptimization(const ImpactZone* zone, float thickness, float obstacleMass) :
     thickness(thickness),
     obstacleMass(obstacleMass) {
     nodes = const_cast<ImpactZone*>(zone)->getNodes();
     impacts = const_cast<ImpactZone*>(zone)->getImpacts();
-    variableSize = 3 * nodes.size();
+    nodeSize = nodes.size();
     constraintSize = impacts.size();
 
     indices.resize(impacts.size());
@@ -21,75 +21,63 @@ ImpactZoneOptimization::ImpactZoneOptimization(const ImpactZone* zone, double th
         }
     }
 
-    invMass = 0.0;
+    invMass = 0.0f;
     for (const Node* node : nodes) {
-        double mass = node->isFree ? node->mass : obstacleMass;
-        invMass += 1.0 / mass;
+        float mass = node->isFree ? node->mass : obstacleMass;
+        invMass += 1.0f / mass;
     }
     invMass /= nodes.size();
 }
 
 ImpactZoneOptimization::~ImpactZoneOptimization() {}
 
-void ImpactZoneOptimization::initialize(double* x) const {
+void ImpactZoneOptimization::initialize(std::vector<Vector3f>& x) const {
     for (int i = 0; i < nodes.size(); i++)
-        for (int j = 0; j < 3; j++)
-            x[3 * i + j] = nodes[i]->x(j);
+        x[i] = nodes[i]->x;
 }
 
-void ImpactZoneOptimization::precompute(const double *x) {}
-
-void ImpactZoneOptimization::finalize(const double* x) {
+void ImpactZoneOptimization::finalize(const std::vector<Vector3f>& x) {
     for (int i = 0; i < nodes.size(); i++)
-        for (int j = 0; j < 3; j++)
-            nodes[i]->x(j) = static_cast<float>(x[3 * i + j]);
+        nodes[i]->x = x[i];
 }
 
-double ImpactZoneOptimization::objective(const double* x) const {
-    double ans = 0.0;
+float ImpactZoneOptimization::objective(const std::vector<Vector3f>& x) const {
+    float ans = 0.0f;
     for (int i = 0; i < nodes.size(); i++) {
         Node* node = nodes[i];
-        double mass = node->isFree ? node->mass : obstacleMass;
-        double norm2 = 0.0;
-        for (int j = 0; j < 3; j++)
-            norm2 += sqr(x[3 * i + j] - node->x1(j));
-        ans += 0.5 * mass * norm2;
+        float mass = node->isFree ? node->mass : obstacleMass;
+        ans += mass * (x[i] - node->x1).norm2();
     }
-    return ans * invMass;
+    return 0.5f * ans * invMass;
 }
 
-void ImpactZoneOptimization::objectiveGradient(const double* x, double* gradient) const {
+void ImpactZoneOptimization::objectiveGradient(const std::vector<Vector3f>& x, std::vector<Vector3f>& gradient) const {
     for (int i = 0; i < nodes.size(); i++) {
         Node* node = nodes[i];
-        double mass = node->isFree ? node->mass : obstacleMass;
-        for (int j = 0; j < 3; j++)
-            gradient[3 * i + j] = invMass * mass * (x[3 * i + j] - node->x1(j));
+        float mass = node->isFree ? node->mass : obstacleMass;
+        gradient[i] = invMass * mass * (x[i] - node->x1);
     }
 }
 
-double ImpactZoneOptimization::constraint(const double* x, int index, int& sign) const {
+float ImpactZoneOptimization::constraint(const std::vector<Vector3f>& x, int index, int& sign) const {
     sign = 1;
-    double ans = -thickness;
+    float ans = -thickness;
     const Impact& impact = impacts[index];
     for (int i = 0; i < 4; i++) {
         int j = indices[index][i];
-        if (j > -1) {
-            double dot = 0.0;
-            for (int k = 0; k < 3; k++)
-                dot += impact.n(k) * x[3 * j + k];
-            ans += impact.w[i] * dot;
-        } else
+        if (j > -1)
+            ans += impact.w[i] * impact.n.dot(x[j]);
+        else
             ans += impact.w[i] * impact.n.dot(impact.nodes[i]->x);
     }
     return ans;
 }
 
-void ImpactZoneOptimization::constraintGradient(const double* x, int index, double factor, double* gradient) const {
+void ImpactZoneOptimization::constraintGradient(const std::vector<Vector3f>& x, int index, float factor, std::vector<Vector3f>& gradient) const {
     const Impact& impact = impacts[index];
     for (int i = 0; i < 4; i++) {
         int j = indices[index][i];
         if (j > -1)
-            for (int k = 0; k < 3; k++)
-                gradient[3 * j + k] += factor * impact.w[i] * impact.n(k);
+            gradient[j] += factor * impact.w[i] * impact.n;
     }
 }
