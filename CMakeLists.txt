@@ -37,9 +37,6 @@ endif()
 # Eigen
 find_package(Eigen3 REQUIRED)
 
-# ALGLIB
-add_subdirectory(lib/alglib)
-
 # CUDA
 find_package(CUDA REQUIRED)
 
@@ -55,7 +52,6 @@ if (WIN32)
                 glad
                 glfw
                 JsonCpp::JsonCpp
-                alglib
                 ${CUDA_cusparse_LIBRARY}
                 ${CUDA_cusolver_LIBRARY}
         )
@@ -65,7 +61,6 @@ else()
                 glad
                 glfw
                 jsoncpp
-                alglib
                 ${CUDA_cusparse_LIBRARY}
                 ${CUDA_cusolver_LIBRARY}
         )

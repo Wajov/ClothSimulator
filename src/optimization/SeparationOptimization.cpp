@@ -1,6 +1,6 @@
 #include "SeparationOptimization.hpp"
 
-SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& intersections, double thickness) :
+SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& intersections, float thickness) :
     thickness(thickness),
     intersections(intersections) {
     indices.resize(intersections.size());
@@ -14,12 +14,12 @@ SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& 
             indices[i][j + 3] = addNode(intersection.face1->vertices[j]->node);
     }
 
-    variableSize = 3 * nodes.size();
+    nodeSize = nodes.size();
     constraintSize = intersections.size();
     
-    invArea = 0.0;
+    invArea = 0.0f;
     for (const Node* node : nodes)
-        invArea += 1.0 / node->area;
+        invArea += 1.0f / node->area;
 }
 
 SeparationOptimization::~SeparationOptimization() {}
@@ -36,77 +36,61 @@ int SeparationOptimization::addNode(const Node* node) {
     return nodes.size() - 1;
 }
 
-void SeparationOptimization::initialize(double* x) const {
+void SeparationOptimization::initialize(std::vector<Vector3f>& x) const {
     for (int i = 0; i < nodes.size(); i++)
-        for (int j = 0; j < 3; j++)
-            x[3 * i + j] = nodes[i]->x(j);
+        x[i] = nodes[i]->x;
 }
 
-void SeparationOptimization::precompute(const double *x) {}
-
-void SeparationOptimization::finalize(const double* x) {
+void SeparationOptimization::finalize(const std::vector<Vector3f>& x) {
     for (int i = 0; i < nodes.size(); i++)
-        for (int j = 0; j < 3; j++)
-            nodes[i]->x(j) = static_cast<float>(x[3 * i + j]);
+        nodes[i]->x = x[i];
 }
 
-double SeparationOptimization::objective(const double* x) const {
-    double ans = 0.0;
+float SeparationOptimization::objective(const std::vector<Vector3f>& x) const {
+    float ans = 0.0f;
     for (int i = 0; i < nodes.size(); i++) {
         Node* node = nodes[i];
-        double norm2 = 0.0;
-        for (int j = 0; j < 3; j++)
-            norm2 += sqr(x[3 * i + j] - node->x1(j));
-        ans += 0.5 * node->area * norm2;
+        ans += node->area * (x[i] - node->x1).norm2();
     }
-    return ans * invArea;
+    return 0.5f * ans * invArea;
 }
 
-void SeparationOptimization::objectiveGradient(const double* x, double* gradient) const {
+void SeparationOptimization::objectiveGradient(const std::vector<Vector3f>& x, std::vector<Vector3f>& gradient) const {
     for (int i = 0; i < nodes.size(); i++) {
         Node* node = nodes[i];
-        for (int j = 0; j < 3; j++)
-            gradient[3 * i + j] = invArea * node->area * (x[3 * i + j] - node->x1(j));
+        gradient[i] = invArea * node->area * (x[i] - node->x1);
     }
 }
 
-double SeparationOptimization::constraint(const double* x, int index, int& sign) const {
+float SeparationOptimization::constraint(const std::vector<Vector3f>& x, int index, int& sign) const {
     sign = 1;
-    double ans = -thickness;
+    float ans = -thickness;
     const Intersection& intersection = intersections[index];
     for (int i = 0; i < 3; i++) {
         int j0 = indices[index][i];
-        if (j0 > -1) {
-            double dot = 0.0;
-            for (int k = 0; k < 3; k++)
-                dot += intersection.d(k) * x[3 * j0 + k];
-            ans += intersection.b0(i) * dot;
-        } else
+        if (j0 > -1)
+            ans += intersection.b0(i) * intersection.d.dot(x[j0]);
+        else
             ans += intersection.b0(i) * intersection.d.dot(intersection.face0->vertices[i]->node->x);
 
         int j1 = indices[index][i + 3];
-        if (j1 > -1) {
-            double dot = 0.0;
-            for (int k = 0; k < 3; k++)
-                dot += intersection.d(k) * x[3 * j1 + k];
-            ans -= intersection.b1(i) * dot;
-        } else
+        if (j1 > -1)
+            ans -= intersection.b1(i) * intersection.d.dot(x[j1]);
+        else
             ans -= intersection.b1(i) * intersection.d.dot(intersection.face1->vertices[i]->node->x);
     }
     return ans;
 }
 
-void SeparationOptimization::constraintGradient(const double* x, int index, double factor, double* gradient) const {
+void SeparationOptimization::constraintGradient(const std::vector<Vector3f>& x, int index, float factor, std::vector<Vector3f>& gradient) const {
     const Intersection& intersection = intersections[index];
     for (int i = 0; i < 3; i++) {
         int j0 = indices[index][i];
         if (j0 > -1)
-            for (int k = 0; k < 3; k++)
-                gradient[3 * j0 + k] += factor * intersection.b0(i) * intersection.d(k);
+            gradient[j0] += factor * intersection.b0(i) * intersection.d;
         
         int j1 = indices[index][i + 3];
         if (j1 > -1)
-            for (int k = 0; k < 3; k++)
-                gradient[3 * j1 + k] -= factor * intersection.b1(i) * intersection.d(k);
+            gradient[j1] -= factor * intersection.b1(i) * intersection.d;
     }
 }

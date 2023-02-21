@@ -7,15 +7,10 @@
 #include "Matrix.cuh"
 #include "optimization/Optimization.hpp"
 
-const int MAX_TOTAL_ITERATIONS = 100;
-const int MAX_SUB_ITERATIONS = 10;
-const double EPSILON_G = 1e-6;
-const double EPSILON_F = 1e-12;
-const double EPSILON_X = 1e-6;
-
-static Optimization* optimization;
-static std::vector<double> lambda;
-static double mu;
+const int MAX_ITERATIONS = 100;
+const float EPSILON = 1e-12f;
+const float RHO = 0.9992f;
+const float RHO2 = RHO * RHO;
 
 template<typename T> __host__ __device__ static void mySwap(T& a, T& b) {
     T t = a;
@@ -174,61 +169,78 @@ static int solveCubic(float a, float b, float c, float d, float x[]) {
     }
 }
 
-static double clampViolation (double x, int sign) {
-    return sign < 0 ? max(x, 0.0) : (sign > 0 ? min(x, 0.0) : x);
+static float clampViolation(float x, int sign) {
+    return sign < 0 ? max(x, 0.0f) : (sign > 0 ? min(x, 0.0f) : x);
 }
 
-static void valueAndGradient(const alglib::real_1d_array& x, double& value, alglib::real_1d_array& gradient, void* p) {
-    optimization->precompute(x.getcontent());
-    value = optimization->objective(x.getcontent());
-    optimization->objectiveGradient(x.getcontent(), gradient.getcontent());
+static float value(const Optimization* optimization, const std::vector<float>& lambda, float mu, const std::vector<Vector3f>& x) {
+    float ans = optimization->objective(x);
+    for (int i = 0; i < optimization->getConstraintSize(); i++) {
+        int sign;
+        float constraint = optimization->constraint(x, i, sign);
+        float coefficient = clampViolation(constraint + lambda[i] / mu, sign);
+        if (coefficient != 0.0f)
+            ans += 0.5f * mu * sqr(coefficient);
+    }
+    return ans;
+}
+
+static void valueAndGradient(const Optimization* optimization, const std::vector<float>& lambda, float mu, const std::vector<Vector3f>& x, float& value, std::vector<Vector3f>& gradient) {
+    value = optimization->objective(x);
+    optimization->objectiveGradient(x, gradient);
 
     for (int i = 0; i < optimization->getConstraintSize(); i++) {
         int sign;
-        double constraint = optimization->constraint(x.getcontent(), i, sign);
-        double coefficient = clampViolation(constraint + lambda[i] / mu, sign);
-        if (coefficient != 0.0) {
-            value += 0.5 * mu * sqr(coefficient);
-            optimization->constraintGradient(x.getcontent(), i, mu * coefficient, gradient.getcontent());
+        float constraint = optimization->constraint(x, i, sign);
+        float coefficient = clampViolation(constraint + lambda[i] / mu, sign);
+        if (coefficient != 0.0f) {
+            value += 0.5f * mu * sqr(coefficient);
+            optimization->constraintGradient(x, i, mu * coefficient, gradient);
         }
     }
 }
 
-static void updateMultiplier(const alglib::real_1d_array& x) {
-    optimization->precompute(x.getcontent());
+static void updateMultiplier(const Optimization* optimization, const std::vector<Vector3f>& x, float mu, std::vector<float>& lambda) {
     for (int i = 0; i < optimization->getConstraintSize(); i++) {
         int sign;
-        double constraint = optimization->constraint(x.getcontent(), i, sign);
+        float constraint = optimization->constraint(x, i, sign);
         lambda[i] = clampViolation(lambda[i] + mu * constraint, sign);
     }
 }
 
 static void augmentedLagrangianMethod(Optimization* optimization) {
-    ::optimization = optimization;
-    lambda.assign(::optimization->getConstraintSize(), 0.0);
-    mu = 1e3;
-    alglib::real_1d_array x;
-    x.setlength(::optimization->getVariableSize());
-    ::optimization->initialize(x.getcontent());
-    alglib::mincgstate state;
-    alglib::mincgreport report;
-    alglib::mincgcreate(x, state);
-    
-    int iter = 0;
-    while (iter < MAX_TOTAL_ITERATIONS) {
-        int maxIterations = min(MAX_SUB_ITERATIONS, MAX_TOTAL_ITERATIONS - iter);
-        alglib::mincgsetcond(state, EPSILON_G, EPSILON_F, EPSILON_X, maxIterations);
-        if (iter > 0)
-            alglib::mincgrestartfrom(state, x);
-        alglib::mincgsuggeststep(state, 1e-3 * ::optimization->getVariableSize());
-        alglib::mincgoptimize(state, valueAndGradient);
-        alglib::mincgresults(state, x, report);
-        updateMultiplier(x);
-        if (report.iterationscount == 0)
+    int nNodes = optimization->getNodeSize();
+    float s = 1e-3f, f, mu = 1e3f, omega = 1.0f;
+    std::vector<Vector3f> x(nNodes), gradient(nNodes), t(nNodes);
+    std::vector<float> lambda(optimization->getConstraintSize(), 0.0f);
+    optimization->initialize(x);
+
+    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+        valueAndGradient(optimization, lambda, mu, x, f, gradient);
+       
+        float norm2 = 0;
+        for (int i = 0; i < nNodes; i++)
+            norm2 += gradient[i].norm2();
+        s /= 0.7f;
+        do {
+            s *= 0.7f;
+            for (int i = 0; i < nNodes; i++)
+                t[i] = x[i] - s * gradient[i];
+        } while (value(optimization, lambda, mu, t) >= f - 0.5f * s * norm2 && s >= EPSILON);
+        if (s < EPSILON)
             break;
-        iter += report.iterationscount;
+
+        if (iter == 10)
+            omega = 2.0f / (2.0f - RHO2);
+        else if (iter > 10)
+            omega = 4.0f / (4.0f - RHO2 * omega);
+        float coeffient = (1 + omega) * s;
+        for (int i = 0; i < nNodes; i++)
+            x[i] = x[i] - coeffient * gradient[i];
+        
+        updateMultiplier(optimization, x, mu, lambda);
     }
-    ::optimization->finalize(x.getcontent());
+    optimization->finalize(x);
 }
 
 #endif
