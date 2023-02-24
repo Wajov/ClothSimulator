@@ -77,6 +77,7 @@ __device__ static void findRange(int nNodes, const unsigned long long* mortonCod
         l = i;
         r = nNodes + 1;
         while (r - l > 1) {
+            mid = (l + r) >> 1;
             commonUpperBits(code, mortonCodes[mid] < dl ? l = mid : r = mid);
         }
         left = i;
