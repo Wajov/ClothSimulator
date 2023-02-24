@@ -181,9 +181,11 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
     }
 }
 
-void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<Intersection>& intersections) const {
+void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const {
     for (BVH* clothBvh : clothBvhs)
         clothBvh->setAllActive(false);
+    for (BVH* obstacleBvh : obstacleBvhs)
+        obstacleBvh->setAllActive(false);
     
     for (const Intersection& intersection : intersections)
         for (int i = 0; i < 3; i++) {
@@ -191,11 +193,17 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
             for (BVH* clothBvh : clothBvhs)
                 if (clothBvh->contain(node0))
                     clothBvh->setActive(node0, true);
+            for (BVH* obstacleBvh : obstacleBvhs)
+                if (obstacleBvh->contain(node0))
+                    obstacleBvh->setActive(node0, true);
             
             Node* node1 = intersection.face1->vertices[i]->node;
             for (BVH* clothBvh : clothBvhs)
                 if (clothBvh->contain(node1))
                     clothBvh->setActive(node1, true);
+            for (BVH* obstacleBvh : obstacleBvhs)
+                if (obstacleBvh->contain(node1))
+                    obstacleBvh->setActive(node1, true);
         }
 }
 
@@ -287,7 +295,7 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
         
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
             if (!intersections.empty())
-                updateActive(clothBvhs, intersections);
+                updateActive(clothBvhs, obstacleBvhs, intersections);
             
             std::vector<Intersection> newIntersections;
             traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
