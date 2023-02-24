@@ -23,7 +23,7 @@
 #include "Wind.cuh"
 #include "Cloth.cuh"
 #include "Obstacle.hpp"
-#include "BVH.hpp"
+#include "BVH.cuh"
 #include "Impact.hpp"
 #include "ImpactZone.hpp"
 #include "Intersection.hpp"
@@ -51,6 +51,10 @@ private:
     std::vector<BVH*> buildObstacleBvhs(bool ccd) const;
     void updateBvhs(std::vector<BVH*>& bvhs) const;
     void destroyBvhs(const std::vector<BVH*>& bvhs) const;
+    void traverse(const BVHNode* node, float thickness, std::function<void(const Face*, const Face*, float)> callback);
+    void traverse(const BVHNode* node0, const BVHNode* node1, float thickness, std::function<void(const Face*, const Face*, float)> callback);
+    void traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback);
+    void traverse(const BVH* bvh0, const BVH* bvh1, float thickness, std::function<void(const Face*, const Face*, float)> callback);
     void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback);
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;

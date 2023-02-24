@@ -3,7 +3,7 @@
 
 #include <cuda_runtime.h>
 
-#include "Bounds.hpp"
+#include "Bounds.cuh"
 #include "Node.cuh"
 #include "Vertex.cuh"
 #include "Face.cuh"

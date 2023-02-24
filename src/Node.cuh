@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 
 #include "Vector.cuh"
-#include "Bounds.hpp"
+#include "Bounds.cuh"
 
 class Node {
 public:

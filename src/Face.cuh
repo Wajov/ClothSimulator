@@ -6,12 +6,11 @@
 #include "MathHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
-#include "Bounds.hpp"
+#include "Bounds.cuh"
 #include "Node.cuh"
 #include "Vertex.cuh"
 #include "Edge.cuh"
 #include "Material.cuh"
-#include "Remeshing.hpp"
 
 class Edge;
 

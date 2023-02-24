@@ -4,7 +4,7 @@
         "cwd": "${workspaceFolder}",
         "args": [
             "conf/sphere.json",
-            // "--gpu"
+            "--gpu"
         ]
     },
     "files.associations": {
@@ -161,6 +161,7 @@
         "dense": "cpp",
         "__functional_03": "cpp",
         "__split_buffer": "cpp",
-        "__functional_base_03": "cpp"
+        "__functional_base_03": "cpp",
+        "__mutex_base": "cpp"
     }
 }

@@ -30,7 +30,7 @@
 #include "Remeshing.hpp"
 #include "Wind.cuh"
 #include "Shader.hpp"
-#include "BVH.hpp"
+#include "BVH.cuh"
 #include "NearPoint.hpp"
 #include "Plane.hpp"
 #include "Disk.hpp"

@@ -1,53 +1,15 @@
-#include "BVHNode.hpp"
+#include "BVHNode.cuh"
 
-BVHNode::BVHNode(BVHNode* parent, int l, int r, std::vector<Face*>& faces, std::vector<Bounds>& bounds, std::vector<Vector3f>& centers, std::unordered_map<Node*, std::vector<BVHNode*>>& adjacents) : 
-    parent(parent) {
-    face = nullptr;
-    active = true;
-    if (l == r) {
-        face = faces[l];
-        this->bounds = bounds[l];
-        left = nullptr;
-        right = nullptr;
-        for (int i = 0; i < 3; i++)
-            adjacents[face->vertices[i]->node].push_back(this);
-    } else {
-        for (int i = l; i <= r; i++)
-            this->bounds += bounds[i];
-        
-        if (r - l == 1) {
-            left = new BVHNode(this, l, l, faces, bounds, centers, adjacents);
-            right = new BVHNode(this, r, r, faces, bounds, centers, adjacents);
-        } else {
-            Vector3f center = this->bounds.center();
-            int axis = this->bounds.majorAxis();
-            int lt = l, rt = r;
-            for (int i = l; i <= r; i++)
-                if (centers[i](axis) > center(axis))
-                    lt++;
-                else {
-                    mySwap(faces[lt], faces[rt]);
-                    mySwap(bounds[lt], bounds[rt]);
-                    mySwap(centers[lt], centers[rt]);
-                    rt--;
-                }
+BVHNode::BVHNode() :
+    face(nullptr),
+    bounds(),
+    parent(nullptr),
+    left(nullptr),
+    right(nullptr),
+    count(0),
+    active(true) {}
 
-            if (lt > l && lt < r) {
-                left = new BVHNode(this, l, rt, faces, bounds, centers, adjacents);
-                right = new BVHNode(this, lt, r, faces, bounds, centers, adjacents);
-            } else {
-                int mid = l + r >> 1;
-                left = new BVHNode(this, l, mid, faces, bounds, centers, adjacents);
-                right = new BVHNode(this, mid + 1, r, faces, bounds, centers, adjacents);
-            }
-        }
-    }
-}
-
-BVHNode::~BVHNode() {
-    delete left;
-    delete right;
-}
+BVHNode::~BVHNode() {}
 
 float BVHNode::unsignedVertexEdgeDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float& wx, float& wy0, float& wy1) const {
     float t = clamp((x - y0).dot(y1 - y0)/(y1 - y0).dot(y1 - y0), 0.0f, 1.0f);
@@ -113,7 +75,7 @@ void BVHNode::checkNearestPoint(const Vector3f& x, const Face* face, NearPoint& 
     }
 }
 
-inline bool BVHNode::isLeaf() const {
+bool BVHNode::isLeaf() const {
     return left == nullptr && right == nullptr;
 }
 
@@ -128,32 +90,6 @@ void BVHNode::setActiveDown(bool active) {
     if (!isLeaf()) { 
         left->setActiveDown(active);
         right->setActiveDown(active);
-    }
-}
-
-void BVHNode::traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback) {
-    if (isLeaf() || !active)
-        return;
-
-    left->traverse(thickness, callback);
-    right->traverse(thickness, callback);
-    left->traverse(right, thickness, callback);
-}
-
-void BVHNode::traverse(const BVHNode* bvhNode, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
-    if (!active && !bvhNode->active)
-        return;
-    if (!bounds.overlap(bvhNode->bounds, thickness))
-        return;
-
-    if (isLeaf() && bvhNode->isLeaf())
-        callback(face, bvhNode->face, thickness);
-    else if (isLeaf()) {
-        traverse(bvhNode->left, thickness, callback);
-        traverse(bvhNode->right, thickness, callback);
-    } else {
-        left->traverse(bvhNode, thickness, callback);
-        right->traverse(bvhNode, thickness, callback);
     }
 }
 

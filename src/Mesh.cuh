@@ -11,6 +11,7 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <thrust/device_vector.h>
+#include <thrust/unique.h>
 #include <thrust/sort.h>
 #include <thrust/remove.h>
 #include <thrust/reduce.h>

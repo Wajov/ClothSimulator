@@ -1,7 +1,6 @@
 #ifndef PHYSICS_HELPER_CUH
 #define PHYSICS_HELPER_CUH
 
-#include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
 #include "MathHelper.cuh"

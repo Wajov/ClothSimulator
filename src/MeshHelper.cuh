@@ -20,12 +20,6 @@ struct EdgeData {
 struct NodeData {
     float mass, area;
 
-    __device__ NodeData& operator=(const NodeData& d) {
-        mass = d.mass;
-        area = d.area;
-        return *this;
-    };
-
     __device__ NodeData operator+(const NodeData& d) const {
         NodeData ans;
         ans.mass = mass + d.mass;

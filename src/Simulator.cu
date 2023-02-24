@@ -90,14 +90,48 @@ void Simulator::destroyBvhs(const std::vector<BVH*>& bvhs) const {
         delete bvh;
 }
 
+void Simulator::traverse(const BVHNode* node, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
+    if (node->isLeaf() || !node->active)
+        return;
+
+    traverse(node->left, thickness, callback);
+    traverse(node->right, thickness, callback);
+    traverse(node->left, node->right, thickness, callback);
+}
+
+void Simulator::traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
+    traverse(bvh->getRoot(), thickness, callback);
+}
+
+void Simulator::traverse(const BVH* bvh0, const BVH* bvh1, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
+    traverse(bvh0->getRoot(), bvh1->getRoot(), thickness, callback);
+}
+
+void Simulator::traverse(const BVHNode* node0, const BVHNode* node1, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
+    if (!node0->active && !node1->active)
+        return;
+    if (!node0->bounds.overlap(node1->bounds, thickness))
+        return;
+
+    if (node0->isLeaf() && node1->isLeaf())
+        callback(node0->face, node1->face, thickness);
+    else if (node0->isLeaf()) {
+        traverse(node0, node1->left, thickness, callback);
+        traverse(node0, node1->right, thickness, callback);
+    } else {
+        traverse(node0->left, node1, thickness, callback);
+        traverse(node0->right, node1, thickness, callback);
+    }
+}
+
 void Simulator::traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
     for (int i = 0; i < clothBvhs.size(); i++) {
-        clothBvhs[i]->traverse(thickness, callback);
+        traverse(clothBvhs[i], thickness, callback);
         for (int j = 0; j < i; j++)
-            clothBvhs[i]->traverse(clothBvhs[j], thickness, callback);
+            traverse(clothBvhs[i], clothBvhs[j], thickness, callback);
         
         for (int j = 0; j < obstacleBvhs.size(); j++)
-            clothBvhs[i]->traverse(obstacleBvhs[j], thickness, callback);
+            traverse(clothBvhs[i], obstacleBvhs[j], thickness, callback);
     }
 }
 
@@ -211,9 +245,10 @@ void Simulator::physicsStep() {
 }
 
 void Simulator::collisionStep() {
+    std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(true));
+    std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(true));
+
     if (!gpu) {
-        std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(true));
-        std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(true));
         std::vector<ImpactZone*> zones;
         float obstacleMass = 1e3f;
         for (int deform = 0; deform < 2; deform++) {
@@ -250,13 +285,14 @@ void Simulator::collisionStep() {
                 break;
         }
 
-        destroyBvhs(clothBvhs);
-        destroyBvhs(obstacleBvhs);
         for (const ImpactZone* zone : zones)
             delete zone;
     } else {
         // TODO
     }
+
+    destroyBvhs(clothBvhs);
+    destroyBvhs(obstacleBvhs);
 
     updateGeometries();
     updateVelocities();

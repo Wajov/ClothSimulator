@@ -1,4 +1,4 @@
-#include "Bounds.hpp"
+#include "Bounds.cuh"
 
 Bounds::Bounds() :
     pMin(FLT_MAX, FLT_MAX, FLT_MAX),
