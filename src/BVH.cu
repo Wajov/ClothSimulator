@@ -95,10 +95,6 @@ void BVH::initialize(const BVHNode* parent, int l, int r, std::vector<Face*>& fa
     }
 }
 
-BVHNode* BVH::getRoot() const {
-    return root;
-}
-
 bool BVH::contain(const Node* node) const {
     return adjacents.find(const_cast<Node*>(node)) != adjacents.end();
 }
@@ -111,6 +107,14 @@ void BVH::setActive(const Node* node, bool active) {
     std::vector<BVHNode*>& adjacentNodes = this->adjacents[const_cast<Node*>(node)];
     for (BVHNode* node : adjacentNodes)
         node->setActiveUp(active);
+}
+
+void BVH::traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback) const {
+    root->traverse(thickness, callback);
+}
+
+void BVH::traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback) const {
+    root->traverse(bvh->root, thickness, callback);
 }
 
 void BVH::findNearestPoint(const Vector3f& x, NearPoint& point) const {

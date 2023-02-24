@@ -75,10 +75,6 @@ void BVHNode::checkNearestPoint(const Vector3f& x, const Face* face, NearPoint& 
     }
 }
 
-bool BVHNode::isLeaf() const {
-    return left == nullptr && right == nullptr;
-}
-
 void BVHNode::setActiveUp(bool active) {
     this->active = active;
     if (parent != nullptr)
@@ -90,6 +86,36 @@ void BVHNode::setActiveDown(bool active) {
     if (!isLeaf()) { 
         left->setActiveDown(active);
         right->setActiveDown(active);
+    }
+}
+
+bool BVHNode::isLeaf() const {
+    return left == nullptr && right == nullptr;
+}
+
+void BVHNode::traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback) const {
+    if (isLeaf() || !active)
+        return;
+
+    left->traverse(thickness, callback);
+    right->traverse(thickness, callback);
+    left->traverse(right, thickness, callback);
+}
+
+void BVHNode::traverse(const BVHNode* node, float thickness, std::function<void(const Face*, const Face*, float)> callback) const {
+    if (!active && !node->active)
+        return;
+    if (!bounds.overlap(node->bounds, thickness))
+        return;
+
+    if (isLeaf() && node->isLeaf())
+        callback(face, node->face, thickness);
+    else if (isLeaf()) {
+        traverse(node->left, thickness, callback);
+        traverse(node->right, thickness, callback);
+    } else {
+        left->traverse(node, thickness, callback);
+        right->traverse(node, thickness, callback);
     }
 }
 

@@ -90,69 +90,14 @@ void Simulator::destroyBvhs(const std::vector<BVH*>& bvhs) const {
         delete bvh;
 }
 
-void Simulator::traverse(const BVHNode* node, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
-    if (node->isLeaf() || !node->active)
-        return;
-
-    traverse(node->left, thickness, callback);
-    traverse(node->right, thickness, callback);
-    traverse(node->left, node->right, thickness, callback);
-}
-
-void Simulator::traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
-    traverse(bvh->getRoot(), thickness, callback);
-}
-
-void Simulator::traverse(const BVH* bvh0, const BVH* bvh1, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
-    traverse(bvh0->getRoot(), bvh1->getRoot(), thickness, callback);
-}
-
-void Simulator::traverse(const BVHNode* node0, const BVHNode* node1, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
-    if (!node0->active && !node1->active)
-        return;
-    if (!node0->bounds.overlap(node1->bounds, thickness))
-        return;
-
-    if (node0->isLeaf() && node1->isLeaf())
-        callback(node0->face, node1->face, thickness);
-    else if (node0->isLeaf()) {
-        traverse(node0, node1->left, thickness, callback);
-        traverse(node0, node1->right, thickness, callback);
-    } else {
-        traverse(node0->left, node1, thickness, callback);
-        traverse(node0->right, node1, thickness, callback);
-    }
-}
-
-void Simulator::traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback) {
+void Simulator::traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback) const {
     for (int i = 0; i < clothBvhs.size(); i++) {
-        traverse(clothBvhs[i], thickness, callback);
+        clothBvhs[i]->traverse(thickness, callback);
         for (int j = 0; j < i; j++)
-            traverse(clothBvhs[i], clothBvhs[j], thickness, callback);
+            clothBvhs[i]->traverse(clothBvhs[j], thickness, callback);
         
         for (int j = 0; j < obstacleBvhs.size(); j++)
-            traverse(clothBvhs[i], obstacleBvhs[j], thickness, callback);
-    }
-}
-
-void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const {
-    for (BVH* clothBvh : clothBvhs)
-        clothBvh->setAllActive(false);
-    for (BVH* obstacleBvh : obstacleBvhs)
-        obstacleBvh->setAllActive(false);
-    
-    for (ImpactZone* zone : zones) {
-        if (!zone->getActive())
-            continue;
-        std::vector<Node*>& nodes = zone->getNodes();
-        for (const Node* node : nodes) {
-            for (BVH* clothBvh : clothBvhs)
-                if (clothBvh->contain(node))
-                    clothBvh->setActive(node, true);
-            for (BVH* obstacleBvh : obstacleBvhs)
-                if (obstacleBvh->contain(node))
-                    obstacleBvh->setActive(node, true);
-        }
+            clothBvhs[i]->traverse(obstacleBvhs[j], thickness, callback);
     }
 }
 
@@ -212,6 +157,27 @@ void Simulator::addImpacts(const std::vector<Impact>& impacts, std::vector<Impac
         }
         zone->addImpact(impact);
         zone->setActive(true);
+    }
+}
+
+void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const {
+    for (BVH* clothBvh : clothBvhs)
+        clothBvh->setAllActive(false);
+    for (BVH* obstacleBvh : obstacleBvhs)
+        obstacleBvh->setAllActive(false);
+    
+    for (ImpactZone* zone : zones) {
+        if (!zone->getActive())
+            continue;
+        std::vector<Node*>& nodes = zone->getNodes();
+        for (const Node* node : nodes) {
+            for (BVH* clothBvh : clothBvhs)
+                if (clothBvh->contain(node))
+                    clothBvh->setActive(node, true);
+            for (BVH* obstacleBvh : obstacleBvhs)
+                if (obstacleBvh->contain(node))
+                    obstacleBvh->setActive(node, true);
+        }
     }
 }
 

@@ -5,7 +5,7 @@
 
 #include "Vector.cuh"
 #include "Matrix.cuh"
-#include "optimization/Optimization.hpp"
+#include "optimization/Optimization.cuh"
 
 const int MAX_ITERATIONS = 100;
 const float EPSILON = 1e-12f;

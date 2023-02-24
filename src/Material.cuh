@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 
 #include "MathHelper.cuh"
-#include "JsonHelper.hpp"
+#include "JsonHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 

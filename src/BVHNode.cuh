@@ -1,14 +1,15 @@
 #ifndef BVH_NODE_CUH
 #define BVH_NODE_CUH
 
-// #include <functional>
+#include <functional>
 #include <unordered_map>
+
 #include <cuda_runtime.h>
 
 #include "MathHelper.cuh"
 #include "Bounds.cuh"
 #include "Face.cuh"
-#include "NearPoint.hpp"
+#include "NearPoint.cuh"
 
 class BVHNode {
 private:
@@ -24,9 +25,11 @@ public:
     bool active;
     __host__ __device__ BVHNode();
     __host__ __device__ ~BVHNode();
-    bool isLeaf() const;
     void setActiveUp(bool active);
     void setActiveDown(bool active);
+    bool isLeaf() const;
+    void traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
+    void traverse(const BVHNode* node, float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
     void findNearestPoint(const Vector3f& x, NearPoint& point) const;
     void update(bool ccd);
 };

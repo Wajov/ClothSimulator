@@ -25,8 +25,8 @@
 #include "Edge.cuh"
 #include "Face.cuh"
 #include "Renderable.cuh"
-#include "Transform.hpp"
-#include "Operator.hpp"
+#include "Transform.cuh"
+#include "Operator.cuh"
 
 extern bool gpu;
 

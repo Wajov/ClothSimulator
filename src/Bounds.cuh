@@ -2,6 +2,7 @@
 #define BOUNDS_CUH
 
 #include <cfloat>
+
 #include <cuda_runtime.h>
 
 #include "MathHelper.cuh"

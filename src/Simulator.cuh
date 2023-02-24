@@ -13,22 +13,22 @@
 #include <json/json.h>
 #include <cuda_runtime.h>
 
-#include "JsonHelper.hpp"
+#include "JsonHelper.cuh"
 #include "CudaHelper.cuh"
-#include "CollisionHelper.hpp"
-#include "SeparationHelper.hpp"
+#include "CollisionHelper.cuh"
+#include "SeparationHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
-#include "Magic.hpp"
+#include "Magic.cuh"
 #include "Wind.cuh"
 #include "Cloth.cuh"
-#include "Obstacle.hpp"
+#include "Obstacle.cuh"
 #include "BVH.cuh"
-#include "Impact.hpp"
-#include "ImpactZone.hpp"
-#include "Intersection.hpp"
-#include "optimization/ImpactZoneOptimization.hpp"
-#include "optimization/SeparationOptimization.hpp"
+#include "Impact.cuh"
+#include "ImpactZone.cuh"
+#include "Intersection.cuh"
+#include "optimization/ImpactZoneOptimization.cuh"
+#include "optimization/SeparationOptimization.cuh"
 
 extern bool gpu;
 
@@ -51,15 +51,11 @@ private:
     std::vector<BVH*> buildObstacleBvhs(bool ccd) const;
     void updateBvhs(std::vector<BVH*>& bvhs) const;
     void destroyBvhs(const std::vector<BVH*>& bvhs) const;
-    void traverse(const BVHNode* node, float thickness, std::function<void(const Face*, const Face*, float)> callback);
-    void traverse(const BVHNode* node0, const BVHNode* node1, float thickness, std::function<void(const Face*, const Face*, float)> callback);
-    void traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback);
-    void traverse(const BVH* bvh0, const BVH* bvh1, float thickness, std::function<void(const Face*, const Face*, float)> callback);
-    void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback);
-    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
+    void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;
     ImpactZone* findImpactZone(const Node* node, std::vector<ImpactZone*>& zones) const;
     void addImpacts(const std::vector<Impact>& impacts, std::vector<ImpactZone*>& zones, bool deformObstacles) const;
+    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<Intersection>& intersections) const;
     void resetObstacles();
     void physicsStep();

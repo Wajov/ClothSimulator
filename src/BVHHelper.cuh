@@ -1,6 +1,7 @@
 #ifndef BVH_HELPER_CUH
 #define BVH_HELPER_CUH
 
+
 #include <device_launch_parameters.h>
 
 #include "Face.cuh"
@@ -49,7 +50,6 @@ __global__ static void initializeLeafNodes(int nNodes, const Face* const* faces,
 }
 
 __device__ static int commonUpperBits(unsigned long long a, unsigned long long b) {
-    // return 0;
     return __clzll(a ^ b);
 }
 
