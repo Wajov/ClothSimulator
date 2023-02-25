@@ -1,5 +1,5 @@
-#ifndef IMPACT_ZONE_OPTIMIZATION_CUH
-#define IMPACT_ZONE_OPTIMIZATION_CUH
+#ifndef COLLISION_OPTIMIZATION_CUH
+#define COLLISION_OPTIMIZATION_CUH
 
 #include <vector>
 
@@ -7,18 +7,18 @@
 #include "Optimization.cuh"
 #include "Node.cuh"
 #include "Impact.cuh"
-#include "ImpactZone.cuh"
 
-class ImpactZoneOptimization : public Optimization {
+class CollisionOptimization : public Optimization {
 private:
     float invMass, thickness, obstacleMass;
     std::vector<Node*> nodes;
     std::vector<Impact> impacts;
     std::vector<std::vector<int>> indices;
+    int addNode(const Node* node, int deform);
 
 public:
-    ImpactZoneOptimization(const ImpactZone* zone, float thickness, float obstacleMass);
-    ~ImpactZoneOptimization();
+    CollisionOptimization(const std::vector<Impact>& impacts, float thickness, int deform, float obstacleMass);
+    ~CollisionOptimization();
     void initialize(std::vector<Vector3f>& x) const override;
     void finalize(const std::vector<Vector3f>& x) override;
     float objective(const std::vector<Vector3f>& x) const override;

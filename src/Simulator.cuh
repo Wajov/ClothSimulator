@@ -25,9 +25,8 @@
 #include "Obstacle.cuh"
 #include "BVH.cuh"
 #include "Impact.cuh"
-#include "ImpactZone.cuh"
 #include "Intersection.cuh"
-#include "optimization/ImpactZoneOptimization.cuh"
+#include "optimization/CollisionOptimization.cuh"
 #include "optimization/SeparationOptimization.cuh"
 
 extern bool gpu;
@@ -53,9 +52,7 @@ private:
     void destroyBvhs(const std::vector<BVH*>& bvhs) const;
     void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;
-    ImpactZone* findImpactZone(const Node* node, std::vector<ImpactZone*>& zones) const;
-    void addImpacts(const std::vector<Impact>& impacts, std::vector<ImpactZone*>& zones, bool deformObstacles) const;
-    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<ImpactZone*>& zones) const;
+    void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Impact>& impacts) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const;
     void resetObstacles();
     void physicsStep();
