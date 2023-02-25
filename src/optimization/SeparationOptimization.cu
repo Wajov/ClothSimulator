@@ -1,8 +1,8 @@
 #include "SeparationOptimization.cuh"
 
 SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& intersections, float thickness) :
-    thickness(thickness),
-    intersections(intersections) {
+    intersections(intersections),
+    thickness(thickness) {
     indices.resize(intersections.size());
     for (int i = 0; i < intersections.size(); i++) {
         indices[i].resize(6);
@@ -20,6 +20,7 @@ SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& 
     invArea = 0.0f;
     for (const Node* node : nodes)
         invArea += 1.0f / node->area;
+    invArea /= nodes.size();
 }
 
 SeparationOptimization::~SeparationOptimization() {}
