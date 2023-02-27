@@ -42,8 +42,8 @@ class Cloth {
 private:
     Mesh* mesh;
     Material* material;
-    std::vector<Handle*> handles;
-    thrust::device_vector<Handle*> handlesGpu;
+    std::vector<Handle> handles;
+    thrust::device_vector<Handle> handlesGpu;
     Remeshing* remeshing;
     Shader* edgeShader, * faceShader;
     cusparseHandle_t cusparseHandle;

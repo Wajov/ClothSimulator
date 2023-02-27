@@ -87,7 +87,7 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     std::string t = s;
     std::vector<std::string> ans;
     while (t.find(c) != std::string::npos) {
-        unsigned int index = t.find(c);
+        int index = t.find(c);
         ans.push_back(t.substr(0, index));
         t.erase(0, index + 1);
     }
@@ -95,15 +95,15 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     return ans;
 }
 
-Edge* Mesh::findEdge(int index0, int index1, std::map<std::pair<int, int>, int>& edgeMap) {
+Edge* Mesh::findEdge(int index0, int index1, std::map<Pairii, int>& edgeMap) {
     if (index0 > index1)
         mySwap(index0, index1);
-    std::pair<int, int> pair = std::make_pair(index0, index1);
-    std::map<std::pair<int, int>, int>::const_iterator iter = edgeMap.find(pair);
+    Pairii index(index0, index1);
+    auto iter = edgeMap.find(index);
     if (iter != edgeMap.end())
         return edges[iter->second];
     else {
-        edgeMap[pair] = edges.size();
+        edgeMap[index] = edges.size();
         edges.push_back(new Edge(nodes[index0], nodes[index1]));
         return edges.back();
     }
@@ -120,7 +120,7 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f
         for (int i = 0; i < u.size(); i++)
             vertices[i] = new Vertex(u[i]);
 
-        std::map<std::pair<int, int>, int> edgeMap;
+        std::map<Pairii, int> edgeMap;
         for (int i = 0; i < xIndices.size(); i += 3) {
             int xIndex0 = xIndices[i];
             int xIndex1 = xIndices[i + 1];
@@ -175,8 +175,8 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f
 
         facesGpu.resize(nFaces);
         Face** facesPointer = pointer(facesGpu);
-        thrust::device_vector<PairIndex> edgeIndices(nEdges);
-        PairIndex* edgeIndicesPointer = pointer(edgeIndices);
+        thrust::device_vector<Pairii> edgeIndices(nEdges);
+        Pairii* edgeIndicesPointer = pointer(edgeIndices);
         thrust::device_vector<EdgeData> edgeData(nEdges);
         EdgeData* edgeDataPointer = pointer(edgeData);
         initializeFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(xIndicesGpu), pointer(uIndicesGpu), nodesPointer, material, verticesPointer, facesPointer, edgeIndicesPointer, edgeDataPointer);
@@ -449,21 +449,58 @@ void Mesh::readDataFromFile(const std::string& path) {
 
 void Mesh::writeDataToFile(const std::string& path) {
     std::ofstream fout(path);
-    for (const Node* node : nodes) {
-        fout << "v " << node->x(0) << " " << node->x(1) << " " << node->x(2) << " " << std::endl;
-        fout << "nv " << node->v(0) << " " << node->v(1) << " " << node->v(2) << " " << std::endl;
-    }
-    for (const Vertex* vertex : vertices)
-        fout << "vt " << vertex->u(0) << " " << vertex->u(1) << std::endl;
-    for (const Face* face : faces) {
-        fout << "f";
-        for (int i = 0; i < 3; i++) {
-            Vertex* vertex = face->vertices[i];
-            int xIndex = vertex->node->index + 1;
-            int uIndex = vertex->index + 1;
-            fout << " " << xIndex << "/" << uIndex;
+    if (!gpu) {
+        for (const Node* node : nodes) {
+            fout << "v " << node->x(0) << " " << node->x(1) << " " << node->x(2) << std::endl;
+            fout << "nv " << node->v(0) << " " << node->v(1) << " " << node->v(2) << std::endl;
         }
-        fout << std::endl;
+        for (const Vertex* vertex : vertices)
+            fout << "vt " << vertex->u(0) << " " << vertex->u(1) << std::endl;
+        for (const Face* face : faces) {
+            fout << "f";
+            for (int i = 0; i < 3; i++) {
+                Vertex* vertex = face->vertices[i];
+                int xIndex = vertex->node->index + 1;
+                int uIndex = vertex->index + 1;
+                fout << " " << xIndex << "/" << uIndex;
+            }
+            fout << std::endl;
+        }
+    } else {
+        int nNodes = nodesGpu.size();
+        thrust::device_vector<Vector3f> x(nNodes);
+        copyX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), pointer(x));
+        CUDA_CHECK_LAST();
+        for (const Vector3f& xt : x)
+            fout << "v " << xt(0) << " " << xt(1) << " " << xt(2) << std::endl;
+
+        thrust::device_vector<Vector3f> v(nNodes);
+        copyX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), pointer(v));
+        CUDA_CHECK_LAST();
+        for (const Vector3f& vt : v)
+            fout << "nv " << vt(0) << " " << vt(1) << " " << vt(2) << std::endl;
+
+        int nVertices = verticesGpu.size();
+        thrust::device_vector<Vector2f> u(nVertices);
+        copyU<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(verticesGpu), pointer(u));
+        CUDA_CHECK_LAST();
+        for (const Vector2f& ut : u)
+            fout << "vt " << ut(0) << " " << ut(1) << std::endl;
+        
+        int nFaces = facesGpu.size();
+        thrust::device_vector<Pairii> indices(3 * nFaces);
+        copyFaceIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(facesGpu), pointer(indices));
+        CUDA_CHECK_LAST();
+        for (int i = 0; i < nFaces; i++) {
+            fout << "f";
+            for (int j = 0; j < 3; j++) {
+                const Pairii& index = indices[3 * i + j];
+                fout << " " << index.first + 1 << "/" << index.second + 1;
+            }
+            fout << std::endl;
+        }
+
+        fout.close();
     }
 }
 

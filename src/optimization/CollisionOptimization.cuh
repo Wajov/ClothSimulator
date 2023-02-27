@@ -1,10 +1,12 @@
 #ifndef COLLISION_OPTIMIZATION_CUH
 #define COLLISION_OPTIMIZATION_CUH
 
+#include <algorithm>
 #include <vector>
 
 #include "MathHelper.cuh"
 #include "Optimization.cuh"
+#include "Pair.cuh"
 #include "Node.cuh"
 #include "Impact.cuh"
 
@@ -14,7 +16,6 @@ private:
     std::vector<Node*> nodes;
     std::vector<Impact> impacts;
     std::vector<std::vector<int>> indices;
-    int addNode(const Node* node, int deform);
 
 public:
     CollisionOptimization(const std::vector<Impact>& impacts, float thickness, int deform, float obstacleMass);

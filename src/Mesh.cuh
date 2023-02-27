@@ -11,6 +11,7 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
 #include <thrust/unique.h>
 #include <thrust/sort.h>
 #include <thrust/remove.h>
@@ -19,6 +20,7 @@
 #include "MathHelper.cuh"
 #include "CudaHelper.cuh"
 #include "MeshHelper.cuh"
+#include "Pair.cuh"
 #include "Vector.cuh"
 #include "Node.cuh"
 #include "Vertex.cuh"
@@ -43,7 +45,7 @@ private:
     thrust::device_vector<Face*> facesGpu;
     cudaGraphicsResource* vboCuda;
     std::vector<std::string> split(const std::string& s, char c) const;
-    Edge* findEdge(int index0, int index1, std::map<std::pair<int, int>, int>& edgeMap);
+    Edge* findEdge(int index0, int index1, std::map<Pairii, int>& edgeMap);
     void initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
 
 public:

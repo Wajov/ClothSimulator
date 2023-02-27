@@ -6,21 +6,7 @@
 #include "Vertex.cuh"
 #include "Handle.cuh"
 
-__global__ static void initializeHandles(int nHandles, const int* handleIndices, Node** nodes, Handle** handles) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nHandles; i += nThreads) {
-        int index = handleIndices[i];
-        nodes[index]->preserve = true;
-        handles[i] = new Handle(nodes[index], nodes[index]->x);
-    }
-}
-
-__global__ static void deleteHandles(int nHandles, const Handle* const* handles) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nHandles; i += nThreads)
-        delete handles[i];
-}
+__global__ void initializeHandles(int nHandles, const int* handleIndices, Node** nodes, Handle* handles);
+__global__ void deleteHandles(int nHandles, const Handle* const* handles);
 
 #endif

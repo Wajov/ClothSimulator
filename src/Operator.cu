@@ -225,7 +225,7 @@ void Operator::update(std::vector<Edge*>& edges) const {
 
 void Operator::setNull(std::vector<Edge*>& edges) const {
     for (const Edge* edge : removedEdges) {
-        std::vector<Edge*>::iterator iter = std::find(edges.begin(), edges.end(), edge);
+        auto iter = std::find(edges.begin(), edges.end(), edge);
         if (iter != edges.end())
             *iter = nullptr;
     }

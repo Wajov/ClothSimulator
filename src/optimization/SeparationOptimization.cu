@@ -14,8 +14,8 @@ SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& 
             indices[i][j + 3] = addNode(intersection.face1->vertices[j]->node);
     }
 
-    nodeSize = nodes.size();
-    constraintSize = intersections.size();
+    nNodes = nodes.size();
+    nConstraints = intersections.size();
     
     invArea = 0.0f;
     for (const Node* node : nodes)

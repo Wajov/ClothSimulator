@@ -27,9 +27,11 @@ Cloth::Cloth(const Json::Value& json) {
         std::vector<Node*>& nodes = mesh->getNodes();
         handles.resize(handleIndices.size());
         for (int i = 0; i < handleIndices.size(); i++) {
-            int index = handleIndices[i];
-            nodes[index]->preserve = true;
-            handles[i] = new Handle(nodes[index], nodes[index]->x);
+            Node* node = nodes[handleIndices[i]];
+            Handle& handle = handles[i];
+            node->preserve = true;
+            handle.node = node;
+            handle.position = node->x;
         }
     } else {
         thrust::device_vector<int> handleIndicesGpu = handleIndices;
@@ -45,8 +47,6 @@ Cloth::Cloth(const Json::Value& json) {
 
 Cloth::~Cloth() {
     delete mesh;
-    for (const Handle* handle : handles)
-        delete handle;
     delete edgeShader;
     delete faceShader;
     
@@ -54,8 +54,6 @@ Cloth::~Cloth() {
         delete material;
     else {
         CUDA_CHECK(cudaFree(material));
-        deleteHandles<<<GRID_SIZE, BLOCK_SIZE>>>(handlesGpu.size(), pointer(handlesGpu));
-        CUDA_CHECK_LAST();
 
         CUSPARSE_CHECK(cusparseDestroy(cusparseHandle));
         CUSOLVER_CHECK(cusolverSpDestroy(cusolverHandle));
@@ -186,26 +184,16 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::Ve
 }
 
 void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
-    for (const Handle* handle : handles) {
-        Node* node = handle->getNode();
-        Vector3f position = handle->getPosition();
+    for (const Handle& handle : handles) {
+        Node* node = handle.node;
         int index = node->index;
         A.coeffRef(3 * index, 3 * index) += dt * dt * stiffness;
         A.coeffRef(3 * index + 1, 3 * index + 1) += dt * dt * stiffness;
         A.coeffRef(3 * index + 2, 3 * index + 2) += dt * dt * stiffness;
-        Vector3f f = dt * ((position - node->x) - dt * node->v) * stiffness;
+        Vector3f f = dt * ((handle.position - node->x) - dt * node->v) * stiffness;
         for (int i = 0; i < 3; i++)
             b(3 * index + i, 0) += f(i);
     }
-    // for (const Constraint* constraint : constraints) {
-    //     std::vector<Gradient*> gradient = constraint->energyGradient();
-    //     std::vector<Hessian*> hessian = constraint->energyHessian();
-    //     for (const Gradient* grad : gradient)
-    //         b.block<3, 1>(3 * grad->getIndex(), 0) -= dt * grad->getValue();
-    //     for (const Hessian* hess : hessian) {
-    //         A.block<
-    //     }
-    // }
 }
 
 Matrix2x2f Cloth::compressionMetric(const Matrix2x2f& G, const Matrix2x2f& S2) const {
@@ -365,13 +353,13 @@ void Cloth::flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpda
 
 std::vector<Edge*> Cloth::findEdgesToSplit() const {
     std::vector<Edge*>& edges = mesh->getEdges();
-    std::vector<std::pair<float, Edge*>> sorted;
+    std::vector<Pairfe> sorted;
     for (Edge* edge : edges) {
         float m = edgeMetric(edge);
         if (m > 1.0f)
-            sorted.push_back(std::make_pair(m, edge));
+            sorted.emplace_back(m, edge);
     }
-    std::sort(sorted.begin(), sorted.end(), [](const std::pair<float, Edge*>& a, const std::pair<float, Edge*>& b) {
+    std::sort(sorted.begin(), sorted.end(), [](const Pairfe& a, const Pairfe& b) {
         return a.first > b.first;
     });
 
@@ -568,7 +556,7 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
         int aSize = 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles;
         int bSize = 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles;
 
-        thrust::device_vector<PairIndex> aIndices(aSize);
+        thrust::device_vector<Pairii> aIndices(aSize);
         thrust::device_vector<int> bIndices(bSize);
         thrust::device_vector<float> aValues(aSize), bValues(bSize);
 
@@ -593,7 +581,7 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
         int n = 3 * nNodes;
 
         thrust::sort_by_key(aIndices.begin(), aIndices.end(), aValues.begin());
-        thrust::device_vector<PairIndex> outputAIndices(aSize);
+        thrust::device_vector<Pairii> outputAIndices(aSize);
         thrust::device_vector<float> values(aSize);
         auto iter = thrust::reduce_by_key(aIndices.begin(), aIndices.end(), aValues.begin(), outputAIndices.begin(), values.begin());
         int nNonZero = iter.first - outputAIndices.begin();

@@ -21,13 +21,13 @@ public:
     Face* face;
     Bounds bounds;
     BVHNode* parent, * left, * right;
-    int count;
+    int count, maxIndex;
     bool active;
     __host__ __device__ BVHNode();
     __host__ __device__ ~BVHNode();
     void setActiveUp(bool active);
     void setActiveDown(bool active);
-    bool isLeaf() const;
+    __host__ __device__ bool isLeaf() const;
     void traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
     void traverse(const BVHNode* node, float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
     void findNearestPoint(const Vector3f& x, NearPoint& point) const;

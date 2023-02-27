@@ -101,23 +101,20 @@ void Simulator::traverse(const std::vector<BVH*>& clothBvhs, const std::vector<B
     }
 }
 
-std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& impacts) const {
-    std::vector<Impact> sorted = impacts;
-    std::sort(sorted.begin(), sorted.end());
-    
-    std::unordered_set<Node*> nodes;
-    std::vector<Impact> ans;
-    for (const Impact& impact : sorted) {
-        bool flag = true;
-        for (int i = 0; i < 4; i++)
-            if (impact.nodes[i]->isFree && nodes.find(impact.nodes[i]) != nodes.end()) {
-                flag = false;
-                break;
-            }
-        if (flag) {
-            ans.push_back(impact);
-            for (int i = 0; i < 4; i++)
-                nodes.insert(impact.nodes[i]);
+thrust::device_vector<Proximity> Simulator::traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness) const {
+    thrust::device_vector<Proximity> ans, proximities;
+    for (int i = 0; i < cloths.size(); i++) {
+        proximities = std::move(clothBvhs[i]->traverse(thickness));
+        ans.insert(ans.end(), proximities.begin(), proximities.end());
+
+        for (int j = 0; j < i; j++) {
+            proximities = std::move(clothBvhs[i]->traverse(clothBvhs[j], thickness));
+            ans.insert(ans.end(), proximities.begin(), proximities.end());
+        }
+
+        for (int j = 0; j < obstacleBvhs.size(); j++) {
+            proximities = std::move(clothBvhs[i]->traverse(obstacleBvhs[j], thickness));
+            ans.insert(ans.end(), proximities.begin(), proximities.end());
         }
     }
     return ans;
@@ -139,6 +136,82 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
                 if (obstacleBvh->contain(node))
                     obstacleBvh->setActive(node, true);
         }
+}
+
+void Simulator::checkImpacts(const Face* face0, const Face* face1, float thickness, std::vector<Impact>& impacts) const {
+    Impact impact;
+    for (int i = 0; i < 3; i++)
+        if (checkVertexFaceImpact(face0->vertices[i], face1, thickness, impact))
+            impacts.push_back(impact);
+    for (int i = 0; i < 3; i++)
+        if (checkVertexFaceImpact(face1->vertices[i], face0, thickness, impact))
+            impacts.push_back(impact);
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            if (checkEdgeEdgeImpact(face0->edges[i], face1->edges[j], thickness, impact))
+                impacts.push_back(impact);
+}
+
+std::vector<Impact> Simulator::findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const {
+    std::vector<Impact> ans;
+    traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
+        checkImpacts(face0, face1, thickness, ans);
+    });
+    return ans;
+}
+
+thrust::device_vector<Impact> Simulator::findImpactsGpu(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const {
+    thrust::device_vector<Proximity> proximities = std::move(traverse(clothBvhs, obstacleBvhs, magic->collisionThickness));
+    int nProximities = proximities.size();
+    thrust::device_vector<Impact> ans(15 * nProximities);
+    checkImpactsGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nProximities, pointer(proximities), magic->collisionThickness, pointer(ans));
+    CUDA_CHECK_LAST();
+
+    ans.erase(thrust::remove_if(ans.begin(), ans.end(), IsNull()), ans.end());
+    return ans;
+}
+
+std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& impacts, int deform) const {
+    std::vector<Impact> sorted = impacts;
+    std::sort(sorted.begin(), sorted.end());
+    
+    std::unordered_set<Node*> nodes;
+    std::vector<Impact> ans;
+    for (const Impact& impact : sorted) {
+        bool flag = true;
+        for (int i = 0; i < 4; i++)
+            if ((deform == 1 || impact.nodes[i]->isFree) && nodes.find(impact.nodes[i]) != nodes.end()) {
+                flag = false;
+                break;
+            }
+        if (flag) {
+            ans.push_back(impact);
+            for (int i = 0; i < 4; i++)
+                nodes.insert(impact.nodes[i]);
+        }
+    }
+    return ans;
+}
+
+thrust::device_vector<Impact> Simulator::independentImpacts(const thrust::device_vector<Impact>& impacts, int deform) const {
+    int nImpacts = impacts.size();
+    int nNodes = 4 * nImpacts;
+    thrust::device_vector<Node*> nodes(nNodes);
+    thrust::device_vector<Pairfi> nodeImpacts(nNodes);
+    collectNodeImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, pointer(impacts), pointer(nodes), pointer(nodeImpacts));
+    CUDA_CHECK_LAST();
+
+    thrust::sort_by_key(nodes.begin(), nodes.end(), nodeImpacts.begin());
+    thrust::device_vector<Node*> outputNodes(nNodes);
+    thrust::device_vector<Pairfi> outputNodeImpacts(nNodes);
+    auto iter = thrust::reduce_by_key(nodes.begin(), nodes.end(), nodeImpacts.begin(), outputNodes.begin(), outputNodeImpacts.begin(), thrust::equal_to<Node*>(), Min());
+    
+    int nIndependentImpacts = iter.first - outputNodes.begin();
+    thrust::device_vector<Impact> ans(nIndependentImpacts);
+    setIndependentImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nIndependentImpacts, pointer(outputNodeImpacts), pointer(impacts), pointer(ans));
+    CUDA_CHECK_LAST();
+
+    return ans;
 }
 
 void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const {
@@ -167,6 +240,25 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
         }
 }
 
+void Simulator::checkIntersection(const Face* face0, const Face* face1, std::vector<Intersection>& intersections, const std::vector<Cloth*>& cloths, const std::vector<Mesh*>& oldMeshes) const {
+    Vector3f b0, b1;
+    if (intersectionMidpoint(face0, face1, b0, b1)) {
+        Vector3f x0 = oldPosition(face0, b0, cloths, oldMeshes);
+        Vector3f x1 = oldPosition(face1, b1, cloths, oldMeshes);
+        Vector3f d = (x0 - x1).normalized();
+        farthestPoint(face0, face1, d, b0, b1);
+        intersections.emplace_back(face0, face1, b0, b1, d);
+    }
+}
+
+std::vector<Intersection> Simulator::findIntersections(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Mesh*>& oldMeshes) const {
+    std::vector<Intersection> ans;
+    traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
+        checkIntersection(face0, face1, ans, cloths, oldMeshes);
+    });
+    return ans;
+}
+
 void Simulator::resetObstacles() {
     for (Obstacle* obstacle : obstacles)
         obstacle->reset();
@@ -192,19 +284,16 @@ void Simulator::collisionStep() {
                 if (!impacts.empty())
                     updateActive(clothBvhs, obstacleBvhs, impacts);
                 
-                std::vector<Impact> newImpacts;
-                traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
-                    checkImpacts(face0, face1, thickness, newImpacts);
-                });
-                newImpacts = std::move(independentImpacts(newImpacts));
+                std::vector<Impact> newImpacts = std::move(findImpacts(clothBvhs, obstacleBvhs));
                 if (newImpacts.empty()) {
                     success = true;
                     break;
                 }
 
+                newImpacts = std::move(independentImpacts(newImpacts, deform));
                 impacts.insert(impacts.end(), newImpacts.begin(), newImpacts.end());
                 Optimization* optimization = new CollisionOptimization(impacts, magic->collisionThickness, deform, obstacleMass);
-                augmentedLagrangianMethod(optimization);
+                optimization->solve();
                 delete optimization;
 
                 updateBvhs(clothBvhs);
@@ -217,7 +306,22 @@ void Simulator::collisionStep() {
                 break;
         }
     } else {
-        // TODO
+        thrust::device_vector<Impact> impacts;
+        for (int deform = 0; deform < 2; deform++) {
+            impacts.clear();
+            bool success = false;
+            for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
+                thrust::device_vector<Impact> newImpacts = std::move(findImpactsGpu(clothBvhs, obstacleBvhs));
+                if (newImpacts.empty()) {
+                    success = true;
+                    break;
+                }
+
+                newImpacts = std::move(independentImpacts(newImpacts, deform));
+                impacts.insert(impacts.end(), newImpacts.begin(), newImpacts.end());
+                // TODO
+            }
+        }
     }
 
     destroyBvhs(clothBvhs);
@@ -252,16 +356,13 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
             if (!intersections.empty())
                 updateActive(clothBvhs, obstacleBvhs, intersections);
             
-            std::vector<Intersection> newIntersections;
-            traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
-                checkIntersection(face0, face1, newIntersections, cloths, oldMeshes);
-            });
+            std::vector<Intersection> newIntersections = std::move(findIntersections(clothBvhs, obstacleBvhs, oldMeshes));
             if (newIntersections.empty())
                 break;
 
             intersections.insert(intersections.end(), newIntersections.begin(), newIntersections.end());
             Optimization* optimization = new SeparationOptimization(intersections, magic->collisionThickness);
-            augmentedLagrangianMethod(optimization);
+            optimization->solve();
             delete optimization;
 
             updateBvhs(clothBvhs);
@@ -384,10 +485,10 @@ void Simulator::printDebugInfo(int x, int y) {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
 
-    Pixel pixel;
+    Pairii pixel;
     glReadPixels(x, y, 1, 1, GL_RG_INTEGER, GL_INT, &pixel);
-    selectedCloth = pixel.clothIndex;
-    selectedFace = pixel.faceInedx;
+    selectedCloth = pixel.first;
+    selectedFace = pixel.second;
     if (selectedCloth != -1 && selectedFace != -1)
         cloths[selectedCloth]->printDebugInfo(selectedFace);
 

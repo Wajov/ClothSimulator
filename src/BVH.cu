@@ -16,7 +16,7 @@ BVH::BVH(const Mesh* mesh, bool ccd) :
         initialize(nullptr, 0, nFaces - 1, faces, bounds, centers);
         root = &nodes[0];
     } else {
-        thrust::device_vector<Face*> faces = const_cast<Mesh*>(mesh)->getFacesGpu();
+        thrust::device_vector<Face*>& faces = const_cast<Mesh*>(mesh)->getFacesGpu();
         int nFaces = faces.size();
         Face** facesPointer = pointer(faces);
 
@@ -28,19 +28,22 @@ BVH::BVH(const Mesh* mesh, bool ccd) :
         Vector3f p = objectBounds.pMin, d = objectBounds.pMax - objectBounds.pMin;
 
         leaves.resize(nFaces);
+        BVHNode* leavesPointer = pointer(leaves);
         thrust::device_vector<unsigned long long> mortonCodes(nFaces);
-        initializeLeafNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, boundsPointer, p, d, pointer(leaves), pointer(mortonCodes));
+        unsigned long long* mortonCodesPointer = pointer(mortonCodes);
+        initializeLeafNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, boundsPointer, p, d, leavesPointer, mortonCodesPointer);
         CUDA_CHECK_LAST();
         thrust::sort_by_key(mortonCodes.begin(), mortonCodes.end(), leaves.begin());
 
         internals.resize(nFaces - 1);
-        initializeInternalNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces - 1, pointer(mortonCodes), pointer(leaves), pointer(internals));
+        BVHNode* internalsPointer = pointer(internals);
+        initializeInternalNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces - 1, mortonCodesPointer, leavesPointer, internalsPointer);
         CUDA_CHECK_LAST();
 
-        computeInternalBounds<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(leaves));
+        computeInternalBounds<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, leavesPointer);
         CUDA_CHECK_LAST();
 
-        root = pointer(internals);
+        root = internalsPointer;
     }
 }
 
@@ -113,8 +116,50 @@ void BVH::traverse(float thickness, std::function<void(const Face*, const Face*,
     root->traverse(thickness, callback);
 }
 
+thrust::device_vector<Proximity> BVH::traverse(float thickness) const {
+    int nLeaves = leaves.size();
+    const BVHNode* leavsPointer = pointer(leaves);
+    thrust::device_vector<int> num(nLeaves);
+    int* numPointer = pointer(num);
+    countProximitiesSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer);
+    CUDA_CHECK_LAST();
+
+    thrust::inclusive_scan(num.begin(), num.end(), num.begin());
+    thrust::device_vector<Proximity> ans(num.back());
+    computeProximitiesSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer, pointer(ans));
+    CUDA_CHECK_LAST();
+
+    return ans;
+}
+
 void BVH::traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback) const {
     root->traverse(bvh->root, thickness, callback);
+}
+
+thrust::device_vector<Proximity> BVH::traverse(const BVH* bvh, float thickness) const {
+    int nLeaves;
+    const BVHNode* leavesPointer, * startRoot;
+    if (leaves.size() > bvh->leaves.size()) {
+        nLeaves = leaves.size();
+        leavesPointer = pointer(leaves);
+        startRoot = bvh->root;
+    } else {
+        nLeaves = bvh->leaves.size();
+        leavesPointer = pointer(bvh->leaves);
+        startRoot = root;
+    }
+
+    thrust::device_vector<int> num(nLeaves);
+    int* numPointer = pointer(num);
+    countProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer);
+    CUDA_CHECK_LAST();
+    
+    thrust::inclusive_scan(num.begin(), num.end(), num.begin());
+    thrust::device_vector<Proximity> ans(num.back());
+    computeProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer, pointer(ans));
+    CUDA_CHECK_LAST();
+
+    return ans;
 }
 
 void BVH::findNearestPoint(const Vector3f& x, NearPoint& point) const {

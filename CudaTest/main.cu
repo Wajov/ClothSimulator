@@ -10,16 +10,22 @@
 #include <thrust/sort.h>
 #include <thrust/reduce.h>
 
-struct Ref {
-    int indices[144];
+class Test {
+public:
+    int a;
+
+    __host__ __device__ Test() {
+        printf("Constructor\n");
+    };
+
+    __host__ __device__ ~Test() {
+        printf("Destructor\n");
+    };
 };
 
-__global__ static void sumAll(int n, const int* a, int* sum) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = gridDim.x * blockIdx.x + threadIdx.x; i < n; i += nThreads)
-        atomicAdd(sum, a[i]);
-}
+// struct Ref {
+//     int indices[144];
+// };
 
 // __global__ static void sum(int n, const Ref* d, int* s) {
 //     int nThreads = gridDim.x * blockDim.x;
@@ -101,18 +107,17 @@ int main() {
     //     if (s[i] != s0[i] || s[i] != s1[i])
     //         std::cout << i << ": " << s[i] << " " << s0[i] << " " << s1[i] << std::endl;
 
-    int n = 100;
-    thrust::host_vector<int> h(n);
-    for (int i = 0; i < n; i++)
-        h[i] = i;
-    thrust::device_vector<int> d = h;
-    int* sum, * sumGpu;
-    cudaMalloc(&sumGpu, sizeof(int));
-    cudaMemset(sumGpu, 0, sizeof(int));
-    sumAll<<<64, 64>>>(n, thrust::raw_pointer_cast(d.data()), sumGpu);
-    sum = new int;
-    cudaMemcpy(sum, sumGpu, sizeof(int), cudaMemcpyDeviceToHost);
-    std::cout << *sum << std::endl;
+    // int n = 10;
+    // thrust::host_vector<int> h(n);
+    // for (int i = 0; i < n; i++)
+    //     h[i] = i;
+    // thrust::device_vector<int> d = h;
+    // thrust::inclusive_scan(d.begin(), d.end(), d.begin());
+    // for (int i = 0; i < n; i++)
+    //     std::cout << d[i] << ' ';
+    // std::cout << std::endl << d.back() << std::endl;
+    std::vector<Test> h(2);
+    thrust::device_vector<Test> d(2);
 
     return 0;
 }

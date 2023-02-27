@@ -12,11 +12,15 @@
 #include <glad/glad.h>
 #include <json/json.h>
 #include <cuda_runtime.h>
+#include <thrust/device_vector.h>
+#include <thrust/remove.h>
 
 #include "JsonHelper.cuh"
 #include "CudaHelper.cuh"
+#include "BVHHelper.cuh"
 #include "CollisionHelper.cuh"
 #include "SeparationHelper.cuh"
+#include "Pair.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Magic.cuh"
@@ -30,10 +34,6 @@
 #include "optimization/SeparationOptimization.cuh"
 
 extern bool gpu;
-
-struct Pixel {
-    int clothIndex, faceInedx;
-};
 
 class Simulator {
 private:
@@ -51,9 +51,16 @@ private:
     void updateBvhs(std::vector<BVH*>& bvhs) const;
     void destroyBvhs(const std::vector<BVH*>& bvhs) const;
     void traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
-    std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts) const;
+    thrust::device_vector<Proximity> traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Impact>& impacts) const;
+    void checkImpacts(const Face* face0, const Face* face1, float thickness, std::vector<Impact>& impacts) const;
+    std::vector<Impact> findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;
+    thrust::device_vector<Impact> findImpactsGpu(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;
+    std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts, int deform) const;
+    thrust::device_vector<Impact> independentImpacts(const thrust::device_vector<Impact>& impacts, int deform) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const;
+    void checkIntersection(const Face* face0, const Face* face1, std::vector<Intersection>& intersections, const std::vector<Cloth*>& cloths, const std::vector<Mesh*>& oldMeshes) const;
+    std::vector<Intersection> findIntersections(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Mesh*>& oldMeshes) const;
     void resetObstacles();
     void physicsStep();
     void collisionStep();

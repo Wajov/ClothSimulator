@@ -7,6 +7,7 @@
 
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
+#include <thrust/scan.h>
 #include <thrust/sort.h>
 #include <thrust/reduce.h>
 
@@ -15,6 +16,7 @@
 #include "BVHNode.cuh"
 #include "Node.cuh"
 #include "Face.cuh"
+#include "Bounds.cuh"
 #include "Mesh.cuh"
 #include "Impact.cuh"
 #include "NearPoint.cuh"
@@ -39,6 +41,8 @@ public:
     void setActive(const Node* node, bool active);
     void traverse(float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
     void traverse(const BVH* bvh, float thickness, std::function<void(const Face*, const Face*, float)> callback) const;
+    thrust::device_vector<Proximity> traverse(float thickness) const;
+    thrust::device_vector<Proximity> traverse(const BVH* bvh, float thickness) const;
     void findNearestPoint(const Vector3f& x, NearPoint& point) const;
     void update();
 };
