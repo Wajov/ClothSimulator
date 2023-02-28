@@ -31,6 +31,5 @@ __host__ __device__ bool checkEdgeEdgeImpact(const Edge* edge0, const Edge* edge
 __global__ void checkImpactsGpu(int nProximities, const Proximity* proximities, float thickness, Impact* impacts);
 __global__ void collectNodeImpacts(int nImpacts, const Impact* impacts, Node** nodes, Pairfi* nodeImpacts);
 __global__ void setIndependentImpacts(int nImpacts, const Pairfi* nodeImpacts, const Impact* impacts, Impact* independentImpacts);
-__global__ void printImpacts(int nImpacts, const Impact* impacts);
 
 #endif

@@ -232,13 +232,3 @@ __global__ void setIndependentImpacts(int nImpacts, const Pairfi* nodeImpacts, c
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nImpacts; i += nThreads)
         independentImpacts[i] = impacts[nodeImpacts[i].second];
 }
-
-__global__ void printImpacts(int nImpacts, const Impact* impacts) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nImpacts; i += nThreads) {
-        for (int j = 0; j < 4; j++)
-            printf("%d ", impacts[i].nodes[j]->index);
-        printf("\n");
-    }
-}

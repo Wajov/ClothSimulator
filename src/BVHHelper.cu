@@ -276,3 +276,26 @@ __global__ void computeProximities(int nLeaves, const BVHNode* leaves, const BVH
         } while (node != nullptr);
     }
 }
+
+__global__ void resetCount(int nNodes, BVHNode* nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
+        nodes[i].count = 0;
+}
+
+__global__ void updateGpu(int nNodes, BVHNode* nodes, bool ccd) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        BVHNode* node = &nodes[i];
+        node->bounds = node->face->bounds(ccd);
+        while (node != nullptr) {
+            if (atomicAdd(&node->count, 1) == 1) {
+                node->bounds = node->left->bounds + node->right->bounds;
+                node = node->parent;
+            } else
+                break;
+        }
+    }
+}

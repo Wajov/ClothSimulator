@@ -204,7 +204,7 @@ thrust::device_vector<Impact> Simulator::independentImpacts(const thrust::device
     thrust::sort_by_key(nodes.begin(), nodes.end(), nodeImpacts.begin());
     thrust::device_vector<Node*> outputNodes(nNodes);
     thrust::device_vector<Pairfi> outputNodeImpacts(nNodes);
-    auto iter = thrust::reduce_by_key(nodes.begin(), nodes.end(), nodeImpacts.begin(), outputNodes.begin(), outputNodeImpacts.begin(), thrust::equal_to<Node*>(), Min());
+    auto iter = thrust::reduce_by_key(nodes.begin(), nodes.end(), nodeImpacts.begin(), outputNodes.begin(), outputNodeImpacts.begin(), thrust::equal_to<Node*>(), thrust::minimum<Pairfi>());
     
     int nIndependentImpacts = iter.first - outputNodes.begin();
     thrust::device_vector<Impact> ans(nIndependentImpacts);
@@ -319,8 +319,18 @@ void Simulator::collisionStep() {
 
                 newImpacts = std::move(independentImpacts(newImpacts, deform));
                 impacts.insert(impacts.end(), newImpacts.begin(), newImpacts.end());
-                // TODO
+                Optimization* optimization = new CollisionOptimization(impacts, magic->collisionThickness, deform, obstacleMass);
+                optimization->solve();
+                delete optimization;
+
+                updateBvhs(clothBvhs);
+                if (deform == 1) {
+                    updateBvhs(obstacleBvhs);
+                    obstacleMass *= 0.5f;
+                }
             }
+            if (success)
+                break;
         }
     }
 

@@ -167,5 +167,13 @@ void BVH::findNearestPoint(const Vector3f& x, NearPoint& point) const {
 }
 
 void BVH::update() {
-    root->update(ccd);
+    if (!gpu)
+        root->update(ccd);
+    else {
+        resetCount<<<GRID_SIZE, BLOCK_SIZE>>>(internals.size(), pointer(internals));
+        CUDA_CHECK_LAST();
+
+        updateGpu<<<GRID_SIZE, BLOCK_SIZE>>>(leaves.size(), pointer(leaves), ccd);
+        CUDA_CHECK_LAST();
+    }
 }

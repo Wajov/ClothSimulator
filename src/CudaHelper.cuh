@@ -23,11 +23,9 @@ struct IsNull {
     __device__ bool operator()(const Impact& impact) const {
         return impact.t < 0.0f;
     };
-};
 
-struct Min {
-    template<typename T> __device__ T operator()(const T& a, const T& b) {
-        return a < b ? a : b;
+    __device__ bool operator()(int index) const {
+        return index < 0;
     };
 };
 

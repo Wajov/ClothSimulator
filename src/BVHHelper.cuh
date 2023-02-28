@@ -21,5 +21,7 @@ __global__ void countProximitiesSelf(int nLeaves, const BVHNode* leaves, const B
 __global__ void computeProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities);
 __global__ void countProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num);
 __global__ void computeProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities);
+__global__ void resetCount(int nNodes, BVHNode* nodes);
+__global__ void updateGpu(int nNodes, BVHNode* nodes, bool ccd);
 
 #endif

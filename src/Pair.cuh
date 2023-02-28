@@ -3,6 +3,7 @@
 
 #include <cuda_runtime.h>
 
+#include "Node.cuh"
 #include "Edge.cuh"
 #include "Face.cuh"
 
@@ -40,6 +41,7 @@ public:
 
 typedef Pair<int, int> Pairii;
 typedef Pair<float, int> Pairfi;
+typedef Pair<Node*, int> Pairni;
 typedef Pair<float, Edge*> Pairfe;
 typedef Pair<Face*, Face*> Proximity;
 
