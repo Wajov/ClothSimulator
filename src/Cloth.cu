@@ -259,13 +259,6 @@ void Cloth::computeSizing(const std::vector<Plane>& planes) {
 
     for (Vertex* vertex : vertices)
         vertex->sizing /= vertex->area;
-
-    for (const Vertex* vertex : vertices) {
-        std::cout << std::endl;
-        for (int i = 0; i < 2; i++)
-            for (int j = 0; j < 2; j++)
-                std::cout << vertex->sizing(i, j) << ' ';
-    }
 }
 
 void Cloth::computeSizing(const thrust::device_vector<Plane>& planes) {
