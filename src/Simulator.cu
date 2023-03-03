@@ -342,15 +342,11 @@ void Simulator::collisionStep() {
 }
 
 void Simulator::remeshingStep() {
-    if (!gpu) {
-        std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
-        for (Cloth* cloth : cloths)
-            cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness);
+    std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
+    for (Cloth* cloth : cloths)
+        cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness);
 
-        destroyBvhs(obstacleBvhs);
-    } else {
-        // TODO
-    }
+    destroyBvhs(obstacleBvhs);
 
     updateStructures();
     updateGeometries();

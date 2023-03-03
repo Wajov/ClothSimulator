@@ -3,6 +3,7 @@
 
 #include <cuda_runtime.h>
 
+#include "Matrix.cuh"
 #include "Node.cuh"
 #include "Edge.cuh"
 #include "Face.cuh"
@@ -32,15 +33,21 @@ public:
 
     __host__ __device__ bool operator!=(const Pair<S, T>& p) const {
         return first != p.first || second != p.second;
-    }
+    };
 
     __host__ __device__ bool operator<(const Pair<S, T>& p) const {
         return first < p.first || first == p.first && second < p.second;
     };
+
+    __host__ __device__ Pair<S, T> operator+(const Pair<S, T>& p) const {
+        Pair<S, T> ans(first + p.first, second + p.second);
+        return ans;
+    }
 };
 
 typedef Pair<int, int> Pairii;
 typedef Pair<float, int> Pairfi;
+typedef Pair<float, Matrix2x2f> Pairfm;
 typedef Pair<Node*, int> Pairni;
 typedef Pair<float, Edge*> Pairfe;
 typedef Pair<Face*, Face*> Proximity;

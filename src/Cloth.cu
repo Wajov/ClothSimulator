@@ -3,12 +3,18 @@
 Cloth::Cloth(const Json::Value& json) {
     Transform* transform = new Transform(json["transform"]);
     Material* materialTemp = new Material(json["materials"]);
-    if (!gpu)
+    Remeshing* remeshingTemp = new Remeshing(json["remeshing"]);
+    if (!gpu) {
         material = materialTemp;
-    else {
+        remeshing = remeshingTemp;
+    } else {
         CUDA_CHECK(cudaMalloc(&material, sizeof(Material)));
         CUDA_CHECK(cudaMemcpy(material, materialTemp, sizeof(Material), cudaMemcpyHostToDevice));
         delete materialTemp;
+
+        CUDA_CHECK(cudaMalloc(&remeshing, sizeof(Remeshing)));
+        CUDA_CHECK(cudaMemcpy(remeshing, remeshingTemp, sizeof(Remeshing), cudaMemcpyHostToDevice));
+        delete remeshingTemp;
     }
     mesh = new Mesh(json["mesh"], transform, material);
 
@@ -17,8 +23,6 @@ Cloth::Cloth(const Json::Value& json) {
         for (const Json::Value& nodeJson : handleJson["nodes"])
             handleIndices.push_back(parseInt(nodeJson));
     
-    remeshing = new Remeshing(json["remeshing"]);
-
     edgeShader = new Shader("shader/Vertex.glsl", "shader/EdgeFragment.glsl");
     faceShader = new Shader("shader/Vertex.glsl", "shader/FaceFragment.glsl");
     delete transform;
@@ -196,85 +200,89 @@ void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float
     }
 }
 
-Matrix2x2f Cloth::compressionMetric(const Matrix2x2f& G, const Matrix2x2f& S2) const {
-    Matrix2x2f P(Vector2f(S2(1, 1), -S2(1, 0)), Vector2f(-S2(0, 1), S2(0, 0)));
-    Matrix2x2f D = G.transpose() * G - 4.0f * sqr(remeshing->refineCompression) * P * remeshing->ribStiffening;
-    return max(-G + sqrt(D), 0.0f) / (2.0f * sqr(remeshing->refineCompression));
-}
-
-Matrix2x2f Cloth::obstacleMetric(const Face* face, const std::vector<Plane>& planes) const {
-    Matrix2x2f ans;
-    for (int i = 0; i < 3; i++) {
-        Plane plane = planes[face->vertices[i]->node->index];
-        if (plane.n.norm2() == 0.0f)
-            continue;
-        float h[3];
-        for (int j = 0; j < 3; j++)
-            h[j] = (face->vertices[j]->node->x - plane.p).dot(plane.n);
-        Vector2f dh = face->inverse.transpose() * Vector2f(h[1] - h[0], h[2] - h[0]);
-        ans += dh.outer(dh) / sqr(h[i]);
+std::vector<Plane> Cloth::findNearestPlane(const std::vector<BVH*>& obstacleBvhs, float thickness) const {
+    std::vector<Node*>& nodes = mesh->getNodes();
+    std::vector<Plane> ans(nodes.size(), Plane(Vector3f(), Vector3f()));
+    for (int i = 0; i < nodes.size(); i++) {
+        Node* node = nodes[i];
+        NearPoint point(thickness, node->x);
+        for (const BVH* obstacleBvh : obstacleBvhs)
+            obstacleBvh->findNearestPoint(node->x, point);
+    
+        Vector3f n = node->x - point.x;
+        if (n.norm2() > 1e-8f)
+            ans[i] = Plane(point.x, n.normalized());
     }
-    return ans / 3.0f;
-}
 
-Matrix2x2f Cloth::maxTensor(const Matrix2x2f M[]) const {
-    int n = 0;
-    Disk d[5];
-    for (int i = 0; i < 5; i++)
-        if (M[i].trace() != 0.0f) {
-            d[n].o = Vector2f(0.5f * (M[i](0, 0) - M[i](1, 1)), 0.5f * (M[i](0, 1) + M[i](1, 0)));
-            d[n].r = 0.5f * (M[i](0, 0) + M[i](1, 1));
-            n++;
-        }
-
-    Disk disk;
-    disk = d[0];
-    for (int i = 1; i < n; i++)
-        if (!disk.enclose(d[i])) {
-            disk = d[i];
-            for (int j = 0; j < i; j++)
-                if (!disk.enclose(d[j])) {
-                    disk = Disk::circumscribedDisk(d[i], d[j]);
-                    for (int k = 0; k < j; k++)
-                        if (!disk.enclose(d[k]))
-                            disk = Disk::circumscribedDisk(d[i], d[j], d[k]);
-                }
-        }
-
-    Matrix2x2f ans;
-    ans(0, 0) = disk.r + disk.o(0);
-    ans(0, 1) = ans(1, 0) = disk.o(1);
-    ans(1, 1) = disk.r - disk.o(0);
     return ans;
 }
 
-Matrix2x2f Cloth::faceSizing(const Face* face, const std::vector<Plane>& planes) const {
-    Node* node0 = face->vertices[0]->node;
-    Node* node1 = face->vertices[1]->node;
-    Node* node2 = face->vertices[2]->node;
-    Matrix2x2f M[5];
+thrust::device_vector<Plane> Cloth::findNearestPlaneGpu(const std::vector<BVH*>& obstacleBvhs, float thickness) const {
+    thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
+    int nNodes = nodes.size();
+    thrust::device_vector<Vector3f> x(nNodes);
+    Vector3f* xPointer = pointer(x);
+    setX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodes), xPointer);
+    CUDA_CHECK_LAST();
 
-    Matrix2x2f Sw1 = face->curvature();
-    M[0] = (Sw1.transpose() * Sw1) / sqr(remeshing->refineAngle);
-    Matrix3x2f Sw2 = face->derivative(node0->n, node1->n, node2->n);
-    M[1] = (Sw2.transpose() * Sw2) / sqr(remeshing->refineAngle);
-    Matrix3x2f V = face->derivative(node0->v, node1->v, node2->v);
-    M[2] = (V.transpose() * V) / sqr(remeshing->refineVelocity);
-    Matrix3x2f F = face->derivative(node0->x, node1->x, node2->x);
-    M[3] = compressionMetric(F.transpose() * F - Matrix2x2f(1.0f), Sw2.transpose() * Sw2);
-    M[4] = obstacleMetric(face, planes);
-    Matrix2x2f S = maxTensor(M);
+    thrust::device_vector<NearPoint> points(nNodes, NearPoint(thickness, Vector3f()));
+    NearPoint* pointsPointer = pointer(points);
+    initializeNearPoints<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xPointer, pointsPointer);
+    CUDA_CHECK_LAST();
 
-    Matrix2x2f Q;
-    Vector2f l;
-    eigenvalueDecomposition(S, Q, l);
-    for (int i = 0; i < 2; i++)
-        l(i) = clamp(l(i), 1.0f / sqr(remeshing->sizeMax), 1.0f / sqr(remeshing->sizeMin));
-    float lMax = max(l(0), l(1));
-    float lMin = lMax * sqr(remeshing->aspectMin);
-    for (int i = 0; i < 2; i++)
-        l(i) = max(l(i), lMin);
-    return Q * diagonal(l) * Q.transpose();
+    for (const BVH* obstacleBvh : obstacleBvhs)
+        obstacleBvh->findNearestPoint(x, points);
+    thrust::device_vector<Plane> ans(nNodes, Plane(Vector3f(), Vector3f()));
+    setNearestPlane<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xPointer, pointsPointer, pointer(ans));
+    CUDA_CHECK_LAST();
+
+    return ans;
+}
+
+void Cloth::computeSizing(const std::vector<Plane>& planes) {
+    std::vector<Vertex*>& vertices = mesh->getVertices();
+    for (Vertex* vertex : vertices) {
+        vertex->area = 0.0f;
+        vertex->sizing = Matrix2x2f();
+    }
+
+    std::vector<Face*>& faces = mesh->getFaces();
+    for (Face* face : faces) {
+        float area = face->area;
+        Matrix2x2f sizing = faceSizing(face, static_cast<const Plane*>(planes.data()), remeshing);
+        for (int i = 0; i < 3; i++) {
+            Vertex* vertex = face->vertices[i];
+            vertex->area += area;
+            vertex->sizing += area * sizing;
+        }
+    }
+
+    for (Vertex* vertex : vertices)
+        vertex->sizing /= vertex->area;
+
+    for (const Vertex* vertex : vertices) {
+        std::cout << std::endl;
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                std::cout << vertex->sizing(i, j) << ' ';
+    }
+}
+
+void Cloth::computeSizing(const thrust::device_vector<Plane>& planes) {
+    thrust::device_vector<Face*> faces = mesh->getFacesGpu();
+    int nFaces = faces.size();
+    thrust::device_vector<int> indices(3 * nFaces);
+    thrust::device_vector<Pairfm> sizing(3 * nFaces);
+    collectVertexSizing<<<GRID_SIZE, BLOCK_SIZE>>>(faces.size(), pointer(faces), pointer(planes), pointer(indices), pointer(sizing), remeshing);
+    CUDA_CHECK_LAST();
+
+    thrust::sort_by_key(indices.begin(), indices.end(), sizing.begin());
+    thrust::device_vector<int> outputIndices(3 * nFaces);
+    thrust::device_vector<Pairfm> outputSizing(3 * nFaces);
+    auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), sizing.begin(), outputIndices.begin(), outputSizing.begin());
+    thrust::device_vector<Vertex*> vertices = mesh->getVerticesGpu();
+    setVertexSizing<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputSizing), pointer(vertices));
+    CUDA_CHECK_LAST();
 }
 
 float Cloth::edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const {
@@ -325,7 +333,7 @@ std::vector<Edge*> Cloth::independentEdges(const std::vector<Edge*>& edges) cons
     return ans;
 }
 
-bool Cloth::flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const {
+bool Cloth::flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) {
     static int nEdges = 0;
     std::vector<Edge*> edgesToFlip = std::move(independentEdges(std::move(findEdgesToFlip(edges))));
     if (edgesToFlip.size() == nEdges)
@@ -345,7 +353,7 @@ bool Cloth::flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesTo
     return !edgesToFlip.empty();
 }
 
-void Cloth::flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const {
+void Cloth::flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) {
     for (int i = 0; i < 2 * edges.size(); i++)
         if (!flipSomeEdges(edges, edgesToUpdate, adjacentEdges, adjacentFaces))
             return;
@@ -370,7 +378,7 @@ std::vector<Edge*> Cloth::findEdgesToSplit() const {
     return ans;
 }
 
-bool Cloth::splitSomeEdges() const {
+bool Cloth::splitSomeEdges() {
     std::vector<Edge*> edgesToSplit = std::move(findEdgesToSplit());
     for (const Edge* edge : edgesToSplit)
         if (edge != nullptr) {
@@ -473,7 +481,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjace
     return true;
 }
 
-bool Cloth::collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
+bool Cloth::collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {
     bool flag = false;
     std::vector<Edge*> edges = mesh->getEdges();
     for (const Edge* edge : edges)
@@ -494,7 +502,7 @@ bool Cloth::collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adj
     return flag;
 }
 
-void Cloth::collapseEdges() const {
+void Cloth::collapseEdges() {
     std::vector<Edge*>& edges = mesh->getEdges();
     std::unordered_map<Node*, std::vector<Edge*>> adjacentEdges;
     for (Edge* edge : edges)
@@ -615,44 +623,20 @@ void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity
 }
 
 void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness) {
-    std::vector<Node*>& nodes = mesh->getNodes();
-    std::vector<Plane> planes(nodes.size(), Plane(Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 0.0f, 0.0f)));
-    for (int i = 0; i < nodes.size(); i++) {
-        Node* node = nodes[i];
-        NearPoint point(thickness, node->x);
-        for (const BVH* obstacleBvh : obstacleBvhs)
-            obstacleBvh->findNearestPoint(node->x, point);
-    
-        if ((point.x - node->x).norm2() > 1e-8f) {
-            planes[i].p = point.x;
-            planes[i].n = (node->x - point.x).normalized();
-        }
+    if (!gpu) {
+        std::vector<Plane> planes = std::move(findNearestPlane(obstacleBvhs, thickness));
+        computeSizing(planes);
+
+        std::vector<Edge*> edges = mesh->getEdges();
+        flipEdges(edges, nullptr, nullptr, nullptr);
+        splitEdges();
+        collapseEdges();
+    } else {
+        thrust::device_vector<Plane> planes = std::move(findNearestPlaneGpu(obstacleBvhs, thickness));
+        computeSizing(planes);
+
+        // TODO
     }
-
-    std::vector<Vertex*>& vertices = mesh->getVertices();
-    for (Vertex* vertex : vertices) {
-        vertex->area = 0.0f;
-        vertex->sizing = Matrix2x2f();
-    }
-
-    std::vector<Face*>& faces = mesh->getFaces();
-    for (Face* face : faces) {
-        float area = face->area;
-        Matrix2x2f sizing = faceSizing(face, planes);
-        for (int i = 0; i < 3; i++) {
-            Vertex* vertex = face->vertices[i];
-            vertex->area += face->area;
-            vertex->sizing += area * sizing;
-        }
-    }
-
-    for (Vertex* vertex : vertices)
-        vertex->sizing /= vertex->area;
-
-    std::vector<Edge*> edges = mesh->getEdges();
-    flipEdges(edges, nullptr, nullptr, nullptr);
-    splitEdges();
-    collapseEdges();
 }
 
 void Cloth::updateStructures() {

@@ -3,6 +3,7 @@
 
 #include <device_launch_parameters.h>
 
+#include "RemeshingHelper.cuh"
 #include "Pair.cuh"
 #include "Face.cuh"
 #include "Bounds.cuh"
@@ -18,9 +19,10 @@ __device__ int findSplit(const unsigned long long* mortonCodes, int left, int ri
 __global__ void initializeInternalNodes(int nNodes, const unsigned long long* mortonCodes, const BVHNode* leaves, BVHNode* internals);
 __global__ void computeInternalBounds(int nNodes, BVHNode* nodes);
 __global__ void countProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num);
-__global__ void computeProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities);
+__global__ void findProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities);
 __global__ void countProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num);
-__global__ void computeProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities);
+__global__ void findProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities);
+__global__ void findNearestPointGpu(int nNodes, const Vector3f* x, const BVHNode* root, NearPoint* points);
 __global__ void resetCount(int nNodes, BVHNode* nodes);
 __global__ void updateGpu(int nNodes, BVHNode* nodes, bool ccd);
 

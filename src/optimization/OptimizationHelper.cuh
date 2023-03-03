@@ -2,6 +2,7 @@
 #define OPTIMIZATION_HELPER_CUH
 
 #include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 
 #include "MathHelper.cuh"
 #include "Vector.cuh"
@@ -19,7 +20,7 @@ __global__ void collisionObjective(int nNodes, const Node* const* nodes, float o
 __global__ void collisionObjectiveGradient(int nNodes, const Node* const* nodes, float invMass, float obstacleMass, const Vector3f* x, Vector3f* gradient);
 __global__ void collisionConstraint(int nConstraints, const Impact* impacts, const int* indices, float thickness, const Vector3f* x, float* constraints, int* signs);
 __global__ void collectCollisionConstraintGradient(int nConstraints, const Impact* impacts, const float* coefficients, float mu, Vector3f* grad);
-__global__ void addConstraintGradient(int n, const int* indices, const Vector3f* grad, Vector3f* gradtient);
+__global__ void addConstraintGradient(int nIndices, const int* indices, const Vector3f* grad, Vector3f* gradtient);
 __global__ void computeCoefficient(int nConstraints, const float* lambda, float mu, const int* signs, float* c);
 __global__ void computeSquare(int nConstraints, float* c);
 __global__ void computeNorm2(int nNodes, const Vector3f* x, float* x2);

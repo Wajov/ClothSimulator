@@ -155,7 +155,7 @@ __global__ void countProximitiesSelf(int nLeaves, const BVHNode* leaves, const B
     }
 }
 
-__global__ void computeProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities) {
+__global__ void findProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities) {
     int nThreads = gridDim.x * blockDim.x;
 
     const BVHNode* stack[64];
@@ -234,7 +234,7 @@ __global__ void countProximities(int nLeaves, const BVHNode* leaves, const BVHNo
     }
 }
 
-__global__ void computeProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities) {
+__global__ void findProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities) {
     int nThreads = gridDim.x * blockDim.x;
 
     const BVHNode* stack[64];
@@ -263,6 +263,41 @@ __global__ void computeProximities(int nLeaves, const BVHNode* leaves, const BVH
                 proximity.first = face;
                 proximity.second = right->face;
             }
+            
+            bool traverseLeft = (overlapLeft && !left->isLeaf());
+            bool traverseRight = (overlapRight && !right->isLeaf());
+            if (!traverseLeft && !traverseRight)
+                node = stack[top--];
+            else {
+                node = traverseLeft ? left : right;
+                if (traverseLeft && traverseRight)
+                    stack[++top] = right;
+            }
+        } while (node != nullptr);
+    }
+}
+
+__global__ void findNearestPointGpu(int nNodes, const Vector3f* x, const BVHNode* root, NearPoint* points) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    const BVHNode* stack[64];
+    stack[0] = nullptr;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        const Vector3f& xt = x[i];
+        NearPoint& point = points[i];
+        int top = 0;
+        const BVHNode* node = root;
+
+        do {
+            const BVHNode* left = node->left;
+            const BVHNode* right = node->right;
+            
+            bool overlapLeft = left->bounds.distance(xt) >= point.d;
+            bool overlapRight = right->bounds.distance(xt) >= point.d;
+            if (overlapLeft && left->isLeaf())
+                checkNearestPoint(xt, left->face, point);
+            if (overlapRight && right->isLeaf())
+                checkNearestPoint(xt, right->face, point);
             
             bool traverseLeft = (overlapLeft && !left->isLeaf());
             bool traverseRight = (overlapRight && !right->isLeaf());

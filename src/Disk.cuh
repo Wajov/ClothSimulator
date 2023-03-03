@@ -8,12 +8,10 @@ class Disk {
 public:
     Vector2f o;
     float r;
-    Disk();
-    Disk(const Vector2f& o, float r);
-    ~Disk();
-    bool enclose(const Disk& d) const;
-    static Disk circumscribedDisk(const Disk& d0, const Disk& d1);
-    static Disk circumscribedDisk(const Disk& d0, const Disk& d1, const Disk& d2);
+    __host__ __device__ Disk();
+    __host__ __device__ Disk(const Vector2f& o, float r);
+    __host__ __device__ ~Disk();
+    __host__ __device__ bool enclose(const Disk& d) const;
 };
 
 #endif

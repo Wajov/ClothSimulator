@@ -44,6 +44,7 @@ public:
     thrust::device_vector<Proximity> traverse(float thickness) const;
     thrust::device_vector<Proximity> traverse(const BVH* bvh, float thickness) const;
     void findNearestPoint(const Vector3f& x, NearPoint& point) const;
+    void findNearestPoint(const thrust::device_vector<Vector3f>& x, thrust::device_vector<NearPoint>& points) const;
     void update();
 };
 

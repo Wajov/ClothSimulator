@@ -21,6 +21,7 @@
 #include "CudaHelper.cuh"
 #include "ClothHelper.cuh"
 #include "PhysicsHelper.cuh"
+#include "RemeshingHelper.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Transform.cuh"
@@ -56,23 +57,23 @@ private:
     void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
-    Matrix2x2f compressionMetric(const Matrix2x2f& G, const Matrix2x2f& S2) const;
-    Matrix2x2f obstacleMetric(const Face* face, const std::vector<Plane>& planes) const;
-    Matrix2x2f maxTensor(const Matrix2x2f M[]) const;
-    Matrix2x2f faceSizing(const Face* face, const std::vector<Plane>& planes) const;
+    std::vector<Plane> findNearestPlane(const std::vector<BVH*>& obstacleBvhs, float thickness) const;
+    thrust::device_vector<Plane> findNearestPlaneGpu(const std::vector<BVH*>& obstacleBvhs, float thickness) const;
+    void computeSizing(const std::vector<Plane>& planes);
+    void computeSizing(const thrust::device_vector<Plane>& planes);
     float edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const;
     float edgeMetric(const Edge* edge) const;
     bool shouldFlip(const Edge* edge) const;
     std::vector<Edge*> findEdgesToFlip(const std::vector<Edge*>& edges) const;
     std::vector<Edge*> independentEdges(const std::vector<Edge*>& edges) const;
-    bool flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const;
-    void flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) const;
+    bool flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces);
+    void flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces);
     std::vector<Edge*> findEdgesToSplit() const;
-    bool splitSomeEdges() const;
+    bool splitSomeEdges();
     void splitEdges();
     bool shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces, const Edge* edge, int side) const;
-    bool collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
-    void collapseEdges() const;
+    bool collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces);
+    void collapseEdges();
 
 public:
     Cloth(const Json::Value& json);

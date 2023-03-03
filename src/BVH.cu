@@ -126,7 +126,7 @@ thrust::device_vector<Proximity> BVH::traverse(float thickness) const {
 
     thrust::inclusive_scan(num.begin(), num.end(), num.begin());
     thrust::device_vector<Proximity> ans(num.back());
-    computeProximitiesSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer, pointer(ans));
+    findProximitiesSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer, pointer(ans));
     CUDA_CHECK_LAST();
 
     return ans;
@@ -156,7 +156,7 @@ thrust::device_vector<Proximity> BVH::traverse(const BVH* bvh, float thickness) 
     
     thrust::inclusive_scan(num.begin(), num.end(), num.begin());
     thrust::device_vector<Proximity> ans(num.back());
-    computeProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer, pointer(ans));
+    findProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer, pointer(ans));
     CUDA_CHECK_LAST();
 
     return ans;
@@ -164,6 +164,11 @@ thrust::device_vector<Proximity> BVH::traverse(const BVH* bvh, float thickness) 
 
 void BVH::findNearestPoint(const Vector3f& x, NearPoint& point) const {
     root->findNearestPoint(x, point);
+}
+
+void BVH::findNearestPoint(const thrust::device_vector<Vector3f>& x, thrust::device_vector<NearPoint>& points) const {
+    findNearestPointGpu<<<GRID_SIZE, BLOCK_SIZE>>>(x.size(), pointer(x), root, pointer(points));
+    CUDA_CHECK_LAST();
 }
 
 void BVH::update() {

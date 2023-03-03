@@ -109,10 +109,10 @@ __global__ void collectCollisionConstraintGradient(int nConstraints, const Impac
     }
 }
 
-__global__ void addConstraintGradient(int n, const int* indices, const Vector3f* grad, Vector3f* gradtient) {
+__global__ void addConstraintGradient(int nIndices, const int* indices, const Vector3f* grad, Vector3f* gradtient) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += nThreads)
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads)
         gradtient[indices[i]] += grad[i];
 }
 

@@ -144,10 +144,10 @@ __global__ void collectNodeStructures(int nFaces, Face** faces, int* indices, No
     }
 }
 
-__global__ void setNodeStructures(int nNodes, const int* indices, const NodeData* nodeData, Node** nodes) {
+__global__ void setNodeStructures(int nIndices, const int* indices, const NodeData* nodeData, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads) {
         Node* node = nodes[indices[i]];
         node->mass = nodeData[i].mass;
         node->area = nodeData[i].area;
@@ -193,10 +193,10 @@ __global__ void collectNodeGeometries(int nFaces, Face** faces, int* indices, Ve
     }
 }
 
-__global__ void setNodeGeometries(int nNodes, const int* indices, const Vector3f* nodeData, Node** nodes) {
+__global__ void setNodeGeometries(int nIndices, const int* indices, const Vector3f* nodeData, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads)
         nodes[indices[i]]->n = nodeData[i].normalized();
 }
 
