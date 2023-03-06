@@ -22,16 +22,11 @@ public:
     std::vector<Vertex*> addedVertices, removedVertices;
     std::vector<Edge*> addedEdges, removedEdges;
     std::vector<Face*> addedFaces, removedFaces;
-    std::vector<Edge*> activeEdges;
     Operator();
     ~Operator();
-    bool empty() const;
     void flip(const Edge* edge, const Material* material);
     void split(const Edge* edge, const Material* material, int index);
-    void collapse(const Edge* edge, int side, const Material* material, std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces);
-    void update(std::vector<Edge*>& edges) const;
-    void setNull(std::vector<Edge*>& edges) const;
-    void updateAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
+    void collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces);
 };
 
 #endif

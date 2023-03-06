@@ -49,6 +49,7 @@ typedef Pair<int, int> Pairii;
 typedef Pair<float, int> Pairfi;
 typedef Pair<float, Matrix2x2f> Pairfm;
 typedef Pair<Node*, int> Pairni;
+typedef Pair<Edge*, int> Pairei;
 typedef Pair<float, Edge*> Pairfe;
 typedef Pair<Face*, Face*> Proximity;
 

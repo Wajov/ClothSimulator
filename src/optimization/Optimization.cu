@@ -106,7 +106,7 @@ void Optimization::solve() {
         for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
             valueAndGradient(x, f, gradient);
         
-            float norm2 = 0;
+            float norm2 = 0.0f;
             for (int i = 0; i < nNodes; i++)
                 norm2 += gradient[i].norm2();
             s /= 0.7f;

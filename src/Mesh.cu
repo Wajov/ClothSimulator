@@ -203,7 +203,8 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f
     }
 
     updateStructures();
-    updateGeometries();
+    updateNodeGeometries();
+    updateFaceGeometries();
 }
 
 std::vector<Node*>& Mesh::getNodes() {
@@ -331,12 +332,8 @@ void Mesh::updateStructures() {
     }
 }
 
-void Mesh::updateGeometries() {
+void Mesh::updateNodeGeometries() {
     if (!gpu) {
-        for (Face* face : faces)
-            face->update();
-        for (Edge* edge : edges)
-            edge->update();
         for (Node* node : nodes) {
             node->x1 = node->x;
             node->n = Vector3f();
@@ -351,11 +348,7 @@ void Mesh::updateGeometries() {
         for (Node* node : nodes)
             node->n.normalize();
     } else {
-        updateFaceGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
-        CUDA_CHECK_LAST();
-        updateEdgeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
-        CUDA_CHECK_LAST();
-        updateNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
+        updateNodeGeometriesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
 
         thrust::device_vector<int> indices(3 * facesGpu.size());
@@ -368,6 +361,16 @@ void Mesh::updateGeometries() {
         thrust::device_vector<Vector3f> outputNodeData(3 * facesGpu.size());
         auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), nodeData.begin(), outputIndices.begin(), outputNodeData.begin());
         setNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputNodeData), pointer(nodesGpu));
+        CUDA_CHECK_LAST();
+    }
+}
+
+void Mesh::updateFaceGeometries() {
+    if (!gpu)
+        for (Face* face : faces)
+            face->update();
+    else {
+        updateFaceGeometriesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
         CUDA_CHECK_LAST();
     }
 }

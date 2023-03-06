@@ -66,7 +66,8 @@ public:
     Vector3f oldPosition(const Vector2f& u) const;
     void apply(const Operator& op);
     void updateStructures();
-    void updateGeometries();
+    void updateNodeGeometries();
+    void updateFaceGeometries();
     void updateVelocities(float dt);
     void updateRenderingData(bool rebind);
     void bind();

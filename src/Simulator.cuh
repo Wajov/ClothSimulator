@@ -54,20 +54,19 @@ private:
     thrust::device_vector<Proximity> traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Impact>& impacts) const;
     void checkImpacts(const Face* face0, const Face* face1, float thickness, std::vector<Impact>& impacts) const;
-    std::vector<Impact> findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;
-    thrust::device_vector<Impact> findImpactsGpu(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;
+    thrust::device_vector<Impact> findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts, int deform) const;
     thrust::device_vector<Impact> independentImpacts(const thrust::device_vector<Impact>& impacts, int deform) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const;
     void checkIntersection(const Face* face0, const Face* face1, std::vector<Intersection>& intersections, const std::vector<Cloth*>& cloths, const std::vector<Mesh*>& oldMeshes) const;
-    std::vector<Intersection> findIntersections(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Mesh*>& oldMeshes) const;
     void resetObstacles();
     void physicsStep();
     void collisionStep();
     void remeshingStep();
     void separationStep(const std::vector<Mesh*>& oldMeshes);
     void updateStructures();
-    void updateGeometries();
+    void updateNodeGeometries();
+    void updateFaceGeometries();
     void updateVelocities();
     void updateRenderingData(bool rebind);
 

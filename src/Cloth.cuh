@@ -22,6 +22,7 @@
 #include "ClothHelper.cuh"
 #include "PhysicsHelper.cuh"
 #include "RemeshingHelper.cuh"
+#include "Pair.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Transform.cuh"
@@ -64,15 +65,16 @@ private:
     float edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const;
     float edgeMetric(const Edge* edge) const;
     bool shouldFlip(const Edge* edge) const;
-    std::vector<Edge*> findEdgesToFlip(const std::vector<Edge*>& edges) const;
-    std::vector<Edge*> independentEdges(const std::vector<Edge*>& edges) const;
-    bool flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces);
-    void flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces);
+    std::vector<Edge*> findEdgesToFlip() const;
+    bool flipSomeEdges();
+    void flipEdges();
     std::vector<Edge*> findEdgesToSplit() const;
     bool splitSomeEdges();
     void splitEdges();
-    bool shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces, const Edge* edge, int side) const;
-    bool collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces);
+    void buildAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
+    bool shouldCollapse(const Edge* edge, int side, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
+    std::vector<Pairei> findEdgesToCollapse(const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
+    bool collapseSomeEdges();
     void collapseEdges();
 
 public:
@@ -83,7 +85,8 @@ public:
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
     void updateStructures();
-    void updateGeometries();
+    void updateNodeGeometries();
+    void updateFaceGeometries();
     void updateVelocities(float dt);
     void updateRenderingData(bool rebind);
     void bind();

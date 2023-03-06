@@ -290,6 +290,9 @@ float Cloth::edgeMetric(const Edge* edge) const {
 }
 
 bool Cloth::shouldFlip(const Edge* edge) const {
+    if (edge->isBoundary() || edge->isSeam())
+        return false;
+        
     Vertex* vertex0 = edge->vertices[0][0];
     Vertex* vertex1 = edge->vertices[1][1];
     Vertex* vertex2 = edge->opposites[0];
@@ -302,53 +305,43 @@ bool Cloth::shouldFlip(const Edge* edge) const {
     return area1 * (x - z).dot(M * (y - z)) + area0 * (y - w).dot(M * (x - w)) < -remeshing->flipThreshold * (area0 + area1);
 }
 
-std::vector<Edge*> Cloth::findEdgesToFlip(const std::vector<Edge*>& edges) const {
-    std::vector<Edge*> ans;
-    for (Edge* edge : edges)
-        if (!edge->isBoundary() && !edge->isSeam() && shouldFlip(edge))
-            ans.push_back(edge);
-
-    return ans;
-}
-
-std::vector<Edge*> Cloth::independentEdges(const std::vector<Edge*>& edges) const {
+std::vector<Edge*> Cloth::findEdgesToFlip() const {
+    std::vector<Edge*>& edges = mesh->getEdges();
     std::unordered_set<Node*> nodes;
     std::vector<Edge*> ans;
-    for (Edge* edge : edges) {
-        Node* node0 = edge->nodes[0];
-        Node* node1 = edge->nodes[1];
-        if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
-            ans.push_back(edge);
-            nodes.insert(node0);
-            nodes.insert(node1);
+    for (Edge* edge : edges)
+        if (shouldFlip(edge)) {
+            Node* node0 = edge->nodes[0];
+            Node* node1 = edge->nodes[1];
+            if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
+                ans.push_back(edge);
+                nodes.insert(node0);
+                nodes.insert(node1);
+            }
         }
-    }
+
     return ans;
 }
 
-bool Cloth::flipSomeEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) {
+bool Cloth::flipSomeEdges() {
     static int nEdges = 0;
-    std::vector<Edge*> edgesToFlip = std::move(independentEdges(std::move(findEdgesToFlip(edges))));
+    std::vector<Edge*> edgesToFlip = std::move(findEdgesToFlip());
     if (edgesToFlip.size() == nEdges)
         return false;
     
     nEdges = edgesToFlip.size();
-    for (const Edge* edge : edgesToFlip) {
-        Operator op;
+    Operator op;
+    for (const Edge* edge : edgesToFlip)
         op.flip(edge, material);
-        op.update(edges);
-        if (edgesToUpdate != nullptr)
-            op.setNull(*edgesToUpdate);
-        if (adjacentEdges != nullptr && adjacentFaces != nullptr)
-            op.updateAdjacents(*adjacentEdges, *adjacentFaces);
-        mesh->apply(op);
-    }
+
+    mesh->apply(op);
     return !edgesToFlip.empty();
 }
 
-void Cloth::flipEdges(std::vector<Edge*>& edges, std::vector<Edge*>* edgesToUpdate, std::unordered_map<Node*, std::vector<Edge*>>* adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>* adjacentFaces) {
-    for (int i = 0; i < 2 * edges.size(); i++)
-        if (!flipSomeEdges(edges, edgesToUpdate, adjacentEdges, adjacentFaces))
+void Cloth::flipEdges() {
+    int nEdges = mesh->getEdges().size();
+    for (int i = 0; i < 2 * nEdges; i++)
+        if (!flipSomeEdges())
             return;
 }
 
@@ -364,22 +357,31 @@ std::vector<Edge*> Cloth::findEdgesToSplit() const {
         return a.first > b.first;
     });
 
-    std::vector<Edge*> ans(sorted.size());
-    for (int i = 0; i < sorted.size(); i++)
-        ans[i] = sorted[i].second;
+    std::unordered_set<Node*> nodes;
+    std::vector<Edge*> ans;
+    for (const Pairfe& p : sorted) {
+        Edge* edge = p.second;
+        Node* node0 = edge->nodes[0];
+        Node* node1 = edge->nodes[1];
+        if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
+            ans.push_back(edge);
+            nodes.insert(node0);
+            nodes.insert(node1);
+        }
+    }
 
     return ans;
 }
 
 bool Cloth::splitSomeEdges() {
     std::vector<Edge*> edgesToSplit = std::move(findEdgesToSplit());
+    Operator op;
+    int nNodes = mesh->getNodes().size();
     for (const Edge* edge : edgesToSplit)
-        if (edge != nullptr) {
-            Operator op;
-            op.split(edge, material, mesh->getNodes().size());
-            mesh->apply(op);
-            flipEdges(op.activeEdges, &edgesToSplit, nullptr, nullptr);
-        }
+        op.split(edge, material, nNodes++);
+
+    mesh->apply(op);
+    flipEdges();
     return !edgesToSplit.empty();
 }
 
@@ -387,13 +389,25 @@ void Cloth::splitEdges() {
     while (splitSomeEdges());
 }
 
-bool Cloth::shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces, const Edge* edge, int side) const {
+void Cloth::buildAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
+    std::vector<Edge*>& edges = mesh->getEdges();
+    for (Edge* edge : edges)
+        for (int i = 0; i < 2; i++)
+            adjacentEdges[edge->nodes[i]].push_back(edge);
+            
+    std::vector<Face*>& faces = mesh->getFaces();
+    for (Face* face : faces)
+        for (int i = 0; i < 3; i++)
+            adjacentFaces[face->vertices[i]].push_back(face);
+}
+
+bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
     Node* node = edge->nodes[side];
     if (node->preserve)
         return false;
     
     bool flag = false;
-    std::vector<Edge*>& edges = adjacentEdges[node];
+    const std::vector<Edge*>& edges = adjacentEdges.at(node);
     for (const Edge* edge : edges)
         if (edge->isBoundary() || edge->isSeam()) {
             flag = true;
@@ -407,7 +421,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjace
             Vertex* vertex0 = edge->vertices[i][side];
             Vertex* vertex1 = edge->vertices[i][1 - side];
             
-            std::vector<Face*>& faces = adjacentFaces[vertex0];
+            const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
             for (const Face* face : faces) {
                 Vertex* v0 = face->vertices[0];
                 Vertex* v1 = face->vertices[1];
@@ -441,7 +455,7 @@ bool Cloth::shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjace
         Vertex* vertex0 = edge->vertices[index][side];
         Vertex* vertex1 = edge->vertices[index][1 - side];
 
-        std::vector<Face*>& faces = adjacentFaces[vertex0];
+        const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
         for (const Face* face : faces) {
             Vertex* v0 = face->vertices[0];
             Vertex* v1 = face->vertices[1];
@@ -474,41 +488,62 @@ bool Cloth::shouldCollapse(std::unordered_map<Node*, std::vector<Edge*>>& adjace
     return true;
 }
 
-bool Cloth::collapseSomeEdges(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {
-    bool flag = false;
-    std::vector<Edge*> edges = mesh->getEdges();
-    for (const Edge* edge : edges)
-        if (edge != nullptr) {
-            Operator op;
-            if (shouldCollapse(adjacentEdges, adjacentFaces, edge, 0))
-                op.collapse(edge, 0, material, adjacentEdges, adjacentFaces);
-            else if (shouldCollapse(adjacentEdges, adjacentFaces, edge, 1))
-                op.collapse(edge, 1, material, adjacentEdges, adjacentFaces);
-            else
-                continue;
-            op.setNull(edges);
-            op.updateAdjacents(adjacentEdges, adjacentFaces);
-            mesh->apply(op);
-            flipEdges(op.activeEdges, &edges, &adjacentEdges, &adjacentFaces);
-            flag = true;
+std::vector<Pairei> Cloth::findEdgesToCollapse(const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
+    std::vector<Edge*>& edges = mesh->getEdges();
+    std::unordered_set<Node*> nodes;
+    std::vector<Pairei> ans;
+    for (Edge* edge : edges) {
+        int side = -1;
+        if (shouldCollapse(edge, 0, adjacentEdges, adjacentFaces))
+            side = 0;
+        else if (shouldCollapse(edge, 1, adjacentEdges, adjacentFaces))
+            side = 1;
+        
+        if (side > -1) {
+            Node* node = edge->nodes[side];
+            if (nodes.find(node) == nodes.end()) {
+                bool flag = true;
+                const std::vector<Edge*>& adjacents = adjacentEdges.at(node);
+                for (const Edge* adjacentEdge : adjacents) {
+                    Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                    if (nodes.find(adjacentNode) != nodes.end()) {
+                        flag = false;
+                        break;
+                    }
+                }
+
+                if (flag) {
+                    ans.emplace_back(edge, side);
+                    nodes.insert(node);
+                    for (const Edge* adjacentEdge : adjacents) {
+                        Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                        nodes.insert(adjacentNode);
+                    }
+                }
+            }
         }
-    return flag;
+    }
+
+    return ans;
+}
+
+bool Cloth::collapseSomeEdges() {
+    std::unordered_map<Node*, std::vector<Edge*>> adjacentEdges;
+    std::unordered_map<Vertex*, std::vector<Face*>> adjacentFaces;
+    buildAdjacents(adjacentEdges, adjacentFaces);
+
+    std::vector<Pairei> edgesToCollapse = std::move(findEdgesToCollapse(adjacentEdges, adjacentFaces));
+    Operator op;
+    for (const Pairei& edge : edgesToCollapse)
+        op.collapse(edge.first, edge.second, material, adjacentEdges, adjacentFaces);
+
+    mesh->apply(op);
+    flipEdges();
+    return !edgesToCollapse.empty();
 }
 
 void Cloth::collapseEdges() {
-    std::vector<Edge*>& edges = mesh->getEdges();
-    std::unordered_map<Node*, std::vector<Edge*>> adjacentEdges;
-    for (Edge* edge : edges)
-        for (int i = 0; i < 2; i++)
-            adjacentEdges[edge->nodes[i]].push_back(edge);
-            
-    std::vector<Face*>& faces = mesh->getFaces();
-    std::unordered_map<Vertex*, std::vector<Face*>> adjacentFaces;
-    for (Face* face : faces)
-        for (int i = 0; i < 3; i++)
-            adjacentFaces[face->vertices[i]].push_back(face);
-    
-    while (collapseSomeEdges(adjacentEdges, adjacentFaces));
+    while (collapseSomeEdges());
 }
 
 Mesh* Cloth::getMesh() const {
@@ -517,7 +552,8 @@ Mesh* Cloth::getMesh() const {
 
 void Cloth::readDataFromFile(const std::string& path) {
     mesh->readDataFromFile(path);
-    mesh->updateGeometries();
+    mesh->updateNodeGeometries();
+    mesh->updateFaceGeometries();
 }
 
 void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind) {
@@ -620,8 +656,7 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
         std::vector<Plane> planes = std::move(findNearestPlane(obstacleBvhs, thickness));
         computeSizing(planes);
 
-        std::vector<Edge*> edges = mesh->getEdges();
-        flipEdges(edges, nullptr, nullptr, nullptr);
+        flipEdges();
         splitEdges();
         collapseEdges();
     } else {
@@ -636,8 +671,12 @@ void Cloth::updateStructures() {
     mesh->updateStructures();
 }
 
-void Cloth::updateGeometries() {
-    mesh->updateGeometries();
+void Cloth::updateNodeGeometries() {
+    mesh->updateNodeGeometries();
+}
+
+void Cloth::updateFaceGeometries() {
+    mesh->updateFaceGeometries();
 }
 
 void Cloth::updateVelocities(float dt) {
