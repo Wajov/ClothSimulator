@@ -78,15 +78,18 @@ Bounds Edge::bounds(bool ccd) const {
     return ans;
 }
 
-void Edge::update() {
-    length = (nodes[1]->x - nodes[0]->x).norm();
+float Edge::length() const {
+    return (nodes[1]->x - nodes[0]->x).norm();
+}
+
+float Edge::angle() const {
     if (!isBoundary()) {
         Vector3f e = (nodes[0]->x - nodes[1]->x).normalized();
         Vector3f n0 = adjacents[0]->n;
         Vector3f n1 = adjacents[1]->n;
         float sine = e.dot(n0.cross(n1));
         float cosine = n0.dot(n1);
-        angle = atan2(sine, cosine);
+        return atan2(sine, cosine);
     } else
-        angle = 0.0f;
+        return 0.0f;
 }

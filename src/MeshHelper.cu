@@ -154,7 +154,7 @@ __global__ void setNodeStructures(int nIndices, const int* indices, const NodeDa
     }
 }
 
-__global__ void updateNodeGeometries(int nNodes, Node** nodes) {
+__global__ void updateNodeGeometriesGpu(int nNodes, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
@@ -163,14 +163,7 @@ __global__ void updateNodeGeometries(int nNodes, Node** nodes) {
     }
 }
 
-__global__ void updateEdgeGeometries(int nEdges, Edge** edges) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads)
-        edges[i]->update();
-}
-
-__global__ void updateFaceGeometries(int nFaces, Face** faces) {
+__global__ void updateFaceGeometriesGpu(int nFaces, Face** faces) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads)

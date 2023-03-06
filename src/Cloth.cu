@@ -500,12 +500,26 @@ std::vector<Pairei> Cloth::findEdgesToCollapse(const std::unordered_map<Node*, s
             side = 1;
         
         if (side > -1) {
-            Node* node0 = edge->nodes[0];
-            Node* node1 = edge->nodes[1];
-            if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
-                ans.emplace_back(edge, side);
-                nodes.insert(node0);
-                nodes.insert(node1);
+            Node* node = edge->nodes[side];
+            if (nodes.find(node) == nodes.end()) {
+                bool flag = true;
+                const std::vector<Edge*>& adjacents = adjacentEdges.at(node);
+                for (const Edge* adjacentEdge : adjacents) {
+                    Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                    if (nodes.find(adjacentNode) != nodes.end()) {
+                        flag = false;
+                        break;
+                    }
+                }
+
+                if (flag) {
+                    ans.emplace_back(edge, side);
+                    nodes.insert(node);
+                    for (const Edge* adjacentEdge : adjacents) {
+                        Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                        nodes.insert(adjacentNode);
+                    }
+                }
             }
         }
     }
@@ -538,7 +552,8 @@ Mesh* Cloth::getMesh() const {
 
 void Cloth::readDataFromFile(const std::string& path) {
     mesh->readDataFromFile(path);
-    mesh->updateGeometries();
+    mesh->updateNodeGeometries();
+    mesh->updateFaceGeometries();
 }
 
 void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind) {
@@ -656,8 +671,12 @@ void Cloth::updateStructures() {
     mesh->updateStructures();
 }
 
-void Cloth::updateGeometries() {
-    mesh->updateGeometries();
+void Cloth::updateNodeGeometries() {
+    mesh->updateNodeGeometries();
+}
+
+void Cloth::updateFaceGeometries() {
+    mesh->updateFaceGeometries();
 }
 
 void Cloth::updateVelocities(float dt) {

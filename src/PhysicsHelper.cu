@@ -143,8 +143,8 @@ void bendingForce(const Edge* edge, const Material* material, Vector12f& f, Matr
     Face* adjacent1 = edge->adjacents[1];
     Vector3f n0 = adjacent0->n;
     Vector3f n1 = adjacent1->n;
-    float length = edge->length;
-    float angle = edge->angle;
+    float length = edge->length();
+    float angle = edge->angle();
     float area = adjacent0->area + adjacent1->area;
 
     float h0 = distance(x2, x0, x1);

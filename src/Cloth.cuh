@@ -85,7 +85,8 @@ public:
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
     void updateStructures();
-    void updateGeometries();
+    void updateNodeGeometries();
+    void updateFaceGeometries();
     void updateVelocities(float dt);
     void updateRenderingData(bool rebind);
     void bind();

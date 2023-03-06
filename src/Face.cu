@@ -109,7 +109,7 @@ Matrix2x2f Face::curvature() const {
     for (int i = 0; i < 3; i++) {
         Vector2f e = vertices[(i + 1) % 3]->u - vertices[i]->u;
         Vector2f t = Vector2f(-e(1), e(0)).normalized();
-        float angle = edges[i]->angle;
+        float angle = edges[i]->angle();
         ans -= 0.5f * angle * e.norm() * t.outer(t);
     }
     return ans / area;

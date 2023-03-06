@@ -37,9 +37,6 @@ void Operator::flip(const Edge* edge, const Material* material) {
     addedFaces.push_back(newFace1);
     removedFaces.push_back(face0);
     removedFaces.push_back(face1);
-
-    activeFaces.push_back(newFace0);
-    activeFaces.push_back(newFace1);
 }
 
 void Operator::split(const Edge* edge, const Material* material, int index) {
@@ -106,13 +103,10 @@ void Operator::split(const Edge* edge, const Material* material, int index) {
             addedFaces.push_back(newFace0);
             addedFaces.push_back(newFace1);
             removedFaces.push_back(face);
-
-            activeFaces.push_back(newFace0);
-            activeFaces.push_back(newFace1);
         }
 }
 
-void Operator::collapse(const Edge* edge, int side, const Material* material, std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {
+void Operator::collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {
     Node* node0 = edge->nodes[side];
     Node* node1 = edge->nodes[1 - side];
 
@@ -146,16 +140,14 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, st
             removedFaces.push_back(face);
         }
 
-    std::vector<Edge*>& adjacentEdges0 = adjacentEdges[node0];
-    std::vector<Edge*>& adjacentEdges1 = adjacentEdges[node1];
+    const std::vector<Edge*>& adjacentEdges0 = adjacentEdges.at(node0);
+    const std::vector<Edge*>& adjacentEdges1 = adjacentEdges.at(node1);
     for (Edge* adjacentEdge : adjacentEdges0)
         if (adjacentEdge != edge) {
             adjacentEdge->replaceNode(node0, node1);
             adjacentEdge->replaceVertex(edge->vertices[0][side], edge->vertices[0][1 - side]);
             adjacentEdge->replaceVertex(edge->vertices[1][side], edge->vertices[1][1 - side]);
-            adjacentEdges1.push_back(adjacentEdge);
         }
-    adjacentEdges.erase(node0);
 
     if (edge->isSeam())
         for (int i = 0; i < 2; i++) {
@@ -163,17 +155,14 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, st
             Vertex* vertex1 = edge->vertices[i][1 - side];
             removedVertices.push_back(vertex0);
 
-            std::vector<Face*>& adjacentFaces0 = adjacentFaces[vertex0];
-            std::vector<Face*>& adjacentFaces1 = adjacentFaces[vertex1];
+            const std::vector<Face*>& adjacentFaces0 = adjacentFaces.at(vertex0);
+            const std::vector<Face*>& adjacentFaces1 = adjacentFaces.at(vertex1);
             for (Face* adjacentFace : adjacentFaces0)
                 if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
                     adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
                     adjacentFace->replaceVertex(vertex0, vertex1);
                     adjacentFace->initialize(material);
-                    adjacentFaces1.push_back(adjacentFace);
-                    activeFaces.push_back(adjacentFace);
                 }
-            adjacentFaces.erase(vertex0);
         }
     else {
         int index = edge->opposites[0] != nullptr ? 0 : 1;
@@ -181,16 +170,13 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, st
         Vertex* vertex1 = edge->vertices[index][1 - side];
         removedVertices.push_back(vertex0);
         
-        std::vector<Face*>& adjacentFaces0 = adjacentFaces[vertex0];
-        std::vector<Face*>& adjacentFaces1 = adjacentFaces[vertex1];
+        const std::vector<Face*>& adjacentFaces0 = adjacentFaces.at(vertex0);
+        const std::vector<Face*>& adjacentFaces1 = adjacentFaces.at(vertex1);
         for (Face* adjacentFace : adjacentFaces0)
             if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
                 adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
                 adjacentFace->replaceVertex(vertex0, vertex1);
                 adjacentFace->initialize(material);
-                adjacentFaces1.push_back(adjacentFace);
-                activeFaces.push_back(adjacentFace);
             }
-        adjacentFaces.erase(vertex0);
     }
 }

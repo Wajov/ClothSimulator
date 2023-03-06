@@ -152,15 +152,7 @@ void Simulator::checkImpacts(const Face* face0, const Face* face1, float thickne
                 impacts.push_back(impact);
 }
 
-std::vector<Impact> Simulator::findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const {
-    std::vector<Impact> ans;
-    traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
-        checkImpacts(face0, face1, thickness, ans);
-    });
-    return ans;
-}
-
-thrust::device_vector<Impact> Simulator::findImpactsGpu(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const {
+thrust::device_vector<Impact> Simulator::findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const {
     thrust::device_vector<Proximity> proximities = std::move(traverse(clothBvhs, obstacleBvhs, magic->collisionThickness));
     int nProximities = proximities.size();
     thrust::device_vector<Impact> ans(15 * nProximities);
@@ -251,14 +243,6 @@ void Simulator::checkIntersection(const Face* face0, const Face* face1, std::vec
     }
 }
 
-std::vector<Intersection> Simulator::findIntersections(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Mesh*>& oldMeshes) const {
-    std::vector<Intersection> ans;
-    traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
-        checkIntersection(face0, face1, ans, cloths, oldMeshes);
-    });
-    return ans;
-}
-
 void Simulator::resetObstacles() {
     for (Obstacle* obstacle : obstacles)
         obstacle->reset();
@@ -267,7 +251,8 @@ void Simulator::resetObstacles() {
 void Simulator::physicsStep() {
     for (Cloth* cloth : cloths)
         cloth->physicsStep(dt, magic->handleStiffness, gravity, wind);
-    updateGeometries();
+    updateNodeGeometries();
+    updateFaceGeometries();
 }
 
 void Simulator::collisionStep() {
@@ -284,7 +269,10 @@ void Simulator::collisionStep() {
                 if (!impacts.empty())
                     updateActive(clothBvhs, obstacleBvhs, impacts);
                 
-                std::vector<Impact> newImpacts = std::move(findImpacts(clothBvhs, obstacleBvhs));
+                std::vector<Impact> newImpacts;
+                traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
+                    checkImpacts(face0, face1, thickness, newImpacts);
+                });
                 if (newImpacts.empty()) {
                     success = true;
                     break;
@@ -311,7 +299,7 @@ void Simulator::collisionStep() {
             impacts.clear();
             bool success = false;
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
-                thrust::device_vector<Impact> newImpacts = std::move(findImpactsGpu(clothBvhs, obstacleBvhs));
+                thrust::device_vector<Impact> newImpacts = std::move(findImpacts(clothBvhs, obstacleBvhs));
                 if (newImpacts.empty()) {
                     success = true;
                     break;
@@ -337,7 +325,8 @@ void Simulator::collisionStep() {
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
 
-    updateGeometries();
+    updateNodeGeometries();
+    updateFaceGeometries();
     updateVelocities();
 }
 
@@ -349,7 +338,8 @@ void Simulator::remeshingStep() {
     destroyBvhs(obstacleBvhs);
 
     updateStructures();
-    updateGeometries();
+    updateNodeGeometries();
+    updateFaceGeometries();
 }
 
 void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
@@ -362,7 +352,10 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
             if (!intersections.empty())
                 updateActive(clothBvhs, obstacleBvhs, intersections);
             
-            std::vector<Intersection> newIntersections = std::move(findIntersections(clothBvhs, obstacleBvhs, oldMeshes));
+            std::vector<Intersection> newIntersections;
+            traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
+                checkIntersection(face0, face1, newIntersections, cloths, oldMeshes);
+            });
             if (newIntersections.empty())
                 break;
 
@@ -371,6 +364,7 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
             optimization->solve();
             delete optimization;
 
+            updateFaceGeometries();
             updateBvhs(clothBvhs);
         }
 
@@ -380,7 +374,7 @@ void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
         // TODO
     }
 
-    updateGeometries();
+    updateNodeGeometries();
     updateVelocities();
 }
 
@@ -389,9 +383,14 @@ void Simulator::updateStructures() {
         cloth->updateStructures();
 }
 
-void Simulator::updateGeometries() {
+void Simulator::updateNodeGeometries() {
     for (Cloth* cloth : cloths)
-        cloth->updateGeometries();
+        cloth->updateNodeGeometries();
+}
+
+void Simulator::updateFaceGeometries() {
+    for (Cloth* cloth : cloths)
+        cloth->updateFaceGeometries();
 }
 
 void Simulator::updateVelocities() {
