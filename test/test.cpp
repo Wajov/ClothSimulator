@@ -5,8 +5,11 @@
 #include <set>
 #include <tuple>
 
+const int N = 500;
+int indices[N][N];
+
 int main() {
-    std::ifstream fin;
+    // std::ifstream fin;
 
     // double x;
     // fin.open("standard_a.txt");
@@ -95,25 +98,43 @@ int main() {
     //             std::cout << i << ' ' << j << ' ' << f[i][j] << ' ' << g[i][j] << ' ' << diff1 << std::endl;
     //     }
 
-    double x, y, z, w;
-    fin.open("standard_sizing.txt");
-    std::vector<std::vector<double>> a;
-    while (fin >> x >> y >> z >> w)
-        a.push_back({x, y, z, w});
-    fin.close();
+    // double x, y, z, w;
+    // fin.open("standard_sizing.txt");
+    // std::vector<std::vector<double>> a;
+    // while (fin >> x >> y >> z >> w)
+    //     a.push_back({x, y, z, w});
+    // fin.close();
 
-    fin.open("output_sizing.txt");
-    std::vector<std::vector<double>> b;
-    while (fin >> x >> y >> z >> w)
-        b.push_back({x, y, z, w});
-    fin.close();
+    // fin.open("output_sizing.txt");
+    // std::vector<std::vector<double>> b;
+    // while (fin >> x >> y >> z >> w)
+    //     b.push_back({x, y, z, w});
+    // fin.close();
 
-    for (int i = 0; i < a.size(); i++)
-        for (int j = 0; j < 4; j++) {
-            double diff0 = std::abs(a[i][j] - b[i][j]);
-            double diff1 = std::abs((a[i][j] - b[i][j]) / a[i][j]);
-            if (std::min(diff0, diff1) > 1e-2)
-                std::cout << i << ' ' << j << ' ' << a[i][j] << ' ' << b[i][j] << ' ' << std::min(diff0, diff1) << std::endl;
+    // for (int i = 0; i < a.size(); i++)
+    //     for (int j = 0; j < 4; j++) {
+    //         double diff0 = std::abs(a[i][j] - b[i][j]);
+    //         double diff1 = std::abs((a[i][j] - b[i][j]) / a[i][j]);
+    //         if (std::min(diff0, diff1) > 1e-2)
+    //             std::cout << i << ' ' << j << ' ' << a[i][j] << ' ' << b[i][j] << ' ' << std::min(diff0, diff1) << std::endl;
+    //     }
+    
+    std::ofstream fout("meshes/test.obj");
+    float d = 2.0f / (N - 1);
+    int num = 0;
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++) {
+            indices[i][j] = ++num;
+            float x = -1.0f + i * d;
+            float y = -1.0f + j * d;
+            fout << "v " << x << ' ' << y << ' ' << 0 << std::endl;
+            fout << "vt " << x << ' ' << y << std::endl;
+        }
+
+    for (int i = 0; i < N - 1; i++)
+        for (int j = 0; j < N - 1; j++) {
+            fout << "f " << indices[i][j] << '/' << indices[i][j] << ' ' << indices[i][j + 1] << '/' << indices[i][j + 1] << ' ' << indices[i + 1][j] << '/' << indices[i + 1][j] << std::endl;
+            fout << "f " << indices[i + 1][j + 1] << '/' << indices[i + 1][j + 1] << ' ' << indices[i + 1][j] << '/' << indices[i + 1][j] << ' ' << indices[i][j + 1] << '/' << indices[i][j + 1] << std::endl;
         }
 
     return 0;

@@ -72,13 +72,13 @@ Mesh::~Mesh() {
         for (const Face* face : faces)
             delete face;
     } else {
-        deleteNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
-        deleteVertices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
         CUDA_CHECK_LAST();
-        deleteEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
         CUDA_CHECK_LAST();
-        deleteFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -189,16 +189,10 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f
         CUDA_CHECK_LAST();
         setEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, edgesPointer);
         CUDA_CHECK_LAST();
-        edgesGpu.erase(thrust::remove_if(edgesGpu.begin(), edgesGpu.end(), IsNull()), edgesGpu.end());
+        edgesGpu.erase(thrust::remove(edgesGpu.begin(), edgesGpu.end(), nullptr), edgesGpu.end());
 
         nEdges = edgesGpu.size();
-        thrust::device_vector<int> nodeIndices(2 * nEdges);
-        int* nodeIndicesPointer = pointer(nodeIndices);
-        collectPreservedNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, nodeIndicesPointer);
-        CUDA_CHECK_LAST();
-        thrust::sort(nodeIndices.begin(), nodeIndices.end());
-        auto iter = thrust::unique(nodeIndices.begin(), nodeIndices.end());
-        setPreservedNodes<<<GRID_SIZE, BLOCK_SIZE>>>(iter - nodeIndices.begin(), nodeIndicesPointer, nodesPointer);
+        setPreserve<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer);
         CUDA_CHECK_LAST();
     }
 
@@ -267,30 +261,50 @@ Vector3f Mesh::oldPosition(const Vector2f& u) const {
 }
 
 void Mesh::apply(const Operator& op) {
-    for (const Node* node : op.removedNodes)
-        nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end());
-    nodes.insert(nodes.end(), op.addedNodes.begin(), op.addedNodes.end());
+    if (!gpu) {
+        for (const Node* node : op.removedNodes)
+            nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end());
+        nodes.insert(nodes.end(), op.addedNodes.begin(), op.addedNodes.end());
 
-    for (const Vertex* vertex : op.removedVertices)
-        vertices.erase(std::remove(vertices.begin(), vertices.end(), vertex), vertices.end());
-    vertices.insert(vertices.end(), op.addedVertices.begin(), op.addedVertices.end());
-    
-    for (const Edge* edge : op.removedEdges)
-        edges.erase(std::remove(edges.begin(), edges.end(), edge), edges.end());
-    edges.insert(edges.end(), op.addedEdges.begin(), op.addedEdges.end());
+        for (const Vertex* vertex : op.removedVertices)
+            vertices.erase(std::remove(vertices.begin(), vertices.end(), vertex), vertices.end());
+        vertices.insert(vertices.end(), op.addedVertices.begin(), op.addedVertices.end());
+        
+        for (const Edge* edge : op.removedEdges)
+            edges.erase(std::remove(edges.begin(), edges.end(), edge), edges.end());
+        edges.insert(edges.end(), op.addedEdges.begin(), op.addedEdges.end());
 
-    for (const Face* face : op.removedFaces)
-        faces.erase(std::remove(faces.begin(), faces.end(), face), faces.end());
-    faces.insert(faces.end(), op.addedFaces.begin(), op.addedFaces.end());
+        for (const Face* face : op.removedFaces)
+            faces.erase(std::remove(faces.begin(), faces.end(), face), faces.end());
+        faces.insert(faces.end(), op.addedFaces.begin(), op.addedFaces.end());
 
-    for (const Node* node : op.removedNodes)
-        delete node;
-    for (const Vertex* vertex : op.removedVertices)
-        delete vertex;
-    for (const Edge* edge : op.removedEdges)
-        delete edge;
-    for (const Face* face : op.removedFaces)
-        delete face;
+        for (const Node* node : op.removedNodes)
+            delete node;
+        for (const Vertex* vertex : op.removedVertices)
+            delete vertex;
+        for (const Edge* edge : op.removedEdges)
+            delete edge;
+        for (const Face* face : op.removedFaces)
+            delete face;
+    } else {
+        removeGpu(op.removedNodesGpu, nodesGpu);
+        nodesGpu.insert(nodesGpu.end(), op.addedNodesGpu.begin(), op.addedNodesGpu.end());
+        removeGpu(op.removedVerticesGpu, verticesGpu);
+        verticesGpu.insert(verticesGpu.end(), op.addedVerticesGpu.begin(), op.addedVerticesGpu.end());
+        removeGpu(op.removedEdgesGpu, edgesGpu);
+        edgesGpu.insert(edgesGpu.end(), op.addedEdgesGpu.begin(), op.addedEdgesGpu.end());
+        removeGpu(op.removedFacesGpu, facesGpu);
+        facesGpu.insert(facesGpu.end(), op.addedFacesGpu.begin(), op.addedFacesGpu.end());
+
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedNodesGpu.size(), pointer(op.removedNodesGpu));
+        CUDA_CHECK_LAST();
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedVerticesGpu.size(), pointer(op.removedVerticesGpu));
+        CUDA_CHECK_LAST();
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedEdgesGpu.size(), pointer(op.removedEdgesGpu));
+        CUDA_CHECK_LAST();
+        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedFacesGpu.size(), pointer(op.removedFacesGpu));
+        CUDA_CHECK_LAST();
+    }
 }
 
 void Mesh::updateStructures() {
@@ -313,21 +327,13 @@ void Mesh::updateStructures() {
             }
         }
     } else {
-        updateNodeIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
-        CUDA_CHECK_LAST();
-        updateVertexIndices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
+        initializeNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
 
-        thrust::device_vector<int> indices(3 * facesGpu.size());
-        thrust::device_vector<NodeData> nodeData(3 * facesGpu.size());
-        collectNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(indices), pointer(nodeData));
+        initializeVertexStructures<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
         CUDA_CHECK_LAST();
-        
-        thrust::sort_by_key(indices.begin(), indices.end(), nodeData.begin());
-        thrust::device_vector<int> outputIndices(3 * facesGpu.size());
-        thrust::device_vector<NodeData> outputNodeData(3 * facesGpu.size());
-        auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), nodeData.begin(), outputIndices.begin(), outputNodeData.begin());
-        setNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputNodeData), pointer(nodesGpu));
+
+        updateStructuresGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -348,19 +354,13 @@ void Mesh::updateNodeGeometries() {
         for (Node* node : nodes)
             node->n.normalize();
     } else {
-        updateNodeGeometriesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
+        initializeNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
 
-        thrust::device_vector<int> indices(3 * facesGpu.size());
-        thrust::device_vector<Vector3f> nodeData(3 * facesGpu.size());
-        collectNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(indices), pointer(nodeData));
+        updateNodeGeometriesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
         CUDA_CHECK_LAST();
 
-        thrust::sort_by_key(indices.begin(), indices.end(), nodeData.begin());
-        thrust::device_vector<int> outputIndices(3 * facesGpu.size());
-        thrust::device_vector<Vector3f> outputNodeData(3 * facesGpu.size());
-        auto iter = thrust::reduce_by_key(indices.begin(), indices.end(), nodeData.begin(), outputIndices.begin(), outputNodeData.begin());
-        setNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputIndices.begin(), pointer(outputIndices), pointer(outputNodeData), pointer(nodesGpu));
+        finalizeNodeGeometries<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
     }
 }
@@ -513,4 +513,31 @@ void Mesh::printDebugInfo(int selectedFace) {
         std::cout << "Nodes=[" << face->vertices[0]->node->index << ", " << face->vertices[1]->node->index << ", " << face->vertices[2]->node->index << "]" << std::endl;
     } else
         printDebugInfoGpu<<<1, 1>>>(pointer(facesGpu), selectedFace);
+}
+
+void Mesh::check() const {
+    if (!gpu) {
+        for (const Edge* edge : edges)
+            for (int i = 0; i < 2; i++)
+                if (edge->opposites[i] != nullptr) {
+                    if (edge->vertices[i][0]->node != edge->nodes[0] || edge->vertices[i][1]->node != edge->nodes[1])
+                        std::cout << "Edge vertices check error!" << std::endl;
+                    if (edge->adjacents[i] == nullptr || !edge->adjacents[i]->contain(edge->opposites[i]) || !edge->adjacents[i]->contain(edge))
+                        std::cout << "Edge adjacents check error!" << std::endl;
+                } else if (edge->adjacents[i] != nullptr)
+                    std::cout << "Edge opposites check error!" << std::endl;
+            
+        for (const Face* face : faces)
+            for (int i = 0; i < 3; i++) {
+                Edge* edge = face->edges[i];
+                if (edge->adjacents[0] != face && edge->adjacents[1] != face)
+                    std::cout << "Face edges check error!" << std::endl;
+            }
+    } else {
+        checkEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
+        CUDA_CHECK_LAST();
+
+        checkFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
+        CUDA_CHECK_LAST();
+    }
 }

@@ -1,41 +1,44 @@
 #include "SeparationOptimization.cuh"
 
-SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& intersections, float thickness) :
+SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& intersections, float thickness, int deform, float obstacleArea) :
     intersections(intersections),
-    thickness(thickness) {
-    indices.resize(intersections.size());
+    thickness(thickness),
+    obstacleArea(obstacleArea) {
+    nConstraints = intersections.size();
+    std::vector<Pairni> intersectionNodes;
     for (int i = 0; i < intersections.size(); i++) {
-        indices[i].resize(6);
         const Intersection& intersection = intersections[i];
-        for (int j = 0; j < 3; j++)
-            indices[i][j] = addNode(intersection.face0->vertices[j]->node);
-
-        for (int j = 0; j < 3; j++)
-            indices[i][j + 3] = addNode(intersection.face1->vertices[j]->node);
+        for (int j = 0; j < 3; j++) {
+            Node* node0 = intersection.face0->vertices[j]->node;
+            if (deform == 1 || node0->isFree)
+                intersectionNodes.emplace_back(node0, 6 * i + j);
+            
+            Node* node1 = intersection.face1->vertices[j]->node;
+            if (deform == 1 || node1->isFree)
+                intersectionNodes.emplace_back(node1, 6 * i + j + 3);
+        }
     }
 
-    nNodes = nodes.size();
-    nConstraints = intersections.size();
-    
+    std::sort(intersectionNodes.begin(), intersectionNodes.end());
     invArea = 0.0f;
-    for (const Node* node : nodes)
-        invArea += 1.0f / node->area;
+    indices.assign(6 * nConstraints, -1);
+    int index = -1;
+    for (int i = 0; i < intersectionNodes.size(); i++) {
+        Node* node = intersectionNodes[i].first;
+        int idx = intersectionNodes[i].second;
+        if (i == 0 || node != intersectionNodes[i - 1].first) {
+            float area = node->isFree ? node->area : obstacleArea;
+            invArea += 1.0f / area;
+            nodes.push_back(node);
+            index++;
+        }
+        indices[idx] = index;
+    }
+    nNodes = nodes.size();
     invArea /= nNodes;
 }
 
 SeparationOptimization::~SeparationOptimization() {}
-
-int SeparationOptimization::addNode(const Node* node) {
-    if (!node->isFree)
-        return -1;
-    
-    for (int i = 0; i < nodes.size(); i++)
-        if (nodes[i] == node)
-            return i;
-
-    nodes.push_back(const_cast<Node*>(node));
-    return nodes.size() - 1;
-}
 
 float SeparationOptimization::objective(const std::vector<Vector3f>& x) const {
     float ans = 0.0f;
@@ -67,13 +70,13 @@ float SeparationOptimization::constraint(const std::vector<Vector3f>& x, int ind
     float ans = -thickness;
     const Intersection& intersection = intersections[index];
     for (int i = 0; i < 3; i++) {
-        int j0 = indices[index][i];
+        int j0 = indices[6 * index + i];
         if (j0 > -1)
             ans += intersection.b0(i) * intersection.d.dot(x[j0]);
         else
             ans += intersection.b0(i) * intersection.d.dot(intersection.face0->vertices[i]->node->x);
 
-        int j1 = indices[index][i + 3];
+        int j1 = indices[6 * index + i + 3];
         if (j1 > -1)
             ans -= intersection.b1(i) * intersection.d.dot(x[j1]);
         else
@@ -89,11 +92,11 @@ void SeparationOptimization::constraint(const thrust::device_vector<Vector3f>& x
 void SeparationOptimization::constraintGradient(const std::vector<Vector3f>& x, int index, float factor, std::vector<Vector3f>& gradient) const {
     const Intersection& intersection = intersections[index];
     for (int i = 0; i < 3; i++) {
-        int j0 = indices[index][i];
+        int j0 = indices[6 * index + i];
         if (j0 > -1)
             gradient[j0] += factor * intersection.b0(i) * intersection.d;
         
-        int j1 = indices[index][i + 3];
+        int j1 = indices[6 * index + i + 3];
         if (j1 > -1)
             gradient[j1] -= factor * intersection.b1(i) * intersection.d;
     }

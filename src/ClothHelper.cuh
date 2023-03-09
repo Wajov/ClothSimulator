@@ -7,6 +7,5 @@
 #include "Handle.cuh"
 
 __global__ void initializeHandles(int nHandles, const int* handleIndices, Node** nodes, Handle* handles);
-__global__ void deleteHandles(int nHandles, const Handle* const* handles);
 
 #endif

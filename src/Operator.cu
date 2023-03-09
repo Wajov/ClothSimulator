@@ -39,6 +39,16 @@ void Operator::flip(const Edge* edge, const Material* material) {
     removedFaces.push_back(face1);
 }
 
+void Operator::flip(const thrust::device_vector<Edge*>& edges, const Material* material) {
+    int nEdges = edges.size();
+    addedEdgesGpu.resize(nEdges);
+    removedEdgesGpu.resize(nEdges);
+    addedFacesGpu.resize(2 * nEdges);
+    removedFacesGpu.resize(2 * nEdges);
+    flipGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), material, pointer(addedEdgesGpu), pointer(removedEdgesGpu), pointer(addedFacesGpu), pointer(removedFacesGpu));
+    CUDA_CHECK_LAST();
+}
+
 void Operator::split(const Edge* edge, const Material* material, int index) {
     Node* node0 = edge->nodes[0];
     Node* node1 = edge->nodes[1];

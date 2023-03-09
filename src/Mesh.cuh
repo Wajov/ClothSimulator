@@ -15,7 +15,6 @@
 #include <thrust/unique.h>
 #include <thrust/sort.h>
 #include <thrust/remove.h>
-#include <thrust/reduce.h>
 
 #include "MathHelper.cuh"
 #include "CudaHelper.cuh"
@@ -75,6 +74,7 @@ public:
     void readDataFromFile(const std::string& path);
     void writeDataToFile(const std::string& path);
     void printDebugInfo(int selectedFace);
+    void check() const;
 };
 
 #endif

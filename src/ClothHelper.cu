@@ -11,10 +11,3 @@ __global__ void initializeHandles(int nHandles, const int* handleIndices, Node**
         handle.position = node->x;
     }
 }
-
-__global__ void deleteHandles(int nHandles, const Handle* const* handles) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nHandles; i += nThreads)
-        delete handles[i];
-}

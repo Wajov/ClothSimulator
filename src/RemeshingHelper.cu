@@ -236,28 +236,153 @@ Matrix2x2f faceSizing(const Face* face, const Plane* planes, const Remeshing* re
     return Q * diagonal(l) * Q.transpose();
 }
 
-__global__ void collectVertexSizing(int nFaces, const Face* const* faces, const Plane* planes, int* indices, Pairfm* sizing, const Remeshing* remeshing) {
+__global__ void initializeSizing(int nVertices, Vertex** vertices) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads) {
+        Vertex* vertex = vertices[i];
+        vertex->area = 0.0f;
+        vertex->sizing = Matrix2x2f();
+    }
+}
+
+__global__ void computeSizingGpu(int nFaces, const Face* const* faces, const Plane* planes, const Remeshing* remeshing) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
         const Face* face = faces[i];
         float area = face->area;
-        Matrix2x2f s = faceSizing(face, planes, remeshing);
+        Matrix2x2f sizing = faceSizing(face, planes, remeshing);
         for (int j = 0; j < 3; j++) {
-            int index = 3 * i + j;
-            indices[index] = face->vertices[j]->index;
-            sizing[index] = Pairfm(area, area * s);
+            Vertex* vertex = face->vertices[j];
+            atomicAdd(&vertex->area, area);
+            for (int k = 0; k < 2; k++)
+                for (int h = 0; h < 2; h++)
+                    atomicAdd(&vertex->sizing(k, h), area * sizing(k, h));
         }
     }
 }
 
-__global__ void setVertexSizing(int nIndices, const int* indices, const Pairfm* sizing, Vertex** vertices) {
+__global__ void finalizeSizing(int nVertices, Vertex** vertices) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads) {
-        const Pairfm& p = sizing[i];
-        Vertex* vertex = vertices[indices[i]];
-        vertex->area = p.first;
-        vertex->sizing = p.second / p.first;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads) {
+        Vertex* vertex = vertices[i];
+        vertex->sizing /= vertex->area;
+    }
+}
+
+bool shouldFlip(const Edge* edge, const Remeshing* remeshing) {
+    if (edge->isBoundary() || edge->isSeam())
+        return false;
+        
+    Vertex* vertex0 = edge->vertices[0][0];
+    Vertex* vertex1 = edge->vertices[1][1];
+    Vertex* vertex2 = edge->opposites[0];
+    Vertex* vertex3 = edge->opposites[1];
+
+    Vector2f x = vertex0->u, y = vertex1->u, z = vertex2->u, w = vertex3->u;
+    Matrix2x2f M = 0.25f * (vertex0->sizing + vertex1->sizing + vertex2->sizing + vertex3->sizing);
+    float area0 = edge->adjacents[0]->area;
+    float area1 = edge->adjacents[1]->area;
+    return area1 * (x - z).dot(M * (y - z)) + area0 * (y - w).dot(M * (x - w)) < -remeshing->flipThreshold * (area0 + area1);
+}
+
+__global__ void checkEdgesToFlip(int nEdges, const Edge* const* edges, const Remeshing* remeshing, Edge** edgesToFlip) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        edgesToFlip[i] = shouldFlip(edge, remeshing) ? const_cast<Edge*>(edge) : nullptr;
+    }
+}
+
+__global__ void initializeFlipNodes(int nEdges, const Edge* const* edges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        for (int j = 0; j < 2; j++)
+            edge->nodes[j]->removed = false;
+    }
+}
+
+__global__ void resetFlipNodes(int nEdges, const Edge* const* edges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        Node* node0 = edge->nodes[0];
+        Node* node1 = edge->nodes[1];
+        if (!node0->removed && !node1->removed)
+            node0->minIndex = node1->minIndex = nEdges;
+    }
+}
+
+__global__ void computeFlipMinIndices(int nEdges, const Edge* const* edges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        Node* node0 = edge->nodes[0];
+        Node* node1 = edge->nodes[1];
+        if (!node0->removed && !node1->removed) {
+            atomicMin(&node0->minIndex, i);
+            atomicMin(&node1->minIndex, i);
+        }
+    }
+}
+
+__global__ void checkIndependentEdgesToFlip(int nEdges, const Edge* const* edges, Edge** independentEdges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        Node* node0 = edge->nodes[0];
+        Node* node1 = edge->nodes[1];
+        if (!node0->removed && !node1->removed && node0->minIndex == node1->minIndex) {
+            independentEdges[i] = const_cast<Edge*>(edge);
+            node0->removed = node1->removed = true;
+        }
+    }
+}
+
+__global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* material, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        Vertex* vertex0 = edge->vertices[0][0];
+        Vertex* vertex1 = edge->vertices[1][1];
+        Vertex* vertex2 = edge->opposites[0];
+        Vertex* vertex3 = edge->opposites[1];
+
+        Face* face0 = edge->adjacents[0];
+        Face* face1 = edge->adjacents[1];
+
+        Edge* edge0 = face0->findEdge(vertex1, vertex2);
+        Edge* edge1 = face0->findEdge(vertex2, vertex0);
+        Edge* edge2 = face1->findEdge(vertex0, vertex3);
+        Edge* edge3 = face1->findEdge(vertex3, vertex1);
+
+        Edge* newEdge = new Edge(vertex2->node, vertex3->node);
+        Face* newFace0 = new Face(vertex0, vertex3, vertex2, material);
+        Face* newFace1 = new Face(vertex1, vertex2, vertex3, material);
+        newEdge->initialize(vertex0, newFace0);
+        newEdge->initialize(vertex1, newFace1);
+        newFace0->setEdges(edge2, newEdge, edge1);
+        newFace1->setEdges(edge0, newEdge, edge3);
+
+        edge0->initialize(vertex3, newFace1);
+        edge1->initialize(vertex3, newFace0);
+        edge2->initialize(vertex2, newFace0);
+        edge3->initialize(vertex2, newFace1);
+
+        addedEdges[i] = newEdge;
+        removedEdges[i] = const_cast<Edge*>(edge);
+        addedFaces[2 * i] = newFace0;
+        addedFaces[2 * i + 1] = newFace1;
+        removedFaces[2 * i] = face0;
+        removedFaces[2 * i + 1] = face1;
     }
 }

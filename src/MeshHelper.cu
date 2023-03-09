@@ -81,27 +81,14 @@ __global__ void setEdges(int nEdges, const Pairii* indices, const EdgeData* edge
         }
 }
 
-__global__ void collectPreservedNodes(int nEdges, const Edge* const* edges, int* nodeIndices) {
+__global__ void setPreserve(int nEdges, const Edge* const* edges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
         const Edge* edge = edges[i];
         if (edge->isBoundary() || edge->isSeam())
             for (int j = 0; j < 2; j++)
-                nodeIndices[2 * i + j] = edge->nodes[j]->index;
-        else
-            for (int j = 0; j < 2; j++)
-                nodeIndices[2 * i + j] = -1;
-    }
-}
-
-__global__ void setPreservedNodes(int nIndices, const int* indices, Node** nodes) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads) {
-        int index = indices[i];
-        if (index > -1)
-            nodes[index]->preserve = true;
+                edge->nodes[j]->preserve = true;
     }
 }
 
@@ -114,53 +101,77 @@ __global__ void resetGpu(int nNodes, Node** nodes) {
     }
 }
 
-__global__ void updateNodeIndices(int nNodes, Node** nodes) {
+__global__ void initializeIndices(int n, int* indices) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
-        nodes[i]->index = i;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += nThreads)
+        indices[i] = i;
 }
 
-__global__ void updateVertexIndices(int nVertices, Vertex** vertices) {
+__global__ void initializeNodeStructures(int nNodes, Node** nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Node* node = nodes[i];
+        node->index = i;
+        node->mass = 0.0f;
+        node->area = 0.0f;
+    }
+}
+
+__global__ void initializeVertexStructures(int nVertices, Vertex** vertices) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads)
         vertices[i]->index = i;
 }
 
-__global__ void collectNodeStructures(int nFaces, Face** faces, int* indices, NodeData* nodeData) {
+__global__ void updateStructuresGpu(int nFaces, const Face* const* faces) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
-        Face* face = faces[i];
+        const Face* face = faces[i];
         float mass = face->mass / 3.0f;
         float area = face->area;
         for (int j = 0; j < 3; j++) {
-            int index = 3 * i + j;
-            indices[index] = face->vertices[j]->node->index;
-            nodeData[index].mass = mass;
-            nodeData[index].area = area;
+            Node* node = face->vertices[j]->node;
+            atomicAdd(&node->mass, mass);
+            atomicAdd(&node->area, area);
         }
     }
 }
 
-__global__ void setNodeStructures(int nIndices, const int* indices, const NodeData* nodeData, Node** nodes) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads) {
-        Node* node = nodes[indices[i]];
-        node->mass = nodeData[i].mass;
-        node->area = nodeData[i].area;
-    }
-}
-
-__global__ void updateNodeGeometriesGpu(int nNodes, Node** nodes) {
+__global__ void initializeNodeGeometries(int nNodes, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
         Node* node = nodes[i];
         node->x1 = node->x;
+        node->n = Vector3f();
     }
+}
+
+__global__ void updateNodeGeometriesGpu(int nFaces, const Face* const* faces) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
+        const Face* face = faces[i];
+        for (int j = 0; j < 3; j++) {
+            Node* node = face->vertices[j]->node;
+            Vector3f e0 = face->vertices[(j + 1) % 3]->node->x - node->x;
+            Vector3f e1 = face->vertices[(j + 2) % 3]->node->x - node->x;
+            Vector3f n = e0.cross(e1) / (e0.norm2() * e1.norm2());
+            for (int k = 0; k < 3; k++)
+                atomicAdd(&node->n(k), n(k));
+        }
+    }
+}
+
+__global__ void finalizeNodeGeometries(int nNodes, Node** nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
+        nodes[i]->n.normalize();
 }
 
 __global__ void updateFaceGeometriesGpu(int nFaces, Face** faces) {
@@ -168,29 +179,6 @@ __global__ void updateFaceGeometriesGpu(int nFaces, Face** faces) {
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads)
         faces[i]->update();
-}
-
-__global__ void collectNodeGeometries(int nFaces, Face** faces, int* indices, Vector3f* nodeData) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
-        Face* face = faces[i];
-        for (int j = 0; j < 3; j++) {
-            int index = 3 * i + j;
-            Node* node = face->vertices[j]->node;
-            Vector3f e0 = face->vertices[(j + 1) % 3]->node->x - node->x;
-            Vector3f e1 = face->vertices[(j + 2) % 3]->node->x - node->x;
-            indices[index] = node->index;
-            nodeData[index] = e0.cross(e1) / (e0.norm2() * e1.norm2());
-        }
-    }
-}
-
-__global__ void setNodeGeometries(int nIndices, const int* indices, const Vector3f* nodeData, Node** nodes) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads)
-        nodes[indices[i]]->n = nodeData[i].normalized();
 }
 
 __global__ void updateVelocitiesGpu(int nNodes, float invDt, Node** nodes) {
@@ -258,30 +246,31 @@ __global__ void printDebugInfoGpu(const Face* const* faces, int index) {
     printf("Nodes=[%d, %d, %d]\n", face->vertices[0]->node->index, face->vertices[1]->node->index, face->vertices[2]->node->index);
 }
 
-__global__ void deleteNodes(int nNodes, const Node* const* nodes) {
+__global__ void checkEdges(int nEdges, const Edge* const* edges) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
-        delete nodes[i];
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        for (int j = 0; j < 2; j++)
+            if (edge->opposites[j] != nullptr) {
+                if (edge->vertices[j][0]->node != edge->nodes[0] || edge->vertices[j][1]->node != edge->nodes[1])
+                    printf("Edge vertices check error!\n");
+                if (edge->adjacents[j] == nullptr || !edge->adjacents[j]->contain(edge->opposites[j]) || !edge->adjacents[j]->contain(edge))
+                    printf("Edge adjacents check error!\n");
+            } else if (edge->adjacents[j] != nullptr)
+                printf("Edge opposites check error!\n");
+    }
 }
 
-__global__ void deleteVertices(int nVertices, const Vertex* const* vertices) {
+__global__ void checkFaces(int nFaces, const Face* const* faces) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads)
-        delete vertices[i];
-}
-
-__global__ void deleteEdges(int nEdges, const Edge* const* edges) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads)
-        delete edges[i];
-}
-
-__global__ void deleteFaces(int nFaces, const Face* const* faces) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads)
-        delete faces[i];
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
+        const Face* face = faces[i];
+        for (int j = 0; j < 3; j++) {
+            Edge* edge = face->edges[j];
+            if (edge->adjacents[0] != face && edge->adjacents[1] != face)
+                printf("Face edges check error!\n");
+        }
+    }
 }

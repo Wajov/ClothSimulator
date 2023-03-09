@@ -54,7 +54,7 @@ private:
     void addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::SparseMatrix<float>& A) const;
     void addSubVector(const Vector9f& b, const Vector3i& indices, Eigen::VectorXf& a) const;
     void addSubVector(const Vector12f& b, const Vector4i& indices, Eigen::VectorXf& a) const;
-    void init(Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
+    void initializeForces(Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
@@ -64,8 +64,8 @@ private:
     void computeSizing(const thrust::device_vector<Plane>& planes);
     float edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const;
     float edgeMetric(const Edge* edge) const;
-    bool shouldFlip(const Edge* edge) const;
     std::vector<Edge*> findEdgesToFlip() const;
+    thrust::device_vector<Edge*> findEdgesToFlipGpu() const;
     bool flipSomeEdges();
     void flipEdges();
     std::vector<Edge*> findEdgesToSplit() const;

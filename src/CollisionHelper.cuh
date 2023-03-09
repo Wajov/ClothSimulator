@@ -29,7 +29,9 @@ __host__ __device__ bool checkImpact(ImpactType type, const Node* node0, const N
 __host__ __device__ bool checkVertexFaceImpact(const Vertex* vertex, const Face* face, float thickness, Impact& impact);
 __host__ __device__ bool checkEdgeEdgeImpact(const Edge* edge0, const Edge* edge1, float thickness, Impact& impact);
 __global__ void checkImpactsGpu(int nProximities, const Proximity* proximities, float thickness, Impact* impacts);
-__global__ void collectNodeImpacts(int nImpacts, const Impact* impacts, Node** nodes, Pairfi* nodeImpacts);
-__global__ void setIndependentImpacts(int nImpacts, const Pairfi* nodeImpacts, const Impact* impacts, Impact* independentImpacts);
+__global__ void initializeImpactNodes(int nImpacts, const Impact* impacts, int deform);
+__global__ void collectRelativeImpacts(int nImpacts, const Impact* impacts, int deform, Node** nodes, Pairfi* relativeImpacts);
+__global__ void setImpactMinIndices(int nNodes, const Pairfi* relativeImpacts, Node** nodes);
+__global__ void checkIndependentImpacts(int nImpacts, const Impact* impacts, int deform, Impact* independentImpacts);
 
 #endif

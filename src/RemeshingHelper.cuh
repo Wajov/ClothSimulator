@@ -31,7 +31,15 @@ __host__ __device__ Disk circumscribedDisk(const Disk& d0, const Disk& d1);
 __host__ __device__ Disk circumscribedDisk(const Disk& d0, const Disk& d1, const Disk& d2);
 __host__ __device__ Matrix2x2f maxTensor(const Matrix2x2f* M);
 __host__ __device__ Matrix2x2f faceSizing(const Face* face, const Plane* planes, const Remeshing* remeshing);
-__global__ void collectVertexSizing(int nFaces, const Face* const* faces, const Plane* planes, int* indices, Pairfm* sizing, const Remeshing* remeshing);
-__global__ void setVertexSizing(int nIndices, const int* indices, const Pairfm* sizing, Vertex** vertices);
+__global__ void initializeSizing(int nVertices, Vertex** vertices);
+__global__ void computeSizingGpu(int nFaces, const Face* const* faces, const Plane* planes, const Remeshing* remeshing);
+__global__ void finalizeSizing(int nVertices, Vertex** vertices);
+__host__ __device__ bool shouldFlip(const Edge* edge, const Remeshing* remeshing);
+__global__ void checkEdgesToFlip(int nEdges, const Edge* const* edges, const Remeshing* remeshing, Edge** edgesToFlip);
+__global__ void initializeFlipNodes(int nEdges, const Edge* const* edges);
+__global__ void resetFlipNodes(int nEdges, const Edge* const* edges);
+__global__ void computeFlipMinIndices(int nEdges, const Edge* const* edges);
+__global__ void checkIndependentEdgesToFlip(int nEdges, const Edge* const* edges, Edge** independentEdges);
+__global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* material, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces);
 
 #endif

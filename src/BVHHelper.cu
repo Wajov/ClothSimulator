@@ -325,6 +325,7 @@ __global__ void updateGpu(int nNodes, BVHNode* nodes, bool ccd) {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
         BVHNode* node = &nodes[i];
         node->bounds = node->face->bounds(ccd);
+        node = node->parent;
         while (node != nullptr) {
             if (atomicAdd(&node->count, 1) == 1) {
                 node->bounds = node->left->bounds + node->right->bounds;

@@ -14,6 +14,7 @@
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
 #include <thrust/remove.h>
+#include <thrust/reduce.h>
 
 #include "JsonHelper.cuh"
 #include "CudaHelper.cuh"

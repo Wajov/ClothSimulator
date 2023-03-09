@@ -3,6 +3,8 @@
 Simulator::Simulator(const std::string& path) :
     nSteps(0),
     selectedCloth(-1) {
+    cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1 << 30);
+
     std::ifstream fin(path);
     if (!fin.is_open()) {
         std::cerr << "Failed to open configuration file: " << path << std::endl;
@@ -31,7 +33,6 @@ Simulator::Simulator(const std::string& path) :
 
     fin.close();
 
-    // cloths[0]->readDataFromFile("input.txt");
     remeshingStep();
     bind();
 
@@ -171,11 +172,14 @@ std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& imp
     std::vector<Impact> ans;
     for (const Impact& impact : sorted) {
         bool flag = true;
-        for (int i = 0; i < 4; i++)
-            if ((deform == 1 || impact.nodes[i]->isFree) && nodes.find(impact.nodes[i]) != nodes.end()) {
+        for (int i = 0; i < 4; i++) {
+            Node* node = impact.nodes[i];
+            if ((deform == 1 || node->isFree) && nodes.find(node) != nodes.end()) {
                 flag = false;
                 break;
             }
+        }
+
         if (flag) {
             ans.push_back(impact);
             for (int i = 0; i < 4; i++)
@@ -187,20 +191,38 @@ std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& imp
 
 thrust::device_vector<Impact> Simulator::independentImpacts(const thrust::device_vector<Impact>& impacts, int deform) const {
     int nImpacts = impacts.size();
+    const Impact* impactsPointer = pointer(impacts);
     int nNodes = 4 * nImpacts;
-    thrust::device_vector<Node*> nodes(nNodes);
-    thrust::device_vector<Pairfi> nodeImpacts(nNodes);
-    collectNodeImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, pointer(impacts), pointer(nodes), pointer(nodeImpacts));
+    thrust::device_vector<Node*> nodes(nNodes), outputNodes(nNodes);
+    Node** nodesPointer = pointer(nodes);
+    Node** outputNodesPointer = pointer(outputNodes);
+    thrust::device_vector<Pairfi> relativeImpacts(nNodes), outputRelativeImpacts(nNodes);
+    Pairfi* relativeImpactsPointer = pointer(relativeImpacts);
+    Pairfi* outputRelativeImpactsPointer = pointer(outputRelativeImpacts);
+    thrust::device_vector<Impact> ans(nImpacts);
+    Impact* ansPointer = pointer(ans);
+    initializeImpactNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, impactsPointer, deform);
     CUDA_CHECK_LAST();
 
-    thrust::sort_by_key(nodes.begin(), nodes.end(), nodeImpacts.begin());
-    thrust::device_vector<Node*> outputNodes(nNodes);
-    thrust::device_vector<Pairfi> outputNodeImpacts(nNodes);
-    auto iter = thrust::reduce_by_key(nodes.begin(), nodes.end(), nodeImpacts.begin(), outputNodes.begin(), outputNodeImpacts.begin(), thrust::equal_to<Node*>(), thrust::minimum<Pairfi>());
-    
-    int nIndependentImpacts = iter.first - outputNodes.begin();
-    thrust::device_vector<Impact> ans(nIndependentImpacts);
-    setIndependentImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nIndependentImpacts, pointer(outputNodeImpacts), pointer(impacts), pointer(ans));
+    int num, newNum = nImpacts;
+    do {
+        num = newNum;
+        collectRelativeImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, impactsPointer, deform, nodesPointer, relativeImpactsPointer);
+        CUDA_CHECK_LAST();
+
+        thrust::sort_by_key(nodes.begin(), nodes.end(), relativeImpacts.begin());
+        auto iter = thrust::reduce_by_key(nodes.begin(), nodes.end(), relativeImpacts.begin(), outputNodes.begin(), outputRelativeImpacts.begin(), thrust::equal_to<Node*>(), thrust::minimum<Pairfi>());
+
+        setImpactMinIndices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputNodes.begin(), outputRelativeImpactsPointer, outputNodesPointer);
+        CUDA_CHECK_LAST();
+
+        checkIndependentImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, impactsPointer, deform, ansPointer);
+        CUDA_CHECK_LAST();
+
+        newNum = thrust::count_if(ans.begin(), ans.end(), IsNull());
+    } while (num > newNum);
+
+    ans.erase(thrust::remove_if(ans.begin(), ans.end(), IsNull()), ans.end());
     CUDA_CHECK_LAST();
 
     return ans;
@@ -343,36 +365,49 @@ void Simulator::remeshingStep() {
 }
 
 void Simulator::separationStep(const std::vector<Mesh*>& oldMeshes) {
+    std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(false));
+    std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
+    float obstacleArea = 1e3f;
+
     if (!gpu) {
-        std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(false));
-        std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
         std::vector<Intersection> intersections;
-        
-        for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
-            if (!intersections.empty())
-                updateActive(clothBvhs, obstacleBvhs, intersections);
-            
-            std::vector<Intersection> newIntersections;
-            traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
-                checkIntersection(face0, face1, newIntersections, cloths, oldMeshes);
-            });
-            if (newIntersections.empty())
+        for (int deform = 0; deform < 2; deform++) {
+            intersections.clear();
+            bool success = false;
+            for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
+                if (!intersections.empty())
+                    updateActive(clothBvhs, obstacleBvhs, intersections);
+                
+                std::vector<Intersection> newIntersections;
+                traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
+                    checkIntersection(face0, face1, newIntersections, cloths, oldMeshes);
+                });
+                if (newIntersections.empty()) {
+                    success = true;
+                    break;
+                }
+
+                intersections.insert(intersections.end(), newIntersections.begin(), newIntersections.end());
+                Optimization* optimization = new SeparationOptimization(intersections, magic->collisionThickness, deform, obstacleArea);
+                optimization->solve();
+                delete optimization;
+
+                updateFaceGeometries();
+                updateBvhs(clothBvhs);
+                if (deform == 1) {
+                    updateBvhs(obstacleBvhs);
+                    obstacleArea *= 0.5f;
+                }
+            }
+            if (success)
                 break;
-
-            intersections.insert(intersections.end(), newIntersections.begin(), newIntersections.end());
-            Optimization* optimization = new SeparationOptimization(intersections, magic->collisionThickness);
-            optimization->solve();
-            delete optimization;
-
-            updateFaceGeometries();
-            updateBvhs(clothBvhs);
         }
-
-        destroyBvhs(clothBvhs);
-        destroyBvhs(obstacleBvhs);
     } else {
         // TODO
     }
+
+    destroyBvhs(clothBvhs);
+    destroyBvhs(obstacleBvhs);
 
     updateNodeGeometries();
     updateVelocities();

@@ -46,8 +46,8 @@ CollisionOptimization::CollisionOptimization(const thrust::device_vector<Impact>
     collectCollisionNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nConstraints, pointer(impacts), deform, nodeIndicesPointer, nodesPointer);
     CUDA_CHECK_LAST();
 
-    nodesGpu.erase(thrust::remove_if(nodesGpu.begin(), nodesGpu.end(), IsNull()), nodesGpu.end());
-    nodeIndices.erase(thrust::remove_if(nodeIndices.begin(), nodeIndices.end(), IsNull()), nodeIndices.end());
+    nodesGpu.erase(thrust::remove(nodesGpu.begin(), nodesGpu.end(), nullptr), nodesGpu.end());
+    nodeIndices.erase(thrust::remove(nodeIndices.begin(), nodeIndices.end(), -1), nodeIndices.end());
     thrust::sort_by_key(nodesGpu.begin(), nodesGpu.end(), nodeIndices.begin());
     thrust::device_vector<int> diff(nodesGpu.size());
     setDiff<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), nodesPointer, pointer(diff));
@@ -134,7 +134,7 @@ void CollisionOptimization::constraintGradient(const thrust::device_vector<Vecto
     CUDA_CHECK_LAST();
 
     grad.erase(thrust::remove_if(grad.begin(), grad.end(), gradIndices.begin(), IsNull()), grad.end());
-    gradIndices.erase(thrust::remove_if(gradIndices.begin(), gradIndices.end(), IsNull()), gradIndices.end());
+    gradIndices.erase(thrust::remove(gradIndices.begin(), gradIndices.end(), -1), gradIndices.end());
     thrust::sort_by_key(gradIndices.begin(), gradIndices.end(), grad.begin());
     thrust::device_vector<int> outputGradIndices(4 * nConstraints);
     thrust::device_vector<Vector3f> outputGrad(4 * nConstraints);

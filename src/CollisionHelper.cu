@@ -213,22 +213,73 @@ __global__ void checkImpactsGpu(int nProximities, const Proximity* proximities, 
     }
 }
 
-__global__ void collectNodeImpacts(int nImpacts, const Impact* impacts, Node** nodes, Pairfi* nodeImpacts) {
+__global__ void initializeImpactNodes(int nImpacts, const Impact* impacts, int deform) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nImpacts; i += nThreads) {
         const Impact& impact = impacts[i];
         for (int j = 0; j < 4; j++) {
-            int index = 4 * i + j;
-            nodes[index] = impact.nodes[j];
-            nodeImpacts[index] = Pairfi(impact.t, i);
+            Node* node = impact.nodes[j];
+            if (deform == 1 || node->isFree)
+                node->removed = false;
         }
     }
 }
 
-__global__ void setIndependentImpacts(int nImpacts, const Pairfi* nodeImpacts, const Impact* impacts, Impact* independentImpacts) {
+__global__ void collectRelativeImpacts(int nImpacts, const Impact* impacts, int deform, Node** nodes, Pairfi* relativeImpacts) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nImpacts; i += nThreads)
-        independentImpacts[i] = impacts[nodeImpacts[i].second];
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nImpacts; i += nThreads) {
+        const Impact& impact = impacts[i];
+        bool flag = true;
+        for (int j = 0; j < 4; j++) {
+            Node* node = impact.nodes[j];
+            if ((deform == 1 || node->isFree) && node->removed) {
+                flag = false;
+                break;
+            }
+        }
+
+        for (int j = 0; j < 4; j++) {
+            Node* node = impact.nodes[j];
+            int index = 4 * i + j;
+            if (flag && (deform == 1 || node->isFree)) {
+                nodes[index] = node;
+                relativeImpacts[index] = Pairfi(impact.t, i);
+            }  else
+                nodes[4 * i + j] = nullptr;
+        }
+    }
+}
+
+__global__ void setImpactMinIndices(int nNodes, const Pairfi* relativeImpacts, Node** nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Node* node = nodes[i];
+        if (node != nullptr)
+            nodes[i]->minIndex = relativeImpacts[i].second;
+    }
+}
+
+__global__ void checkIndependentImpacts(int nImpacts, const Impact* impacts, int deform, Impact* independentImpacts) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nImpacts; i += nThreads) {
+        const Impact& impact = impacts[i];
+        bool flag = true;
+        for (int j = 0; j < 4; j++) {
+            Node* node = impact.nodes[j];
+            if ((deform == 1 || node->isFree) && (node->removed || node->minIndex != i)) {
+                flag = false;
+                break;
+            }
+        }
+
+        if (flag) {
+            independentImpacts[i] = impact;
+            for (int j = 0; j < 4; j++)
+                impact.nodes[j]->removed = true;
+        }
+    }
 }

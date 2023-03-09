@@ -1,6 +1,7 @@
 #include "Impact.cuh"
 
-Impact::Impact() {}
+Impact::Impact() :
+    t(-1.0f) {}
 
 Impact::~Impact() {}
 

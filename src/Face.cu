@@ -55,6 +55,22 @@ bool Face::isFree() const {
     return vertices[0]->node->isFree && vertices[1]->node->isFree && vertices[2]->node->isFree;
 }
 
+bool Face::contain(const Vertex* vertex) const {
+    for (int i = 0; i < 3; i++)
+        if (vertices[i] == vertex)
+            return true;
+    
+    return false;
+}
+
+bool Face::contain(const Edge* edge) const {
+    for (int i = 0; i < 3; i++)
+        if (edges[i] == edge)
+            return true;
+    
+    return false;
+}
+
 bool Face::adjacent(const Face* face) const {
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
