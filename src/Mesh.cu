@@ -34,33 +34,6 @@ Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* 
     initialize(x, u, xIndices, uIndices, material);
 }
 
-Mesh::Mesh(const Mesh* mesh) {
-    nodes.resize(mesh->nodes.size());
-    for (int i = 0; i < mesh->nodes.size(); i++) {
-        Node* node = mesh->nodes[i];
-        nodes[i] = new Node(node->x, node->isFree);
-    }
-
-    vertices.resize(mesh->vertices.size());
-    for (int i = 0; i < mesh->vertices.size(); i++) {
-        Vertex* vertex = mesh->vertices[i];
-        vertices[i] = new Vertex(vertex->u);
-        vertices[i]->node = nodes[vertex->node->index];
-    }
-    
-    edges.resize(mesh->edges.size());
-    for (int i = 0; i < mesh->edges.size(); i++) {
-        Edge* edge = mesh->edges[i];
-        edges[i] = new Edge(nodes[edge->nodes[0]->index], nodes[edge->nodes[1]->index]);
-    }
-    
-    faces.resize(mesh->faces.size());
-    for (int i = 0; i < mesh->faces.size(); i++) {
-        Face* face = mesh->faces[i];
-        faces[i] = new Face(vertices[face->vertices[0]->index], vertices[face->vertices[1]->index], vertices[face->vertices[2]->index], nullptr);
-    }
-}
-
 Mesh::~Mesh() {
     if (!gpu) {
         for (const Node* node : nodes)
@@ -252,12 +225,26 @@ void Mesh::reset() {
     }
 }
 
-Vector3f Mesh::oldPosition(const Vector2f& u) const {
-    for (const Face* face : faces) {
-        Vector3f b = face->barycentricCoordinates(u);
-        if (b(0) >= -1e-6f && b(1) >= -1e-6f && b(2) >= -1e-5f)
-            return face->position(b);
+std::vector<BackupFace> Mesh::backupFaces() const {
+    std::vector<BackupFace> ans(faces.size());
+    for (int i = 0; i < faces.size(); i++) {
+        BackupFace& backupFace = ans[i];
+        Face* face = faces[i];
+        for (int j = 0; j < 3; j++) {
+            Vertex* vertex = face->vertices[j];
+            backupFace.x[j] = vertex->node->x;
+            backupFace.u[j] = vertex->u;
+        }
     }
+    return ans;
+}
+
+thrust::device_vector<BackupFace> Mesh::backupFacesGpu() const {
+    thrust::device_vector<BackupFace> ans(facesGpu.size());
+    setBackupFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(ans));
+    CUDA_CHECK_LAST();
+
+    return ans;
 }
 
 void Mesh::apply(const Operator& op) {

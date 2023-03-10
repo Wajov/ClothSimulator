@@ -14,6 +14,7 @@
 #include "Face.cuh"
 #include "Renderable.cuh"
 #include "Material.cuh"
+#include "BackupFace.cuh"
 
 struct EdgeData {
     Vertex* opposite;
@@ -39,6 +40,7 @@ __global__ void initializeEdges(int nEdges, const Pairii* indices, const EdgeDat
 __global__ void setEdges(int nEdges, const Pairii* indices, const EdgeData* edgeData, Edge** edges);
 __global__ void setPreserve(int nEdges, const Edge* const* edges);
 __global__ void resetGpu(int nNodes, Node** nodes);
+__global__ void setBackupFaces(int nFaces, const Face* const* faces, BackupFace* backupFaces);
 __global__ void initializeIndices(int n, int* indices);
 __global__ void initializeNodeStructures(int nNodes, Node** nodes);
 __global__ void initializeVertexStructures(int nVertices, Vertex** vertices);

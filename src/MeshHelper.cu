@@ -101,6 +101,20 @@ __global__ void resetGpu(int nNodes, Node** nodes) {
     }
 }
 
+__global__ void setBackupFaces(int nFaces, const Face* const* faces, BackupFace* backupFaces) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
+        BackupFace& backupFace = backupFaces[i];
+        const Face* face = faces[i];
+        for (int j = 0; j < 3; j++) {
+            Vertex* vertex = face->vertices[j];
+            backupFace.x[j] = vertex->node->x;
+            backupFace.u[j] = vertex->u;
+        }
+    }
+}
+
 __global__ void initializeIndices(int n, int* indices) {
     int nThreads = gridDim.x * blockDim.x;
 

@@ -107,11 +107,6 @@ Bounds Face::bounds(bool ccd) const {
     return ans;
 }
 
-Vector3f Face::barycentricCoordinates(const Vector2f& u) const {
-    Vector2f x = Matrix2x2f(vertices[0]->u - vertices[2]->u, vertices[1]->u - vertices[2]->u).inverse() * (u - vertices[2]->u);
-    return Vector3f(x(0), x(1), 1.0f - x(0) - x(1));
-}
-
 Vector3f Face::position(const Vector3f& b) const {
     return b(0) * vertices[0]->node->x + b(1) * vertices[1]->node->x + b(2) * vertices[2]->node->x;
 }

@@ -33,7 +33,7 @@ bool facePlaneIntersection(const Face* face, const Face* plane, Vector3f& b0, Ve
     return true;
 }
 
-bool intersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b0, Vector3f& b1) {
+bool checkIntersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b0, Vector3f& b1) {
     if (face0->adjacent(face1))
         return false;
     
@@ -63,14 +63,20 @@ bool intersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b0, Ve
     return true;
 }
 
-Vector3f oldPosition(const Face* face, const Vector3f& b, const std::vector<Cloth*>& cloths, const std::vector<Mesh*>& oldMeshes) {
-    if (!face->isFree())
-        return face->position(b);
-    
-    Vector2f u = b(0) * face->vertices[0]->u + b(1) * face->vertices[1]->u + b(2) * face->vertices[2]->u;
-    for (int i = 0; i < cloths.size(); i++)
-        if (cloths[i]->getMesh()->contain(face))
-            return oldMeshes[i]->oldPosition(u);
+__global__ void checkIntersectionsGpu(int nProximities, const Proximity* proximities, Intersection* intersections) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nProximities; i += nThreads) {
+        const Proximity& proximity = proximities[i];
+        Face* face0 = proximity.first;
+        Face* face1 = proximity.second;
+        Intersection& intersection = intersections[i];
+        if (checkIntersectionMidpoint(face0, face1, intersection.b0, intersection.b1)) {
+            intersection.face0 = face0;
+            intersection.face1 = face1;
+        } else
+            intersection.face0 = intersection.face1 = nullptr;
+    }
 }
 
 void clearVertexFaceDistance(const Face* face0, const Face* face1, const Vector3f& d, float& maxDist, Vector3f& b0, Vector3f& b1) {

@@ -35,7 +35,6 @@ public:
     __host__ __device__ Edge* findEdge(const Vertex* vertex0, const Vertex* vertex1) const;
     __host__ __device__ Edge* findOpposite(const Vertex* vertex) const;
     __host__ __device__ Bounds bounds(bool ccd) const;
-    __host__ __device__ Vector3f barycentricCoordinates(const Vector2f& u) const;
     __host__ __device__ Vector3f position(const Vector3f& b) const;
     __host__ __device__ Matrix3x2f derivative(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2) const;
     __host__ __device__ Matrix2x2f curvature() const;

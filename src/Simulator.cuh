@@ -30,6 +30,7 @@
 #include "Obstacle.cuh"
 #include "BVH.cuh"
 #include "Impact.cuh"
+#include "BackupFace.cuh"
 #include "Intersection.cuh"
 #include "optimization/CollisionOptimization.cuh"
 #include "optimization/SeparationOptimization.cuh"
@@ -59,12 +60,16 @@ private:
     std::vector<Impact> independentImpacts(const std::vector<Impact>& impacts, int deform) const;
     thrust::device_vector<Impact> independentImpacts(const thrust::device_vector<Impact>& impacts, int deform) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Intersection>& intersections) const;
-    void checkIntersection(const Face* face0, const Face* face1, std::vector<Intersection>& intersections, const std::vector<Cloth*>& cloths, const std::vector<Mesh*>& oldMeshes) const;
+    Vector3f oldPosition(const Vector2f& u, const std::vector<BackupFace>& faces) const;
+    Vector3f oldPosition(const Face* face, const Vector3f& b, const std::vector<std::vector<BackupFace>>& faces) const;
+    void checkIntersection(const Face* face0, const Face* face1, std::vector<Intersection>& intersections, const std::vector<std::vector<BackupFace>>& faces) const;
+    thrust::device_vector<Intersection> findIntersections(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<thrust::device_vector<BackupFace>>& faces) const;
     void resetObstacles();
     void physicsStep();
     void collisionStep();
     void remeshingStep();
-    void separationStep(const std::vector<Mesh*>& oldMeshes);
+    void separationStep(const std::vector<std::vector<BackupFace>>& faces);
+    void separationStep(const std::vector<thrust::device_vector<BackupFace>>& faces);
     void updateStructures();
     void updateNodeGeometries();
     void updateFaceGeometries();

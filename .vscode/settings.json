@@ -4,7 +4,7 @@
         "cwd": "${workspaceFolder}",
         "args": [
             "conf/sphere.json",
-            // "--gpu"
+            "--gpu"
         ]
     },
     "files.associations": {

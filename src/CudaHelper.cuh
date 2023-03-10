@@ -9,6 +9,7 @@
 #include <thrust/device_vector.h>
 
 #include "Impact.cuh"
+#include "Intersection.cuh"
 
 #define CUDA_CHECK(val) cudaCheck((val), #val, __FILE__, __LINE__)
 #define CUDA_CHECK_LAST() cudaCheckLast(__FILE__, __LINE__)
@@ -22,6 +23,10 @@ struct IsNull {
     
     __device__ bool operator()(const Impact& impact) const {
         return impact.t < 0.0f;
+    };
+
+    __device__ bool operator()(const Intersection& intersection) const {
+        return intersection.face0 == nullptr && intersection.face1 == nullptr;
     };
 };
 

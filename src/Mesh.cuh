@@ -27,6 +27,7 @@
 #include "Face.cuh"
 #include "Renderable.cuh"
 #include "Transform.cuh"
+#include "BackupFace.cuh"
 #include "Operator.cuh"
 
 extern bool gpu;
@@ -49,7 +50,6 @@ private:
 
 public:
     Mesh(const Json::Value& json, const Transform* transform, const Material* material);
-    Mesh(const Mesh* mesh);
     ~Mesh();
     std::vector<Node*>& getNodes();
     thrust::device_vector<Node*>& getNodesGpu();
@@ -62,7 +62,8 @@ public:
     bool contain(const Vertex* vertex) const;
     bool contain(const Face* face) const;
     void reset();
-    Vector3f oldPosition(const Vector2f& u) const;
+    std::vector<BackupFace> backupFaces() const;
+    thrust::device_vector<BackupFace> backupFacesGpu() const;
     void apply(const Operator& op);
     void updateStructures();
     void updateNodeGeometries();
