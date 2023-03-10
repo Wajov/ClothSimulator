@@ -274,17 +274,6 @@ void Cloth::computeSizing(const thrust::device_vector<Plane>& planes) {
     CUDA_CHECK_LAST();
 }
 
-float Cloth::edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const {
-    if (vertex0 == nullptr || vertex1 == nullptr)
-        return 0.0f;
-    Vector2f du = vertex0->u - vertex1->u;
-    return sqrt(0.5f * (du.dot(vertex0->sizing * du) + du.dot(vertex1->sizing * du)));
-}
-
-float Cloth::edgeMetric(const Edge* edge) const {
-    return max(edgeMetric(edge->vertices[0][0], edge->vertices[0][1]), edgeMetric(edge->vertices[1][0], edge->vertices[1][1]));
-}
-
 std::vector<Edge*> Cloth::findEdgesToFlip() const {
     std::vector<Edge*>& edges = mesh->getEdges();
     std::unordered_set<Node*> nodes;
@@ -306,29 +295,28 @@ std::vector<Edge*> Cloth::findEdgesToFlip() const {
 thrust::device_vector<Edge*> Cloth::findEdgesToFlipGpu() const {
     thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
     int nEdges = edges.size();
-    Edge** edgesPointer = pointer(edges);
     thrust::device_vector<Edge*> edgesToFlip(nEdges);
     Edge** edgesToFlipPointer = pointer(edgesToFlip);
-    checkEdgesToFlip<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, remeshing, edgesToFlipPointer);
+    checkEdgesToFlip<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), remeshing, edgesToFlipPointer);
     CUDA_CHECK_LAST();
 
     edgesToFlip.erase(thrust::remove(edgesToFlip.begin(), edgesToFlip.end(), nullptr), edgesToFlip.end());
     int nEdgesToFlip = edgesToFlip.size();
     thrust::device_vector<Edge*> ans(nEdgesToFlip, nullptr);
     Edge** ansPointer = pointer(ans);
-    initializeFlipNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer);
+    initializeEdgeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer);
     CUDA_CHECK_LAST();
 
     int num, newNum = nEdgesToFlip;
     do {
         num = newNum;
-        resetFlipNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer);
+        resetEdgeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer);
         CUDA_CHECK_LAST();
 
-        computeFlipMinIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer);
+        computeEdgeMinIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer);
         CUDA_CHECK_LAST();
 
-        checkIndependentEdgesToFlip<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer, ansPointer);
+        checkIndependentEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToFlip, edgesToFlipPointer, ansPointer);
         CUDA_CHECK_LAST();
 
         newNum = thrust::count(ans.begin(), ans.end(), nullptr);
@@ -401,20 +389,60 @@ std::vector<Edge*> Cloth::findEdgesToSplit() const {
     return ans;
 }
 
+thrust::device_vector<Edge*> Cloth::findEdgesToSplitGpu() const {
+    thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
+    int nEdges = edges.size();
+    thrust::device_vector<Edge*> edgesToSplit(nEdges);
+    Edge** edgesToSplitPointer = pointer(edgesToSplit);
+    thrust::device_vector<float> metrics(nEdges);
+    checkEdgesToSplit<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), edgesToSplitPointer, pointer(metrics));
+    CUDA_CHECK_LAST();
+
+    metrics.erase(thrust::remove_if(metrics.begin(), metrics.end(), edgesToSplit.begin(), IsNull()), metrics.end());
+    edgesToSplit.erase(thrust::remove(edgesToSplit.begin(), edgesToSplit.end(), nullptr), edgesToSplit.end());
+    thrust::sort_by_key(metrics.begin(), metrics.end(), edgesToSplit.begin(), thrust::greater<float>());
+    int nEdgesToSplit = edgesToSplit.size();
+    thrust::device_vector<Edge*> ans(nEdgesToSplit, nullptr);
+    Edge** ansPointer = pointer(ans);
+    initializeEdgeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToSplit, edgesToSplitPointer);
+    CUDA_CHECK_LAST();
+
+    int num, newNum = nEdgesToSplit;
+    do {
+        num = newNum;
+        resetEdgeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToSplit, edgesToSplitPointer);
+        CUDA_CHECK_LAST();
+
+        computeEdgeMinIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToSplit, edgesToSplitPointer);
+        CUDA_CHECK_LAST();
+
+        checkIndependentEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToSplit, edgesToSplitPointer, ansPointer);
+        CUDA_CHECK_LAST();
+
+        newNum = thrust::count(ans.begin(), ans.end(), nullptr);
+    } while (num > newNum);
+
+    ans.erase(thrust::remove(ans.begin(), ans.end(), nullptr), ans.end());
+    return ans;
+}
+
 bool Cloth::splitSomeEdges() {
     if (!gpu) {
         std::vector<Edge*> edgesToSplit = std::move(findEdgesToSplit());
         Operator op;
-        int nNodes = mesh->getNodes().size();
         for (const Edge* edge : edgesToSplit)
-            op.split(edge, material, nNodes++);
+            op.split(edge, material);
 
         mesh->apply(op);
         flipEdges();
         return !edgesToSplit.empty();
     } else {
-        // TODO
-        return false;
+        thrust::device_vector<Edge*> edgesToSplit = std::move(findEdgesToSplitGpu());
+        Operator op;
+        op.split(edgesToSplit, material);
+
+        mesh->apply(op);
+        return !edgesToSplit.empty();
     }
 }
 

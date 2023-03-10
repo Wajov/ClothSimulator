@@ -36,10 +36,14 @@ __global__ void computeSizingGpu(int nFaces, const Face* const* faces, const Pla
 __global__ void finalizeSizing(int nVertices, Vertex** vertices);
 __host__ __device__ bool shouldFlip(const Edge* edge, const Remeshing* remeshing);
 __global__ void checkEdgesToFlip(int nEdges, const Edge* const* edges, const Remeshing* remeshing, Edge** edgesToFlip);
-__global__ void initializeFlipNodes(int nEdges, const Edge* const* edges);
-__global__ void resetFlipNodes(int nEdges, const Edge* const* edges);
-__global__ void computeFlipMinIndices(int nEdges, const Edge* const* edges);
-__global__ void checkIndependentEdgesToFlip(int nEdges, const Edge* const* edges, Edge** independentEdges);
+__global__ void initializeEdgeNodes(int nEdges, const Edge* const* edges);
+__global__ void resetEdgeNodes(int nEdges, const Edge* const* edges);
+__global__ void computeEdgeMinIndices(int nEdges, const Edge* const* edges);
+__global__ void checkIndependentEdges(int nEdges, const Edge* const* edges, Edge** independentEdges);
 __global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* material, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces);
+__host__ __device__ float edgeMetric(const Vertex* vertex0, const Vertex* vertex1);
+__host__ __device__ float edgeMetric(const Edge* edge);
+__global__ void checkEdgesToSplit(int nEdges, const Edge* const* edges, Edge** edgesToSplit, float* metrics);
+__global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* material, Node** addedNodes, Vertex** addedVertices, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces);
 
 #endif

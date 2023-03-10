@@ -17,6 +17,10 @@
 #define CUSOLVER_CHECK(val) cusolverCheck((val), #val, __FILE__, __LINE__)
 
 struct IsNull {
+    template<typename T> __device__ bool operator()(const T* p) const {
+        return p == nullptr;
+    };
+    
     __device__ bool operator()(int index) const {
         return index < 0;
     };

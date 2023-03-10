@@ -49,12 +49,11 @@ void Operator::flip(const thrust::device_vector<Edge*>& edges, const Material* m
     CUDA_CHECK_LAST();
 }
 
-void Operator::split(const Edge* edge, const Material* material, int index) {
+void Operator::split(const Edge* edge, const Material* material) {
     Node* node0 = edge->nodes[0];
     Node* node1 = edge->nodes[1];
 
     Node* newNode = new Node(0.5f * (node0->x + node1->x), node0->isFree && node1->isFree);
-    newNode->index = index;
     newNode->x0 = 0.5f * (node0->x0 + node1->x0);
     newNode->v = 0.5f * (node0->v + node1->v);
     Edge* newEdges[2];
@@ -114,6 +113,23 @@ void Operator::split(const Edge* edge, const Material* material, int index) {
             addedFaces.push_back(newFace1);
             removedFaces.push_back(face);
         }
+}
+
+void Operator::split(const thrust::device_vector<Edge*>& edges, const Material* material) {
+    int nEdges = edges.size();
+    addedNodesGpu.resize(nEdges);
+    addedVerticesGpu.resize(2 * nEdges);
+    addedEdgesGpu.resize(4 * nEdges);
+    removedEdgesGpu.resize(nEdges);
+    addedFacesGpu.resize(4 * nEdges);
+    removedFacesGpu.resize(2 * nEdges);
+    splitGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), material, pointer(addedNodesGpu), pointer(addedVerticesGpu), pointer(addedEdgesGpu), pointer(removedEdgesGpu), pointer(addedFacesGpu), pointer(removedFacesGpu));
+    CUDA_CHECK_LAST();
+
+    addedVerticesGpu.erase(thrust::remove(addedVerticesGpu.begin(), addedVerticesGpu.end(), nullptr), addedVerticesGpu.end());
+    addedEdgesGpu.erase(thrust::remove(addedEdgesGpu.begin(), addedEdgesGpu.end(), nullptr), addedEdgesGpu.end());
+    addedFacesGpu.erase(thrust::remove(addedFacesGpu.begin(), addedFacesGpu.end(), nullptr), addedFacesGpu.end());
+    removedFacesGpu.erase(thrust::remove(removedFacesGpu.begin(), removedFacesGpu.end(), nullptr), removedFacesGpu.end());
 }
 
 void Operator::collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {

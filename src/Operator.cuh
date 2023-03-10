@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include <thrust/device_vector.h>
+#include <thrust/remove.h>
 
 #include "MathHelper.cuh"
 #include "CudaHelper.cuh"
@@ -18,9 +19,6 @@
 #include "Material.cuh"
 
 class Operator {
-private:
-    void updateActive(const std::vector<Face*>& activeFaces);
-
 public:
     std::vector<Node*> addedNodes, removedNodes;
     std::vector<Vertex*> addedVertices, removedVertices;
@@ -34,7 +32,8 @@ public:
     ~Operator();
     void flip(const Edge* edge, const Material* material);
     void flip(const thrust::device_vector<Edge*>& edges, const Material* material);
-    void split(const Edge* edge, const Material* material, int index);
+    void split(const Edge* edge, const Material* material);
+    void split(const thrust::device_vector<Edge*>& edges, const Material* material);
     void collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces);
 };
 

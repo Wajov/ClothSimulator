@@ -95,11 +95,11 @@ __global__ void initializeOldPosition(int nIntersections, const Intersection* in
     }
 }
 
-bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices) {
+__device__ bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices) {
     return vertex->index < nVertices && vertex == vertices[vertex->index];
 }
 
-bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices) {
+__device__ bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices) {
     return containGpu(face->vertices[0], nVertices, vertices) && containGpu(face->vertices[1], nVertices, vertices) && containGpu(face->vertices[2], nVertices, vertices);
 }
 
@@ -129,7 +129,7 @@ __global__ void collectContainedFaces(int nIntersections, const Intersection* in
     }
 }
 
-void oldPositionGpu(const Vector2f& u, const BackupFace& face, Vector3f& x) {
+__device__ void oldPositionGpu(const Vector2f& u, const BackupFace& face, Vector3f& x) {
     Vector3f b = face.barycentricCoordinates(u);
     if (b(0) >= -1e-6f && b(1) >= -1e-6f && b(2) >= -1e-5f)
         x = face.position(b);

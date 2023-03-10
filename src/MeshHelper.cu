@@ -14,7 +14,7 @@ __global__ void initializeVertices(int nVertices, const Vector2f* u, Vertex** ve
         vertices[i] = new Vertex(u[i]);
 }
 
-void setEdgeData(int index0, int index1, const Vertex* vertex, const Face* face, Pairii& index, EdgeData& edgeData) {
+__device__ void setEdgeData(int index0, int index1, const Vertex* vertex, const Face* face, Pairii& index, EdgeData& edgeData) {
     if (index0 > index1)
         mySwap(index0, index1);
     

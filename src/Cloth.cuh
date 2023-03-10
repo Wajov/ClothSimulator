@@ -62,13 +62,12 @@ private:
     thrust::device_vector<Plane> findNearestPlaneGpu(const std::vector<BVH*>& obstacleBvhs, float thickness) const;
     void computeSizing(const std::vector<Plane>& planes);
     void computeSizing(const thrust::device_vector<Plane>& planes);
-    float edgeMetric(const Vertex* vertex0, const Vertex* vertex1) const;
-    float edgeMetric(const Edge* edge) const;
     std::vector<Edge*> findEdgesToFlip() const;
     thrust::device_vector<Edge*> findEdgesToFlipGpu() const;
     bool flipSomeEdges();
     void flipEdges();
     std::vector<Edge*> findEdgesToSplit() const;
+    thrust::device_vector<Edge*> findEdgesToSplitGpu() const;
     bool splitSomeEdges();
     void splitEdges();
     void buildAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;

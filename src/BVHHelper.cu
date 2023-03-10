@@ -7,7 +7,7 @@ __global__ void computeLeafBounds(int nFaces, const Face* const* faces, bool ccd
         bounds[i] = faces[i]->bounds(ccd);
 }
 
-unsigned int expandBits(unsigned int v) {
+__device__ unsigned int expandBits(unsigned int v) {
     v = (v * 0x00010001u) & 0xFF0000FFu;
     v = (v * 0x00000101u) & 0x0F00F00Fu;
     v = (v * 0x00000011u) & 0xC30C30C3u;
@@ -15,7 +15,7 @@ unsigned int expandBits(unsigned int v) {
     return v;
 }
 
-unsigned int mortonCode(const Vector3f& v, const Vector3f& p, const Vector3f& d) {
+__device__ unsigned int mortonCode(const Vector3f& v, const Vector3f& p, const Vector3f& d) {
     float x = d(0) == 0.0f ? 0.0f : (v(0) - p(0)) / d(0);
     float y = d(1) == 0.0f ? 0.0f : (v(1) - p(1)) / d(1);
     float z = d(2) == 0.0f ? 0.0f : (v(2) - p(2)) / d(2);
@@ -41,11 +41,11 @@ __global__ void initializeLeafNodes(int nNodes, const Face* const* faces, const 
     }
 }
 
-int commonUpperBits(unsigned long long a, unsigned long long b) {
+__device__ int commonUpperBits(unsigned long long a, unsigned long long b) {
     return __clzll(a ^ b);
 }
 
-void findRange(int nNodes, const unsigned long long* mortonCodes, int i, int& left, int& right) {
+__device__ void findRange(int nNodes, const unsigned long long* mortonCodes, int i, int& left, int& right) {
     if (i == 0) {
         left = 0;
         right = nNodes;
@@ -77,7 +77,7 @@ void findRange(int nNodes, const unsigned long long* mortonCodes, int i, int& le
     }
 }
 
-int findSplit(const unsigned long long* mortonCodes, int left, int right) {
+__device__ int findSplit(const unsigned long long* mortonCodes, int left, int right) {
     unsigned long long code = mortonCodes[left];
     int d = commonUpperBits(code, mortonCodes[right]);
     int l = left, r = right, mid;

@@ -297,7 +297,7 @@ __global__ void checkEdgesToFlip(int nEdges, const Edge* const* edges, const Rem
     }
 }
 
-__global__ void initializeFlipNodes(int nEdges, const Edge* const* edges) {
+__global__ void initializeEdgeNodes(int nEdges, const Edge* const* edges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -307,7 +307,7 @@ __global__ void initializeFlipNodes(int nEdges, const Edge* const* edges) {
     }
 }
 
-__global__ void resetFlipNodes(int nEdges, const Edge* const* edges) {
+__global__ void resetEdgeNodes(int nEdges, const Edge* const* edges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -319,7 +319,7 @@ __global__ void resetFlipNodes(int nEdges, const Edge* const* edges) {
     }
 }
 
-__global__ void computeFlipMinIndices(int nEdges, const Edge* const* edges) {
+__global__ void computeEdgeMinIndices(int nEdges, const Edge* const* edges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -333,7 +333,7 @@ __global__ void computeFlipMinIndices(int nEdges, const Edge* const* edges) {
     }
 }
 
-__global__ void checkIndependentEdgesToFlip(int nEdges, const Edge* const* edges, Edge** independentEdges) {
+__global__ void checkIndependentEdges(int nEdges, const Edge* const* edges, Edge** independentEdges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -384,5 +384,106 @@ __global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* ma
         addedFaces[2 * i + 1] = newFace1;
         removedFaces[2 * i] = face0;
         removedFaces[2 * i + 1] = face1;
+    }
+}
+
+float edgeMetric(const Vertex* vertex0, const Vertex* vertex1) {
+    if (vertex0 == nullptr || vertex1 == nullptr)
+        return 0.0f;
+    Vector2f du = vertex0->u - vertex1->u;
+    return sqrt(0.5f * (du.dot(vertex0->sizing * du) + du.dot(vertex1->sizing * du)));
+}
+
+float edgeMetric(const Edge* edge) {
+    return max(edgeMetric(edge->vertices[0][0], edge->vertices[0][1]), edgeMetric(edge->vertices[1][0], edge->vertices[1][1]));
+}
+
+__global__ void checkEdgesToSplit(int nEdges, const Edge* const* edges, Edge** edgesToSplit, float* metrics) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        float m = edgeMetric(edge);
+        if (m > 1.0f) {
+            edgesToSplit[i] = const_cast<Edge*>(edge);
+            metrics[i] = m;
+        } else
+            edgesToSplit[i] = nullptr;
+    }
+}
+
+__global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* material, Node** addedNodes, Vertex** addedVertices, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        Node* node0 = edge->nodes[0];
+        Node* node1 = edge->nodes[1];
+
+        Node* newNode = new Node(0.5f * (node0->x + node1->x), node0->isFree && node1->isFree);
+        newNode->x0 = 0.5f * (node0->x0 + node1->x0);
+        newNode->v = 0.5f * (node0->v + node1->v);
+        Edge* newEdges[2];
+        newEdges[0] = new Edge(newNode, node0);
+        newEdges[1] = new Edge(newNode, node1);
+        
+        addedNodes[i] = newNode;
+        addedEdges[4 * i] = newEdges[0];
+        addedEdges[4 * i + 1] = newEdges[1];
+        removedEdges[i] = const_cast<Edge*>(edge);
+
+        Vertex* newVertices[2];
+        if (edge->isSeam()) {
+            newVertices[0] = new Vertex(0.5f * (edge->vertices[0][0]->u + edge->vertices[0][1]->u));
+            newVertices[0]->sizing = 0.5f * (edge->vertices[0][0]->sizing + edge->vertices[0][1]->sizing);
+            newVertices[1] = new Vertex(0.5f * (edge->vertices[1][0]->u + edge->vertices[1][1]->u));
+            newVertices[1]->sizing = 0.5f * (edge->vertices[1][0]->sizing + edge->vertices[1][1]->sizing);
+            newVertices[0]->node = newVertices[1]->node = newNode;
+            addedVertices[2 * i] = newVertices[0];
+            addedVertices[2 * i + 1] = newVertices[1];
+        } else {
+            int j = edge->opposites[0] != nullptr ? 0 : 1;
+            newVertices[0] = newVertices[1] = new Vertex(0.5f * (edge->vertices[j][0]->u + edge->vertices[j][1]->u));
+            newVertices[0]->sizing = 0.5f * (edge->vertices[j][0]->sizing + edge->vertices[j][1]->sizing);
+            newVertices[0]->node = newNode;
+            addedVertices[2 * i] = newVertices[0];
+            addedVertices[2 * i + 1] = nullptr;
+        }
+
+        for (int j = 0; j < 2; j++)
+            if (edge->opposites[j] != nullptr) {
+                Vertex* vertex0 = edge->vertices[j][j];
+                Vertex* vertex1 = edge->vertices[j][1 - j];
+                Vertex* vertex2 = edge->opposites[j];
+
+                Face* face = edge->adjacents[j];
+                Edge* edge0 = face->findEdge(vertex1, vertex2);
+                Edge* edge1 = face->findEdge(vertex2, vertex0);
+                
+                Vertex* newVertex = newVertices[j];
+                Edge* newEdge0 = newEdges[j];
+                Edge* newEdge1 = newEdges[1 - j];
+                Edge* newEdge2 = new Edge(newNode, vertex2->node);
+                Face* newFace0 = new Face(vertex0, newVertex, vertex2, material);
+                Face* newFace1 = new Face(vertex2, newVertex, vertex1, material);
+                
+                newEdge0->initialize(vertex2, newFace0);
+                newEdge1->initialize(vertex2, newFace1);
+                newEdge2->initialize(vertex0, newFace0);
+                newEdge2->initialize(vertex1, newFace1);
+                newFace0->setEdges(newEdge0, newEdge2, edge1);
+                newFace1->setEdges(newEdge2, newEdge1, edge0);
+                edge0->initialize(newVertex, newFace1);
+                edge1->initialize(newVertex, newFace0);
+                
+                addedEdges[4 * i + j + 2] = newEdge2;
+                addedFaces[4 * i + 2 * j] = newFace0;
+                addedFaces[4 * i + 2 * j + 1] = newFace1;
+                removedFaces[2 * i + j] = face;
+            } else {
+                addedEdges[4 * i + j + 2] = nullptr;
+                addedFaces[4 * i + 2 * j] = addedFaces[4 * i + 2 * j + 1] = nullptr;
+                removedFaces[2 * i + j] = nullptr;
+            }
     }
 }
