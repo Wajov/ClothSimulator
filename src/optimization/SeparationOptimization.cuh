@@ -23,6 +23,8 @@ private:
     float invArea, thickness, obstacleArea;
     std::vector<Intersection> intersections;
     std::vector<int> indices;
+    thrust::device_vector<Intersection> intersectionsGpu;
+    thrust::device_vector<int> indicesGpu;
 
 protected:
     float objective(const std::vector<Vector3f>& x) const override;
@@ -36,6 +38,7 @@ protected:
 
 public:
     SeparationOptimization(const std::vector<Intersection>& intersections, float thickness, int deform, float obstacleArea);
+    SeparationOptimization(const thrust::device_vector<Intersection>& intersections, float thickness, int deform, float obstacleArea);
     ~SeparationOptimization();
 };
 

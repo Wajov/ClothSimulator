@@ -292,18 +292,41 @@ thrust::device_vector<Intersection> Simulator::findIntersections(const std::vect
     thrust::device_vector<Proximity> proximities = std::move(traverse(clothBvhs, obstacleBvhs, magic->collisionThickness));
     int nProximities = proximities.size();
     thrust::device_vector<Intersection> ans(nProximities);
-    checkIntersectionsGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nProximities, pointer(proximities), pointer(ans));
+    Intersection* ansPointer = pointer(ans);
+    checkIntersectionsGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nProximities, pointer(proximities), ansPointer);
     CUDA_CHECK_LAST();
 
     ans.erase(thrust::remove_if(ans.begin(), ans.end(), IsNull()), ans.end());
-    // TODO
+    int nAns = ans.size();
+    thrust::device_vector<Vector3f> x(2 * nAns);
+    Vector3f* xPointer = pointer(x);
+    initializeOldPosition<<<GRID_SIZE, BLOCK_SIZE>>>(nAns, ansPointer, xPointer);
+    CUDA_CHECK_LAST();
+
+    for (int i = 0; i < cloths.size(); i++) {
+        thrust::device_vector<Vertex*>& vertices = cloths[i]->getMesh()->getVerticesGpu();
+        thrust::device_vector<int> indices(2 * nAns);
+        int* indicesPointer = pointer(indices);
+        thrust::device_vector<Vector2f> u(2 * nAns);
+        Vector2f* uPointer = pointer(u);
+        collectContainedFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nAns, ansPointer, vertices.size(), pointer(vertices), indicesPointer, uPointer);
+        CUDA_CHECK_LAST();
+
+        u.erase(thrust::remove_if(u.begin(), u.end(), indices.begin(), IsNull()), u.end());
+        indices.erase(thrust::remove(indices.begin(), indices.end(), -1), indices.end());
+        computeOldPosition<<<GRID_SIZE, BLOCK_SIZE>>>(indices.size(), indicesPointer, uPointer, faces[i].size(), pointer(faces[i]), xPointer);
+        CUDA_CHECK_LAST();
+    }
+
+    computeFarthestPoint<<<GRID_SIZE, BLOCK_SIZE>>>(nAns, xPointer, ansPointer);
+    CUDA_CHECK_LAST();
 
     return ans;
 }
 
 void Simulator::resetObstacles() {
     for (Obstacle* obstacle : obstacles)
-        obstacle->reset();
+        obstacle->getMesh()->reset();
 }
 
 void Simulator::physicsStep() {
@@ -462,9 +485,9 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
             }
 
             intersections.insert(intersections.end(), newIntersections.begin(), newIntersections.end());
-            // Optimization* optimization = new SeparationOptimization(intersections, magic->collisionThickness, deform, obstacleArea);
-            // optimization->solve();
-            // delete optimization;
+            Optimization* optimization = new SeparationOptimization(intersections, magic->collisionThickness, deform, obstacleArea);
+            optimization->solve();
+            delete optimization;
 
             updateFaceGeometries();
             updateBvhs(clothBvhs);
@@ -486,34 +509,34 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
 
 void Simulator::updateStructures() {
     for (Cloth* cloth : cloths)
-        cloth->updateStructures();
+        cloth->getMesh()->updateStructures();
 }
 
 void Simulator::updateNodeGeometries() {
     for (Cloth* cloth : cloths)
-        cloth->updateNodeGeometries();
+        cloth->getMesh()->updateNodeGeometries();
 }
 
 void Simulator::updateFaceGeometries() {
     for (Cloth* cloth : cloths)
-        cloth->updateFaceGeometries();
+        cloth->getMesh()->updateFaceGeometries();
 }
 
 void Simulator::updateVelocities() {
     for (Cloth* cloth : cloths)
-        cloth->updateVelocities(dt);
+        cloth->getMesh()->updateVelocities(dt);
 }
 
 void Simulator::updateRenderingData(bool rebind) {
     for (Cloth* cloth : cloths)
-        cloth->updateRenderingData(rebind);
+        cloth->getMesh()->updateRenderingData(rebind);
 }
 
 void Simulator::bind() {
     for (Cloth* cloth : cloths)
-        cloth->bind();
+        cloth->getMesh()->bind();
     for (Obstacle* obstacle : obstacles)
-        obstacle->bind();
+        obstacle->getMesh()->bind();
 }
 
 void Simulator::render(int width, int height, const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
@@ -614,7 +637,7 @@ void Simulator::printDebugInfo(int x, int y) {
     selectedCloth = pixel.first;
     selectedFace = pixel.second;
     if (selectedCloth != -1 && selectedFace != -1)
-        cloths[selectedCloth]->printDebugInfo(selectedFace);
+        cloths[selectedCloth]->getMesh()->printDebugInfo(selectedFace);
 
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

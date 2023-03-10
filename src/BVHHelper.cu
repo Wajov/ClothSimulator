@@ -283,7 +283,7 @@ __global__ void findNearestPointGpu(int nNodes, const Vector3f* x, const BVHNode
     const BVHNode* stack[64];
     stack[0] = nullptr;
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        const Vector3f& xt = x[i];
+        Vector3f xt = x[i];
         NearPoint& point = points[i];
         int top = 0;
         const BVHNode* node = root;

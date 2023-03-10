@@ -707,30 +707,6 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
     }
 }
 
-void Cloth::updateStructures() {
-    mesh->updateStructures();
-}
-
-void Cloth::updateNodeGeometries() {
-    mesh->updateNodeGeometries();
-}
-
-void Cloth::updateFaceGeometries() {
-    mesh->updateFaceGeometries();
-}
-
-void Cloth::updateVelocities(float dt) {
-    mesh->updateVelocities(dt);
-}
-
-void Cloth::updateRenderingData(bool rebind) {
-    mesh->updateRenderingData(rebind);
-}
-
-void Cloth::bind() {
-    mesh->bind();
-}
-
 void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const {
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     edgeShader->use();
@@ -749,8 +725,4 @@ void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix
     faceShader->setVec3("lightDirection", lightDirection);
     faceShader->setInt("selectedFace", selectedFace);
     mesh->render();
-}
-
-void Cloth::printDebugInfo(int selectedFace) {
-    mesh->printDebugInfo(selectedFace);
 }

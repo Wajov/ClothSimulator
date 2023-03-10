@@ -79,6 +79,72 @@ __global__ void checkIntersectionsGpu(int nProximities, const Proximity* proximi
     }
 }
 
+__global__ void initializeOldPosition(int nIntersections, const Intersection* intersections, Vector3f* x) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIntersections; i += nThreads) {
+        const Intersection& intersection = intersections[i];
+        
+        Face* face0 = intersection.face0;
+        if (!face0->isFree())
+            x[2 * i] = face0->position(intersection.b0);
+
+        Face* face1 = intersection.face1;
+        if (!face1->isFree())
+            x[2 * i + 1] = face1->position(intersection.b1);
+    }
+}
+
+bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices) {
+    return vertex->index < nVertices && vertex == vertices[vertex->index];
+}
+
+bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices) {
+    return containGpu(face->vertices[0], nVertices, vertices) && containGpu(face->vertices[1], nVertices, vertices) && containGpu(face->vertices[2], nVertices, vertices);
+}
+
+__global__ void collectContainedFaces(int nIntersections, const Intersection* intersections, int nVertices, const Vertex* const* vertices, int* indices, Vector2f* u) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIntersections; i += nThreads) {
+        const Intersection& intersection = intersections[i];
+        
+        Face* face0 = intersection.face0;
+        Vector3f b0 = intersection.b0;
+        int index0 = 2 * i;
+        if (containGpu(face0, nVertices, vertices)) {
+            indices[index0] = index0;
+            u[index0] = b0(0) * face0->vertices[0]->u + b0(1) * face0->vertices[1]->u + b0(2) * face0->vertices[2]->u;
+        } else
+            indices[index0] = -1;
+
+        Face* face1 = intersection.face1;
+        Vector3f b1 = intersection.b1;
+        int index1 = 2 * i + 1;
+        if (containGpu(face1, nVertices, vertices)) {
+            indices[index1] = index1;
+            u[index1] = b1(0) * face1->vertices[0]->u + b1(1) * face1->vertices[1]->u + b1(2) * face1->vertices[2]->u;
+        } else
+            indices[index1] = -1;
+    }
+}
+
+void oldPositionGpu(const Vector2f& u, const BackupFace& face, Vector3f& x) {
+    Vector3f b = face.barycentricCoordinates(u);
+    if (b(0) >= -1e-6f && b(1) >= -1e-6f && b(2) >= -1e-5f)
+        x = face.position(b);
+}
+
+__global__ void computeOldPosition(int nIndices, const int* indices, const Vector2f* u, int nFaces, const BackupFace* faces, Vector3f* x) {
+    int nThreads = gridDim.x * blockDim.x;
+    int nm = nIndices * nFaces;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nm; i += nThreads) {
+        int n = i / nFaces;
+        oldPositionGpu(u[n], faces[i % nFaces], x[indices[n]]);
+    }
+}
+
 void clearVertexFaceDistance(const Face* face0, const Face* face1, const Vector3f& d, float& maxDist, Vector3f& b0, Vector3f& b1) {
     Vector3f x0 = face1->vertices[0]->node->x;
     Vector3f x1 = face1->vertices[1]->node->x;
@@ -149,4 +215,15 @@ void farthestPoint(const Face* face0, const Face* face1, const Vector3f& d, Vect
     clearVertexFaceDistance(face0, face1, d, maxDist, b0, b1);
     clearVertexFaceDistance(face1, face0, -d, maxDist, b1, b0);
     clearEdgeEdgeDistance(face0, face1, d, maxDist, b0, b1);
+}
+
+__global__ void computeFarthestPoint(int nIntersections, const Vector3f* x, Intersection* intersections) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIntersections; i += nThreads) {
+        Intersection& intersection = intersections[i];
+        Vector3f& d = intersection.d;
+        d = (x[2 * i] - x[2 * i + 1]).normalized();
+        farthestPoint(intersection.face0, intersection.face1, d, intersection.b0, intersection.b1);
+    }
 }

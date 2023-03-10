@@ -109,6 +109,104 @@ __global__ void collectCollisionConstraintGradient(int nConstraints, const Impac
     }
 }
 
+__global__ void collectSeparationNodes(int nConstraints, const Intersection* intersections, int deform, int* indices, Node** nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nConstraints; i += nThreads) {
+        const Intersection& intersection = intersections[i];
+        Face* face0 = intersection.face0;
+        Face* face1 = intersection.face1;
+
+        for (int j = 0; j < 3; j++) {
+            int index0 = 6 * i + j;
+            Node* node0 = face0->vertices[j]->node;
+            if (deform == 1 || node0->isFree) {
+                indices[index0] = index0;
+                nodes[index0] = node0;
+            } else {
+                indices[index0] = -1;
+                nodes[index0] = nullptr;
+            }
+
+            int index1 = 6 * i + j + 3;
+            Node* node1 = face1->vertices[j]->node;
+            if (deform == 1 || node1->isFree) {
+                indices[index1] = index1;
+                nodes[index1] = node1;
+            } else {
+                indices[index1] = -1;
+                nodes[index1] = nullptr;
+            }
+        }
+    }
+}
+
+__global__ void separationInv(int nNodes, const Node* const* nodes, float obstacleArea, float* inv) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        const Node* node = nodes[i];
+        float area = node->isFree ? node->area : obstacleArea;
+        inv[i] = 1.0f / area;
+    }
+}
+
+__global__ void separationObjective(int nNodes, const Node* const* nodes, float obstacleArea, const Vector3f* x, float* objectives) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        const Node* node = nodes[i];
+        float area = node->isFree ? node->area : obstacleArea;
+        objectives[i] = area * (x[i] - node->x1).norm2();
+    }
+}
+
+__global__ void separationObjectiveGradient(int nNodes, const Node* const* nodes, float invArea, float obstacleArea, const Vector3f* x, Vector3f* gradient) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        const Node* node = nodes[i];
+        float area = node->isFree ? node->area : obstacleArea;
+        gradient[i] = invArea * area * (x[i] - node->x1);
+    }
+}
+
+__global__ void separationConstraint(int nConstraints, const Intersection* intersections, const int* indices, float thickness, const Vector3f* x, float* constraints, int* signs) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nConstraints; i += nThreads) {
+        float c = -thickness;
+        const Intersection& intersection = intersections[i];
+        for (int j = 0; j < 3; j++) {
+            int k0 = indices[6 * i + j];
+            if (k0 > -1)
+                c += intersection.b0(j) * intersection.d.dot(x[k0]);
+            else
+                c += intersection.b0(j) * intersection.d.dot(intersection.face0->vertices[j]->node->x);
+
+            int k1 = indices[6 * i + j + 3];
+            if (k1 > -1)
+                c -= intersection.b1(j) * intersection.d.dot(x[k1]);
+            else
+                c -= intersection.b1(j) * intersection.d.dot(intersection.face1->vertices[j]->node->x);
+        }
+        constraints[i] = c;
+        signs[i] = 1;
+    }
+}
+
+__global__ void collectSeparationConstraintGradient(int nConstraints, const Intersection* intersections, const float* coefficients, float mu, Vector3f* grad) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nConstraints; i += nThreads) {
+        const Intersection& intersection = intersections[i];
+        for (int j = 0; j < 3; j++) {
+            grad[6 * i + j] = mu * coefficients[i] * intersection.b0(j) * intersection.d;
+            grad[6 * i + j + 3] = -mu * coefficients[i] * intersection.b1(j) * intersection.d;
+        }
+    }
+}
+
 __global__ void addConstraintGradient(int nIndices, const int* indices, const Vector3f* grad, Vector3f* gradtient) {
     int nThreads = gridDim.x * blockDim.x;
 

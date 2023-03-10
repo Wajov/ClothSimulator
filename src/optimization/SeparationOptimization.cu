@@ -38,31 +38,70 @@ SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& 
     invArea /= nNodes;
 }
 
+SeparationOptimization::SeparationOptimization(const thrust::device_vector<Intersection>& intersections, float thickness, int deform, float obstacleArea) :
+    intersectionsGpu(intersections),
+    thickness(thickness),
+    obstacleArea(obstacleArea) {
+    nConstraints = intersections.size();
+    nodesGpu.resize(6 * nConstraints);
+    Node** nodesPointer = pointer(nodesGpu);
+    thrust::device_vector<int> nodeIndices(6 * nConstraints);
+    int *nodeIndicesPointer = pointer(nodeIndices);
+    collectSeparationNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nConstraints, pointer(intersections), deform, nodeIndicesPointer, nodesPointer);
+    CUDA_CHECK_LAST();
+
+    nodesGpu.erase(thrust::remove(nodesGpu.begin(), nodesGpu.end(), nullptr), nodesGpu.end());
+    nodeIndices.erase(thrust::remove(nodeIndices.begin(), nodeIndices.end(), -1), nodeIndices.end());
+    thrust::sort_by_key(nodesGpu.begin(), nodesGpu.end(), nodeIndices.begin());
+    thrust::device_vector<int> diff(nodesGpu.size());
+    setDiff<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), nodesPointer, pointer(diff));
+    CUDA_CHECK_LAST();
+
+    thrust::inclusive_scan(diff.begin(), diff.end(), diff.begin());
+    indicesGpu.assign(6 * nConstraints, -1);
+    setIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), nodeIndicesPointer, pointer(diff), pointer(indicesGpu));
+    CUDA_CHECK_LAST();
+
+    nodesGpu.erase(thrust::unique(nodesGpu.begin(), nodesGpu.end()), nodesGpu.end());
+    nNodes = nodesGpu.size();
+    thrust::device_vector<float> inv(nNodes);
+    separationInv<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, nodesPointer, obstacleArea, pointer(inv));
+    CUDA_CHECK_LAST();
+
+    invArea = thrust::reduce(inv.begin(), inv.end()) / nNodes;
+}
+
 SeparationOptimization::~SeparationOptimization() {}
 
 float SeparationOptimization::objective(const std::vector<Vector3f>& x) const {
     float ans = 0.0f;
     for (int i = 0; i < nNodes; i++) {
         Node* node = nodes[i];
-        ans += node->area * (x[i] - node->x1).norm2();
+        float area = node->isFree ? node->area : obstacleArea;
+        ans += area * (x[i] - node->x1).norm2();
     }
     return 0.5f * ans * invArea;
 }
 
 float SeparationOptimization::objective(const thrust::device_vector<Vector3f>& x) const {
-    // TODO
-    return 0.0f;
+    thrust::device_vector<float> objectives(nNodes);
+    separationObjective<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), obstacleArea, pointer(x), pointer(objectives));
+    CUDA_CHECK_LAST();
+
+    return 0.5f * invArea * thrust::reduce(objectives.begin(), objectives.end());
 }
 
 void SeparationOptimization::objectiveGradient(const std::vector<Vector3f>& x, std::vector<Vector3f>& gradient) const {
     for (int i = 0; i < nNodes; i++) {
         Node* node = nodes[i];
-        gradient[i] = invArea * node->area * (x[i] - node->x1);
+        float area = node->isFree ? node->area : obstacleArea;
+        gradient[i] = invArea * area * (x[i] - node->x1);
     }
 }
 
 void SeparationOptimization::objectiveGradient(const thrust::device_vector<Vector3f>& x, thrust::device_vector<Vector3f>& gradient) const {
-    // TODO
+    separationObjectiveGradient<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), invArea, obstacleArea, pointer(x), pointer(gradient));
+    CUDA_CHECK_LAST();
 }
 
 float SeparationOptimization::constraint(const std::vector<Vector3f>& x, int index, int& sign) const {
@@ -86,7 +125,8 @@ float SeparationOptimization::constraint(const std::vector<Vector3f>& x, int ind
 }
 
 void SeparationOptimization::constraint(const thrust::device_vector<Vector3f>& x, thrust::device_vector<float>& constraints, thrust::device_vector<int>& signs) const {
-    // TODO
+    separationConstraint<<<GRID_SIZE, BLOCK_SIZE>>>(nConstraints, pointer(intersectionsGpu), pointer(indicesGpu), thickness, pointer(x), pointer(constraints), pointer(signs));
+    CUDA_CHECK_LAST();
 }
 
 void SeparationOptimization::constraintGradient(const std::vector<Vector3f>& x, int index, float factor, std::vector<Vector3f>& gradient) const {
@@ -103,5 +143,17 @@ void SeparationOptimization::constraintGradient(const std::vector<Vector3f>& x, 
 }
 
 void SeparationOptimization::constraintGradient(const thrust::device_vector<Vector3f>& x, const thrust::device_vector<float>& coefficients, float mu, thrust::device_vector<Vector3f>& gradient) const {
-    // TODO
+    thrust::device_vector<int> gradIndices = indicesGpu;
+    thrust::device_vector<Vector3f> grad(6 * nConstraints);
+    collectSeparationConstraintGradient<<<GRID_SIZE, BLOCK_SIZE>>>(nConstraints, pointer(intersectionsGpu), pointer(coefficients), mu, pointer(grad));
+    CUDA_CHECK_LAST();
+
+    grad.erase(thrust::remove_if(grad.begin(), grad.end(), gradIndices.begin(), IsNull()), grad.end());
+    gradIndices.erase(thrust::remove(gradIndices.begin(), gradIndices.end(), -1), gradIndices.end());
+    thrust::sort_by_key(gradIndices.begin(), gradIndices.end(), grad.begin());
+    thrust::device_vector<int> outputGradIndices(6 * nConstraints);
+    thrust::device_vector<Vector3f> outputGrad(6 * nConstraints);
+    auto iter = thrust::reduce_by_key(gradIndices.begin(), gradIndices.end(), grad.begin(), outputGradIndices.begin(), outputGrad.begin());
+    addConstraintGradient<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputGradIndices.begin(), pointer(outputGradIndices), pointer(outputGrad), pointer(gradient));
+    CUDA_CHECK_LAST();
 }
