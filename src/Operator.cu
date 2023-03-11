@@ -166,9 +166,8 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, co
             removedFaces.push_back(face);
         }
 
-    const std::vector<Edge*>& adjacentEdges0 = adjacentEdges.at(node0);
-    const std::vector<Edge*>& adjacentEdges1 = adjacentEdges.at(node1);
-    for (Edge* adjacentEdge : adjacentEdges0)
+    const std::vector<Edge*>& edges = adjacentEdges.at(node0);
+    for (Edge* adjacentEdge : edges)
         if (adjacentEdge != edge) {
             adjacentEdge->replaceNode(node0, node1);
             adjacentEdge->replaceVertex(edge->vertices[0][side], edge->vertices[0][1 - side]);
@@ -181,9 +180,8 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, co
             Vertex* vertex1 = edge->vertices[i][1 - side];
             removedVertices.push_back(vertex0);
 
-            const std::vector<Face*>& adjacentFaces0 = adjacentFaces.at(vertex0);
-            const std::vector<Face*>& adjacentFaces1 = adjacentFaces.at(vertex1);
-            for (Face* adjacentFace : adjacentFaces0)
+            const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
+            for (Face* adjacentFace : faces)
                 if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
                     adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
                     adjacentFace->replaceVertex(vertex0, vertex1);
@@ -196,13 +194,26 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, co
         Vertex* vertex1 = edge->vertices[index][1 - side];
         removedVertices.push_back(vertex0);
         
-        const std::vector<Face*>& adjacentFaces0 = adjacentFaces.at(vertex0);
-        const std::vector<Face*>& adjacentFaces1 = adjacentFaces.at(vertex1);
-        for (Face* adjacentFace : adjacentFaces0)
+        const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
+        for (Face* adjacentFace : faces)
             if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
                 adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
                 adjacentFace->replaceVertex(vertex0, vertex1);
                 adjacentFace->initialize(material);
             }
     }
+}
+
+void Operator::collapse(const thrust::device_vector<Pairei>& edges, const Material* material, const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) {
+    int nEdges = edges.size();
+    removedNodesGpu.resize(nEdges);
+    removedVerticesGpu.resize(2 * nEdges);
+    removedEdgesGpu.resize(3 * nEdges);
+    removedFacesGpu.resize(2 * nEdges);
+    collapseGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), material, pointer(edgeBegin), pointer(edgeEnd), pointer(adjacentEdges), pointer(faceBegin), pointer(faceEnd), pointer(adjacentFaces), pointer(removedNodesGpu), pointer(removedVerticesGpu), pointer(removedEdgesGpu), pointer(removedFacesGpu));
+    CUDA_CHECK_LAST();
+
+    removedVerticesGpu.erase(thrust::remove(removedVerticesGpu.begin(), removedVerticesGpu.end(), nullptr), removedVerticesGpu.end());
+    removedEdgesGpu.erase(thrust::remove(removedEdgesGpu.begin(), removedEdgesGpu.end(), nullptr), removedEdgesGpu.end());
+    removedFacesGpu.erase(thrust::remove(removedFacesGpu.begin(), removedFacesGpu.end(), nullptr), removedFacesGpu.end());
 }

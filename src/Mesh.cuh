@@ -65,6 +65,7 @@ public:
     std::vector<BackupFace> backupFaces() const;
     thrust::device_vector<BackupFace> backupFacesGpu() const;
     void apply(const Operator& op);
+    void updateIndices();
     void updateStructures();
     void updateNodeGeometries();
     void updateFaceGeometries();

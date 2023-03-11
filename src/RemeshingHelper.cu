@@ -487,3 +487,361 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
             }
     }
 }
+
+__global__ void collectAdjacentEdges(int nEdges, const Edge* const* edges, int* indices, Edge** adjacentEdges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        Edge* edge = const_cast<Edge*>(edges[i]);
+        for (int j = 0; j < 2; j++) {
+            int index = 2 * i + j;
+            indices[index] = edge->nodes[j]->index;
+            adjacentEdges[index] = edge;
+        }
+    }
+}
+
+__global__ void collectAdjacentFaces(int nFaces, const Face* const* faces, int* indices, Face** adjacentFaces) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
+        Face* face = const_cast<Face*>(faces[i]);
+        for (int j = 0; j < 3; j++) {
+            int index = 3 * i + j;
+            indices[index] = face->vertices[j]->index;
+            adjacentFaces[index] = face;
+        }
+    }
+}
+
+__global__ void setRange(int n, const int* indices, int* l, int* r) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += nThreads) {
+        int index = indices[i];
+        if (i == 0 || index != indices[i - 1])
+            l[index] = i;
+        if (i == n - 1 || index != indices[i + 1])
+            r[index] = i + 1;
+    }
+}
+
+__device__ bool shouldCollapseGpu(const Edge* edge, int side, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing) {
+    Node* node = edge->nodes[side];
+    if (node->preserve)
+        return false;
+    
+    bool flag = false;
+    int l = edgeBegin[node->index], r = edgeEnd[node->index];
+    for (int i = l; i < r; i++) {
+        const Edge* adjacentEdge = adjacentEdges[i];
+        if (adjacentEdge->isBoundary() || adjacentEdge->isSeam()) {
+            flag = true;
+            break;
+        }
+    }
+    if (flag && (!edge->isBoundary() && !edge->isSeam()))
+        return false;
+    
+    if (edge->isSeam())
+        for (int i = 0; i < 2; i++) {
+            Vertex* vertex0 = edge->vertices[i][side];
+            Vertex* vertex1 = edge->vertices[i][1 - side];
+            
+            int l = faceBegin[vertex0->index], r = faceEnd[vertex0->index];
+            for (int j = l; j < r; j++) {
+                const Face* adjacentFace = adjacentFaces[j];
+                Vertex* v0 = adjacentFace->vertices[0];
+                Vertex* v1 = adjacentFace->vertices[1];
+                Vertex* v2 = adjacentFace->vertices[2];
+                if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
+                    continue;
+                
+                if (v0 == vertex0)
+                    v0 = vertex1;
+                else if (v1 == vertex0) {
+                    v1 = vertex1;
+                    mySwap(v0, v1);
+                } else {
+                    v2 = vertex1;
+                    mySwap(v0, v2);
+                }
+                Vector2f u0 = v0->u;
+                Vector2f u1 = v1->u;
+                Vector2f u2 = v2->u;
+                float a = 0.5f * (u1 - u0).cross(u2 - u0);
+                float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
+                float aspect = 12.0f * sqrt(3.0f) * a / sqr(p);
+                if (a < 1e-6f || aspect < remeshing->aspectMin)
+                    return false;
+                if (edgeMetric(v0, v1) > 0.9f || edgeMetric(v0, v2) > 0.9f)
+                    return false;
+            }
+        }
+    else {
+        int index = edge->opposites[0] != nullptr ? 0 : 1;
+        Vertex* vertex0 = edge->vertices[index][side];
+        Vertex* vertex1 = edge->vertices[index][1 - side];
+
+        int l = faceBegin[vertex0->index], r = faceEnd[vertex0->index];
+        for (int i = l; i < r; i++) {
+            const Face* adjacentFace = adjacentFaces[i];
+            Vertex* v0 = adjacentFace->vertices[0];
+            Vertex* v1 = adjacentFace->vertices[1];
+            Vertex* v2 = adjacentFace->vertices[2];
+            if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
+                continue;
+            
+            if (v0 == vertex0)
+                v0 = vertex1;
+            else if (v1 == vertex0) {
+                v1 = vertex1;
+                mySwap(v0, v1);
+            } else {
+                v2 = vertex1;
+                mySwap(v0, v2);
+            }
+            Vector2f u0 = v0->u;
+            Vector2f u1 = v1->u;
+            Vector2f u2 = v2->u;
+            float a = 0.5f * (u1 - u0).cross(u2 - u0);
+            float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
+            float aspect = 12.0f * sqrt(3.0f) * a / sqr(p);
+            if (a < 1e-6f || aspect < remeshing->aspectMin)
+                return false;
+            if (edgeMetric(v0, v1) > 0.9f || edgeMetric(v0, v2) > 0.9f)
+                return false;
+        }
+    }
+
+    return true;
+}
+
+__global__ void checkEdgesToCollapse(int nEdges, const Edge* const* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing, Pairei* edgesToCollapse) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        const Edge* edge = edges[i];
+        if (shouldCollapseGpu(edge, 0, edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces, remeshing))
+            edgesToCollapse[i] = Pairei(const_cast<Edge*>(edge), 0);
+        else if (shouldCollapseGpu(edge, 1, edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces, remeshing))
+            edgesToCollapse[i] = Pairei(const_cast<Edge*>(edge), 1);
+        else
+            edgesToCollapse[i] = Pairei(nullptr, -1);
+    }
+}
+
+__global__ void initializeCollapseNodes(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        Edge* edge = edges[i].first;
+        int side = edges[i].second;
+        
+        Node* node = edge->nodes[side];
+        node->removed = false;
+        int l = edgeBegin[node->index], r = edgeEnd[node->index];
+        for (int j = l; j < r; j++) {
+            const Edge* adjacentEdge = adjacentEdges[j];
+            Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+            adjacentNode->removed = false;
+        }
+    }
+}
+
+__global__ void resetCollapseNodes(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        Edge* edge = edges[i].first;
+        int side = edges[i].second;
+
+        Node* node = edge->nodes[side];
+        if (!node->removed) {
+            int l = edgeBegin[node->index], r = edgeEnd[node->index];
+            bool flag = true;
+            for (int j = l; j < r; j++) {
+                const Edge* adjacentEdge = adjacentEdges[j];
+                Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                if (adjacentNode->removed) {
+                    flag = false;
+                    break;
+                }
+            }
+
+            if (flag) {
+                node->minIndex = nEdges;
+                for (int j = l; j < r; j++) {
+                    const Edge* adjacentEdge = adjacentEdges[j];
+                    Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                    adjacentNode->minIndex = nEdges;
+                }
+            }
+        }
+    }
+}
+
+__global__ void computeCollapseMinIndices(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        Edge* edge = edges[i].first;
+        int side = edges[i].second;
+
+        Node* node = edge->nodes[side];
+        if (!node->removed) {
+            int l = edgeBegin[node->index], r = edgeEnd[node->index];
+            bool flag = true;
+            for (int j = l; j < r; j++) {
+                const Edge* adjacentEdge = adjacentEdges[j];
+                Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                if (adjacentNode->removed) {
+                    flag = false;
+                    break;
+                }
+            }
+
+            if (flag) {
+                atomicMin(&node->minIndex, i);
+                for (int j = l; j < r; j++) {
+                    const Edge* adjacentEdge = adjacentEdges[j];
+                    Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                    atomicMin(&adjacentNode->minIndex, i);
+                }
+            }
+        }
+    }
+}
+
+__global__ void checkIndependentEdgesToCollapse(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, Pairei* edgesToCollapse) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        Edge* edge = edges[i].first;
+        int side = edges[i].second;
+
+        Node* node = edge->nodes[side];
+        if (!node->removed && node->minIndex == i) {
+            int l = edgeBegin[node->index], r = edgeEnd[node->index];
+            bool flag = true;
+            for (int j = l; j < r; j++) {
+                const Edge* adjacentEdge = adjacentEdges[j];
+                Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                if (adjacentNode->removed || adjacentNode->minIndex != i) {
+                    flag = false;
+                    break;
+                }
+            }
+
+            if (flag) {
+                edgesToCollapse[i] = edges[i];
+                node->removed = true;
+                for (int j = l; j < r; j++) {
+                    const Edge* adjacentEdge = adjacentEdges[j];
+                    Node* adjacentNode = adjacentEdge->nodes[0] != node ? adjacentEdge->nodes[0] : adjacentEdge->nodes[1];
+                    adjacentNode->removed = true;
+                }
+            }
+        }
+    }
+}
+
+__global__ void collapseGpu(int nEdges, const Pairei* edges, const Material* material, const int* edgeBegin, const int* edgeEnd, Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces, Node** removedNodes, Vertex** removedVertices, Edge** removedEdges, Face** removedFaces) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        Edge* edge = edges[i].first;
+        int side = edges[i].second;
+        Node* node0 = edge->nodes[side];
+        Node* node1 = edge->nodes[1 - side];
+
+        removedNodes[i] = node0;
+        removedEdges[3 * i] = edge;
+
+        for (int j = 0; j < 2; j++)
+            if (edge->opposites[j] != nullptr) {
+                Vertex* vertex0 = edge->vertices[j][side];
+                Vertex* vertex1 = edge->vertices[j][1 - side];
+                Vertex* vertex2 = edge->opposites[j];
+
+                Face* face = edge->adjacents[j];
+                Edge* edge0 = face->findEdge(vertex1, vertex2);
+                Edge* edge1 = face->findEdge(vertex2, vertex0);
+
+                if (!edge1->isBoundary()) {
+                    Vertex* v = edge1->opposites[0];
+                    Face* f = edge1->adjacents[0];
+                    if (f == face) {
+                        v = edge1->opposites[1];
+                        f = edge1->adjacents[1];
+                    }
+
+                    edge0->replaceOpposite(vertex0, v);
+                    edge0->replaceAdjacent(face, f);
+                    f->replaceEdge(edge1, edge0);
+                }
+
+                removedEdges[3 * i + j + 1] = edge1;
+                removedFaces[2 * i + j] = face;
+            } else {
+                removedEdges[3 * i + j + 1] = nullptr;
+                removedFaces[2 * i + j] = nullptr;
+            }
+
+        int l = edgeBegin[node0->index], r = edgeEnd[node0->index];
+        for (int j = l; j < r; j++) {
+            Edge* adjacentEdge = adjacentEdges[j];
+            if (adjacentEdge != edge) {
+                adjacentEdge->replaceNode(node0, node1);
+                adjacentEdge->replaceVertex(edge->vertices[0][side], edge->vertices[0][1 - side]);
+                adjacentEdge->replaceVertex(edge->vertices[1][side], edge->vertices[1][1 - side]);
+            }
+        }
+
+        if (edge->isSeam())
+            for (int j = 0; j < 2; j++) {
+                Vertex* vertex0 = edge->vertices[j][side];
+                Vertex* vertex1 = edge->vertices[j][1 - side];
+                removedVertices[2 * i + j] = vertex0;
+
+                l = faceBegin[vertex0->index];
+                r = faceEnd[vertex0->index];
+                for (int k = l; k < r; k++) {
+                    Face* adjacentFace = adjacentFaces[k];
+                    if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
+                        adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
+                        adjacentFace->replaceVertex(vertex0, vertex1);
+                        adjacentFace->initialize(material);
+                    }
+                }
+            }
+        else {
+            int index = edge->opposites[0] != nullptr ? 0 : 1;
+            Vertex* vertex0 = edge->vertices[index][side];
+            Vertex* vertex1 = edge->vertices[index][1 - side];
+            removedVertices[2 * i] = vertex0;
+            removedVertices[2 * i + 1] = nullptr;
+            
+            l = faceBegin[vertex0->index];
+            r = faceEnd[vertex0->index];
+            for (int k = l; k < r; k++) {
+                Face* adjacentFace = adjacentFaces[k];
+                if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
+                    adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
+                    adjacentFace->replaceVertex(vertex0, vertex1);
+                    adjacentFace->initialize(material);
+                }
+            }
+        }
+    }
+}
+
+__global__ void printEdges(int nEdges, const Pairei* edges) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
+        Edge* edge = edges[i].first;
+        int side = edges[i].second;
+        printf("%d %d %d\n", edge->nodes[0]->index, edge->nodes[1]->index, side);
+    }
+}

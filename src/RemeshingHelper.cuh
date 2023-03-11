@@ -45,5 +45,16 @@ __host__ __device__ float edgeMetric(const Vertex* vertex0, const Vertex* vertex
 __host__ __device__ float edgeMetric(const Edge* edge);
 __global__ void checkEdgesToSplit(int nEdges, const Edge* const* edges, Edge** edgesToSplit, float* metrics);
 __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* material, Node** addedNodes, Vertex** addedVertices, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces);
+__global__ void collectAdjacentEdges(int nEdges, const Edge* const* edges, int* indices, Edge** adjacentEdges);
+__global__ void collectAdjacentFaces(int nFaces, const Face* const* faces, int* indices, Face** adjacentFaces);
+__global__ void setRange(int n, const int* indices, int* l, int* r);
+__device__ bool shouldCollapseGpu(const Edge* edge, int side, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing);
+__global__ void checkEdgesToCollapse(int nEdges, const Edge* const* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing, Pairei* edgesToCollapse);
+__global__ void initializeCollapseNodes(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges);
+__global__ void resetCollapseNodes(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges);
+__global__ void computeCollapseMinIndices(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges);
+__global__ void checkIndependentEdgesToCollapse(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, Pairei* edgesToCollapse);
+__global__ void collapseGpu(int nEdges, const Pairei* edges, const Material* material, const int* edgeBegin, const int* edgeEnd, Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces, Node** removedNodes, Vertex** removedVertices, Edge** removedEdges, Face** removedFaces);
+__global__ void printEdges(int nEdges, const Pairei* edges);
 
 #endif

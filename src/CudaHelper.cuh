@@ -8,6 +8,7 @@
 #include <cusolverSp.h>
 #include <thrust/device_vector.h>
 
+#include "Pair.cuh"
 #include "Impact.cuh"
 #include "Intersection.cuh"
 
@@ -31,6 +32,10 @@ struct IsNull {
 
     __device__ bool operator()(const Intersection& intersection) const {
         return intersection.face0 == nullptr && intersection.face1 == nullptr;
+    };
+
+    __device__ bool operator()(const Pairei& p) const {
+        return p.first == nullptr && p.second < 0;
     };
 };
 

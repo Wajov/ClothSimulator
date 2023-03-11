@@ -328,30 +328,27 @@ thrust::device_vector<Edge*> Cloth::findEdgesToFlipGpu() const {
 
 bool Cloth::flipSomeEdges() {
     static int nEdges = 0;
+    Operator op;
+    
     if (!gpu) {
         std::vector<Edge*> edgesToFlip = std::move(findEdgesToFlip());
-        if (edgesToFlip.size() == nEdges)
+        if (edgesToFlip.empty() || edgesToFlip.size() == nEdges)
             return false;
         
         nEdges = edgesToFlip.size();
-        Operator op;
         for (const Edge* edge : edgesToFlip)
             op.flip(edge, material);
-
-        mesh->apply(op);
-        return !edgesToFlip.empty();
     } else {
         thrust::device_vector<Edge*> edgesToFlip = std::move(findEdgesToFlipGpu());
-        if (edgesToFlip.size() == nEdges)
+        if (edgesToFlip.empty() || edgesToFlip.size() == nEdges)
             return false;
         
         nEdges = edgesToFlip.size();
-        Operator op;
         op.flip(edgesToFlip, material);
-
-        mesh->apply(op);
-        return !edgesToFlip.empty();
     }
+
+    mesh->apply(op);
+    return true;
 }
 
 void Cloth::flipEdges() {
@@ -427,23 +424,26 @@ thrust::device_vector<Edge*> Cloth::findEdgesToSplitGpu() const {
 }
 
 bool Cloth::splitSomeEdges() {
+    Operator op;
+
     if (!gpu) {
         std::vector<Edge*> edgesToSplit = std::move(findEdgesToSplit());
-        Operator op;
+        if (edgesToSplit.empty())
+            return false;
+        
         for (const Edge* edge : edgesToSplit)
             op.split(edge, material);
-
-        mesh->apply(op);
-        flipEdges();
-        return !edgesToSplit.empty();
     } else {
         thrust::device_vector<Edge*> edgesToSplit = std::move(findEdgesToSplitGpu());
-        Operator op;
-        op.split(edgesToSplit, material);
+        if (edgesToSplit.empty())
+            return false;
 
-        mesh->apply(op);
-        return !edgesToSplit.empty();
+        op.split(edgesToSplit, material);
     }
+
+    mesh->apply(op);
+    flipEdges();
+    return true;
 }
 
 void Cloth::splitEdges() {
@@ -462,6 +462,38 @@ void Cloth::buildAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjace
             adjacentFaces[face->vertices[i]].push_back(face);
 }
 
+void Cloth::buildAdjacents(thrust::device_vector<int>& edgeBegin, thrust::device_vector<int>& edgeEnd, thrust::device_vector<Edge*>& adjacentEdges, thrust::device_vector<int>& faceBegin, thrust::device_vector<int>& faceEnd, thrust::device_vector<Face*>& adjacentFaces) const {
+    thrust::device_vector<int> indices;
+
+    int nNodes = mesh->getNodesGpu().size();
+    thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
+    int nEdges = edges.size();
+    edgeBegin.assign(nNodes, 0);
+    edgeEnd.assign(nNodes, 0);
+    adjacentEdges.resize(2 * nEdges);
+    indices.resize(2 * nEdges);
+    collectAdjacentEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), pointer(indices), pointer(adjacentEdges));
+    CUDA_CHECK_LAST();
+
+    thrust::sort_by_key(indices.begin(), indices.end(), adjacentEdges.begin());
+    setRange<<<GRID_SIZE, BLOCK_SIZE>>>(2 * nEdges, pointer(indices), pointer(edgeBegin), pointer(edgeEnd));
+    CUDA_CHECK_LAST();
+
+    int nVertices = mesh->getVerticesGpu().size();
+    thrust::device_vector<Face*>& faces = mesh->getFacesGpu();
+    int nFaces = faces.size();
+    faceBegin.assign(nVertices, 0);
+    faceEnd.assign(nVertices, 0);
+    adjacentFaces.resize(3 * nFaces);
+    indices.resize(3 * nFaces);
+    collectAdjacentFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(faces), pointer(indices), pointer(adjacentFaces));
+    CUDA_CHECK_LAST();
+
+    thrust::sort_by_key(indices.begin(), indices.end(), adjacentFaces.begin());
+    setRange<<<GRID_SIZE, BLOCK_SIZE>>>(3 * nFaces, pointer(indices), pointer(faceBegin), pointer(faceEnd));
+    CUDA_CHECK_LAST();
+}
+
 bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
     Node* node = edge->nodes[side];
     if (node->preserve)
@@ -469,8 +501,8 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
     
     bool flag = false;
     const std::vector<Edge*>& edges = adjacentEdges.at(node);
-    for (const Edge* edge : edges)
-        if (edge->isBoundary() || edge->isSeam()) {
+    for (const Edge* adjacentEdge : edges)
+        if (adjacentEdge->isBoundary() || adjacentEdge->isSeam()) {
             flag = true;
             break;
         }
@@ -483,10 +515,10 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
             Vertex* vertex1 = edge->vertices[i][1 - side];
             
             const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
-            for (const Face* face : faces) {
-                Vertex* v0 = face->vertices[0];
-                Vertex* v1 = face->vertices[1];
-                Vertex* v2 = face->vertices[2];
+            for (const Face* adjacentFace : faces) {
+                Vertex* v0 = adjacentFace->vertices[0];
+                Vertex* v1 = adjacentFace->vertices[1];
+                Vertex* v2 = adjacentFace->vertices[2];
                 if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
                     continue;
                 
@@ -517,10 +549,10 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
         Vertex* vertex1 = edge->vertices[index][1 - side];
 
         const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
-        for (const Face* face : faces) {
-            Vertex* v0 = face->vertices[0];
-            Vertex* v1 = face->vertices[1];
-            Vertex* v2 = face->vertices[2];
+        for (const Face* adjacentFace : faces) {
+            Vertex* v0 = adjacentFace->vertices[0];
+            Vertex* v1 = adjacentFace->vertices[1];
+            Vertex* v2 = adjacentFace->vertices[2];
             if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
                 continue;
             
@@ -588,24 +620,80 @@ std::vector<Pairei> Cloth::findEdgesToCollapse(const std::unordered_map<Node*, s
     return ans;
 }
 
+thrust::device_vector<Pairei> Cloth::findEdgesToCollapse(const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) const {
+    const int* edgeBeginPointer = pointer(edgeBegin);
+    const int* edgeEndPointer = pointer(edgeEnd);
+    Edge* const* adjacentEdgesPointer = pointer(adjacentEdges);
+    const int* faceBeginPointer = pointer(faceBegin);
+    const int* faceEndPointer = pointer(faceEnd);
+    Face* const* adjacentFacesPointer = pointer(adjacentFaces);
+
+    thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
+    int nEdges = edges.size();
+    thrust::device_vector<Pairei> edgesToCollapse(nEdges);
+    Pairei* edgesToCollapsePointer = pointer(edgesToCollapse);
+    thrust::device_vector<float> metrics(nEdges);
+    checkEdgesToCollapse<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer, faceBeginPointer, faceEndPointer, adjacentFacesPointer, remeshing,edgesToCollapsePointer);
+    CUDA_CHECK_LAST();
+
+    edgesToCollapse.erase(thrust::remove_if(edgesToCollapse.begin(), edgesToCollapse.end(), IsNull()), edgesToCollapse.end());
+    int nEdgesToCollapse = edgesToCollapse.size();
+    thrust::device_vector<Pairei> ans(nEdgesToCollapse, Pairei(nullptr, -1));
+    Pairei* ansPointer = pointer(ans);
+    initializeCollapseNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToCollapse, edgesToCollapsePointer, edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer);
+    CUDA_CHECK_LAST();
+
+    int num, newNum = nEdgesToCollapse;
+    do {
+        num = newNum;
+        resetCollapseNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToCollapse, edgesToCollapsePointer, edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer);
+        CUDA_CHECK_LAST();
+
+        computeCollapseMinIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToCollapse, edgesToCollapsePointer, edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer);
+        CUDA_CHECK_LAST();
+
+        checkIndependentEdgesToCollapse<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToCollapse, edgesToCollapsePointer, edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer, ansPointer);
+        CUDA_CHECK_LAST();
+
+        newNum = thrust::count_if(ans.begin(), ans.end(), IsNull());
+    } while (num > newNum);
+
+    ans.erase(thrust::remove_if(ans.begin(), ans.end(), IsNull()), ans.end());
+    return ans;
+}
+
 bool Cloth::collapseSomeEdges() {
+    Operator op;
+
     if (!gpu) {
         std::unordered_map<Node*, std::vector<Edge*>> adjacentEdges;
         std::unordered_map<Vertex*, std::vector<Face*>> adjacentFaces;
         buildAdjacents(adjacentEdges, adjacentFaces);
 
         std::vector<Pairei> edgesToCollapse = std::move(findEdgesToCollapse(adjacentEdges, adjacentFaces));
-        Operator op;
+        if (edgesToCollapse.empty())
+            return false;
+
         for (const Pairei& edge : edgesToCollapse)
             op.collapse(edge.first, edge.second, material, adjacentEdges, adjacentFaces);
-
-        mesh->apply(op);
-        flipEdges();
-        return !edgesToCollapse.empty();
     } else {
-        // TODO
-        return false;
+        mesh->updateIndices();
+
+        thrust::device_vector<int> edgeBegin, edgeEnd, faceBegin, faceEnd;
+        thrust::device_vector<Edge*> adjacentEdges;
+        thrust::device_vector<Face*> adjacentFaces;
+        buildAdjacents(edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces);
+
+        thrust::device_vector<Pairei> edgesToCollapse = std::move(findEdgesToCollapse(edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces));
+        if (edgesToCollapse.empty())
+            return false;
+
+        op.collapse(edgesToCollapse, material, edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces);
     }
+
+    mesh->apply(op);
+    flipEdges();
+    return true;
 }
 
 void Cloth::collapseEdges() {
@@ -725,6 +813,8 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
         flipEdges();
         splitEdges();
         collapseEdges();
+
+        mesh->updateIndices();
     } else {
         thrust::device_vector<Plane> planes = std::move(findNearestPlaneGpu(obstacleBvhs, thickness));
         computeSizing(planes);

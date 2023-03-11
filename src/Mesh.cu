@@ -169,6 +169,7 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f
         CUDA_CHECK_LAST();
     }
 
+    updateIndices();
     updateStructures();
     updateNodeGeometries();
     updateFaceGeometries();
@@ -294,16 +295,27 @@ void Mesh::apply(const Operator& op) {
     }
 }
 
-void Mesh::updateStructures() {
+void Mesh::updateIndices() {
     if (!gpu) {
-        for (int i = 0; i < nodes.size(); i++) {
-            Node* node = nodes[i];
-            node->index = i;
-            node->mass = 0.0f;
-            node->area = 0.0f;
-        }
+        for (int i = 0; i < nodes.size(); i++)
+            nodes[i]->index = i;
         for (int i = 0; i < vertices.size(); i++)
             vertices[i]->index = i;
+    } else {
+        updateNodeIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
+        CUDA_CHECK_LAST();
+
+        updateVertexIndices<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
+        CUDA_CHECK_LAST();
+    }
+}
+
+void Mesh::updateStructures() {
+    if (!gpu) {
+        for (Node* node : nodes) {
+            node->mass = 0.0f;
+            node->area = 0.0f;
+        }        
         for (const Face* face : faces) {
             float mass = face->mass / 3.0f;
             float area = face->area;
@@ -317,10 +329,7 @@ void Mesh::updateStructures() {
         initializeNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
         CUDA_CHECK_LAST();
 
-        initializeVertexStructures<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
-        CUDA_CHECK_LAST();
-
-        updateStructuresGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
+        updateNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
         CUDA_CHECK_LAST();
     }
 }
