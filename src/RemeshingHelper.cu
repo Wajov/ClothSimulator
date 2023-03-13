@@ -835,13 +835,3 @@ __global__ void collapseGpu(int nEdges, const Pairei* edges, const Material* mat
         }
     }
 }
-
-__global__ void printEdges(int nEdges, const Pairei* edges) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
-        Edge* edge = edges[i].first;
-        int side = edges[i].second;
-        printf("%d %d %d\n", edge->nodes[0]->index, edge->nodes[1]->index, side);
-    }
-}
