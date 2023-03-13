@@ -9,8 +9,13 @@ Transform::Transform(const Json::Value& json) {
 
 Transform::~Transform() {}
 
-Vector3f Transform::applyTo(const Vector3f& v) const {
-    Vector4f ans = matrix * Vector4f(v(0), v(1), v(2), 1.0f);
+Vector3f Transform::applyToPoint(const Vector3f& p) const {
+    Vector4f ans = matrix * Vector4f(p(0), p(1), p(2), 1.0f);
+    return Vector3f(ans(0), ans(1), ans(2));
+}
+
+Vector3f Transform::applyToVector(const Vector3f& v) const {
+    Vector4f ans = matrix * Vector4f(v(0), v(1), v(2), 0.0f);
     return Vector3f(ans(0), ans(1), ans(2));
 }
 

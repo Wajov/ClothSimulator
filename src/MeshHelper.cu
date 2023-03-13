@@ -1,10 +1,13 @@
 #include "MeshHelper.cuh"
 
-__global__ void initializeNodes(int nNodes, const Vector3f* x, bool isFree, Node** nodes) {
+__global__ void initializeNodes(int nNodes, const Vector3f* x, bool isFree, int nVelocities, const Vector3f* v, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
-        nodes[i] = new Node(x[i], isFree);
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Node* node = new Node(x[i], isFree);
+        node->v = i < nVelocities ? v[i] : Vector3f(0.0f, 0.0f, 0.0f);
+        nodes[i] = node;
+    }
 }
 
 __global__ void initializeVertices(int nVertices, const Vector2f* u, Vertex** vertices) {
@@ -259,11 +262,6 @@ __global__ void copyFaceIndices(int nFaces, const Face* const* faces, Pairii* in
             index.second = vertex->index;
         }
     }
-}
-
-__global__ void printDebugInfoGpu(const Face* const* faces, int index) {
-    const Face* face = faces[index];
-    printf("Nodes=[%d, %d, %d]\n", face->vertices[0]->node->index, face->vertices[1]->node->index, face->vertices[2]->node->index);
 }
 
 __global__ void checkEdges(int nEdges, const Edge* const* edges) {

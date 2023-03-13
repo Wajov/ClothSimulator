@@ -7,5 +7,6 @@
 #include "Handle.cuh"
 
 __global__ void initializeHandles(int nHandles, const int* handleIndices, Node** nodes, Handle* handles);
+__global__ void collectHandleIndices(int nHandles, const Handle* handles, int* handleIndices);
 
 #endif

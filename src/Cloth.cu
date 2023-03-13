@@ -23,8 +23,6 @@ Cloth::Cloth(const Json::Value& json) {
         for (const Json::Value& nodeJson : handleJson["nodes"])
             handleIndices.push_back(parseInt(nodeJson));
     
-    edgeShader = new Shader("shader/Vertex.glsl", "shader/EdgeFragment.glsl");
-    faceShader = new Shader("shader/Vertex.glsl", "shader/FaceFragment.glsl");
     delete transform;
 
     if (!gpu) {
@@ -704,12 +702,6 @@ Mesh* Cloth::getMesh() const {
     return mesh;
 }
 
-void Cloth::readDataFromFile(const std::string& path) {
-    mesh->readDataFromFile(path);
-    mesh->updateNodeGeometries();
-    mesh->updateFaceGeometries();
-}
-
 void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind) {
     if (!gpu) {
         Eigen::SparseMatrix<float> A;
@@ -825,7 +817,13 @@ void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness
     }
 }
 
-void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const {
+void Cloth::bind() {
+    edgeShader = new Shader("shader/Vertex.glsl", "shader/EdgeFragment.glsl");
+    faceShader = new Shader("shader/Vertex.glsl", "shader/FaceFragment.glsl");
+    mesh->bind();
+}
+
+void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     edgeShader->use();
     edgeShader->setMat4("model", model);
@@ -841,6 +839,34 @@ void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix
     faceShader->setVec3("color", Vector3f(0.6f, 0.7f, 1.0f));
     faceShader->setVec3("cameraPosition", cameraPosition);
     faceShader->setVec3("lightDirection", lightDirection);
-    faceShader->setInt("selectedFace", selectedFace);
     mesh->render();
+}
+
+void Cloth::load(const std::string& path) {
+    Transform* transform = new Transform(Json::nullValue);
+    mesh->load(path, transform, material);
+}
+
+void Cloth::save(const std::string& path, Json::Value& json) const {
+    json["mesh"] = path;
+    json["transform"] = Json::nullValue;
+    if (!gpu) {
+        int index = 0;
+        for (Json::Value& handleJson : json["handles"])
+            for (Json::Value& nodeJson : handleJson["nodes"])
+                nodeJson = handles[index++].node->index;
+    } else {
+        int nHandles = handlesGpu.size();
+        thrust::device_vector<int> handleIndices(nHandles);
+        collectHandleIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), pointer(handleIndices));
+        CUDA_CHECK_LAST();
+
+        int index = 0;
+        for (Json::Value& handleJson : json["handles"])
+            for (Json::Value& nodeJson : handleJson["nodes"]) {
+                int handleIndex = handleIndices[index++];
+                nodeJson = handleIndex;
+            }
+    }
+    mesh->save(path);
 }

@@ -11,3 +11,10 @@ __global__ void initializeHandles(int nHandles, const int* handleIndices, Node**
         handle.position = node->x;
     }
 }
+
+__global__ void collectHandleIndices(int nHandles, const Handle* handles, int* handleIndices) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nHandles; i += nThreads)
+        handleIndices[i] = handles[i].node->index;
+}
