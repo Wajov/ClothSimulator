@@ -46,7 +46,7 @@ private:
     cudaGraphicsResource* vboCuda;
     std::vector<std::string> split(const std::string& s, char c) const;
     Edge* findEdge(int index0, int index1, std::map<Pairii, int>& edgeMap);
-    void initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
+    void initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
 
 public:
     Mesh(const Json::Value& json, const Transform* transform, const Material* material);
@@ -73,9 +73,8 @@ public:
     void updateRenderingData(bool rebind);
     void bind();
     void render() const;
-    void readDataFromFile(const std::string& path);
-    void writeDataToFile(const std::string& path);
-    void printDebugInfo(int selectedFace);
+    void load(const std::string& path, const Transform* transform, const Material* material);
+    void save(const std::string& path);
     void check() const;
 };
 

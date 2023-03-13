@@ -1,37 +1,7 @@
 #include "Mesh.cuh"
 
 Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* material) {
-    std::ifstream fin(json.asString());
-    if (!fin.is_open()) {
-        std::cerr << "Failed to open mesh file: " << json.asString() << std::endl;
-        exit(1);
-    }
-
-    std::string line;
-    std::vector<Vector3f> x;
-    std::vector<Vector2f> u;
-    std::vector<int> xIndices, uIndices;
-    while (getline(fin, line)) {
-        std::vector<std::string> s = std::move(split(line, ' '));
-        if (s[0] == "v")
-            x.push_back(transform->applyTo(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
-        else if (s[0] == "vt")
-            u.emplace_back(std::stof(s[1]), std::stof(s[2]));
-        else if (s[0] == "f")
-            for (int i = 1; i < 4; i++)
-                if (line.find('/') != std::string::npos) {
-                    std::vector<std::string> t = std::move(split(s[i], '/'));
-                    xIndices.push_back(std::stoi(t[0]) - 1);
-                    uIndices.push_back(std::stoi(t[1]) - 1);
-                } else {
-                    u.emplace_back(0.0f, 0.0f);
-                    xIndices.push_back(std::stoi(s[i]) - 1);
-                    uIndices.push_back(u.size() - 1);
-                }
-    }
-    fin.close();
-
-    initialize(x, u, xIndices, uIndices, material);
+    load(json.asString(), transform, material);
 }
 
 Mesh::~Mesh() {
@@ -82,14 +52,18 @@ Edge* Mesh::findEdge(int index0, int index1, std::map<Pairii, int>& edgeMap) {
     }
 }
 
-void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material) {
+void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material) {
     bool isFree = (material != nullptr);
     if (!gpu) {
         nodes.resize(x.size());
         vertices.resize(u.size());
+        edges.clear();
         faces.resize(xIndices.size() / 3);
-        for (int i = 0; i < x.size(); i++)
-            nodes[i] = new Node(x[i], isFree);
+        for (int i = 0; i < x.size(); i++) {
+            Node* node = new Node(x[i], isFree);
+            node->v = i < v.size() ? v[i] : Vector3f(0.0f, 0.0f, 0.0f);
+            nodes[i] = node;
+        }
         for (int i = 0; i < u.size(); i++)
             vertices[i] = new Vertex(u[i]);
 
@@ -132,13 +106,14 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector2f
         int nFaces = xIndices.size() / 3;
         int nEdges = xIndices.size();
         thrust::device_vector<Vector3f> xGpu = x;
+        thrust::device_vector<Vector3f> vGpu = v;
         thrust::device_vector<Vector2f> uGpu = u;
         thrust::device_vector<int> xIndicesGpu = xIndices;
         thrust::device_vector<int> uIndicesGpu = uIndices;
 
         nodesGpu.resize(nNodes);
         Node** nodesPointer = pointer(nodesGpu);
-        initializeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(xGpu), isFree, nodesPointer);
+        initializeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(xGpu), isFree, v.size(), pointer(vGpu), nodesPointer);
         CUDA_CHECK_LAST();
 
         verticesGpu.resize(nVertices);
@@ -439,14 +414,43 @@ void Mesh::render() const {
     glBindVertexArray(0);
 }
 
-void Mesh::readDataFromFile(const std::string& path) {
+void Mesh::load(const std::string& path, const Transform* transform, const Material* material) {
     std::ifstream fin(path);
-    for (Node* node : nodes)
-        fin >> node->x0(0) >> node->x0(1) >> node->x0(2) >> node->x(0) >> node->x(1) >> node->x(2) >> node->v(0) >> node->v(1) >> node->v(2);
+    if (!fin.is_open()) {
+        std::cerr << "Failed to open mesh file: " << path << std::endl;
+        exit(1);
+    }
+
+    std::string line;
+    std::vector<Vector3f> x, v;
+    std::vector<Vector2f> u;
+    std::vector<int> xIndices, uIndices;
+    while (getline(fin, line)) {
+        std::vector<std::string> s = std::move(split(line, ' '));
+        if (s[0] == "v")
+            x.push_back(transform->applyToPoint(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
+        else if (s[0] == "nv")
+            v.push_back(transform->applyToVector(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
+        else if (s[0] == "vt")
+            u.emplace_back(std::stof(s[1]), std::stof(s[2]));
+        else if (s[0] == "f")
+            for (int i = 1; i < 4; i++)
+                if (line.find('/') != std::string::npos) {
+                    std::vector<std::string> t = std::move(split(s[i], '/'));
+                    xIndices.push_back(std::stoi(t[0]) - 1);
+                    uIndices.push_back(std::stoi(t[1]) - 1);
+                } else {
+                    u.emplace_back(0.0f, 0.0f);
+                    xIndices.push_back(std::stoi(s[i]) - 1);
+                    uIndices.push_back(u.size() - 1);
+                }
+    }
     fin.close();
+
+    initialize(x, v, u, xIndices, uIndices, material);
 }
 
-void Mesh::writeDataToFile(const std::string& path) {
+void Mesh::save(const std::string& path) {
     std::ofstream fout(path);
     if (!gpu) {
         for (const Node* node : nodes) {
@@ -474,7 +478,7 @@ void Mesh::writeDataToFile(const std::string& path) {
             fout << "v " << xt(0) << " " << xt(1) << " " << xt(2) << std::endl;
 
         thrust::device_vector<Vector3f> v(nNodes);
-        copyX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), pointer(v));
+        copyV<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), pointer(v));
         CUDA_CHECK_LAST();
         for (const Vector3f& vt : v)
             fout << "nv " << vt(0) << " " << vt(1) << " " << vt(2) << std::endl;
@@ -503,31 +507,23 @@ void Mesh::writeDataToFile(const std::string& path) {
     }
 }
 
-void Mesh::printDebugInfo(int selectedFace) {
-    if (!gpu) {
-        Face* face = faces[selectedFace];
-        std::cout << "Nodes=[" << face->vertices[0]->node->index << ", " << face->vertices[1]->node->index << ", " << face->vertices[2]->node->index << "]" << std::endl;
-    } else
-        printDebugInfoGpu<<<1, 1>>>(pointer(facesGpu), selectedFace);
-}
-
 void Mesh::check() const {
     if (!gpu) {
         for (const Edge* edge : edges)
             for (int i = 0; i < 2; i++)
                 if (edge->opposites[i] != nullptr) {
                     if (edge->vertices[i][0]->node != edge->nodes[0] || edge->vertices[i][1]->node != edge->nodes[1])
-                        std::cout << "Edge vertices check error!" << std::endl;
+                        std::cerr << "Edge vertices check error!" << std::endl;
                     if (edge->adjacents[i] == nullptr || !edge->adjacents[i]->contain(edge->opposites[i]) || !edge->adjacents[i]->contain(edge))
-                        std::cout << "Edge adjacents check error!" << std::endl;
+                        std::cerr << "Edge adjacents check error!" << std::endl;
                 } else if (edge->adjacents[i] != nullptr)
-                    std::cout << "Edge opposites check error!" << std::endl;
+                    std::cerr << "Edge opposites check error!" << std::endl;
             
         for (const Face* face : faces)
             for (int i = 0; i < 3; i++) {
                 Edge* edge = face->edges[i];
                 if (edge->adjacents[0] != face && edge->adjacents[1] != face)
-                    std::cout << "Face edges check error!" << std::endl;
+                    std::cerr << "Face edges check error!" << std::endl;
             }
     } else {
         checkEdges<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));

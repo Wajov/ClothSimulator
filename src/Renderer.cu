@@ -1,6 +1,6 @@
 #include "Renderer.cuh"
 
-Renderer::Renderer(int width, int height, const std::string& path) :
+Renderer::Renderer(int width, int height) :
     width(width),
     height(height),
     press(false),
@@ -8,7 +8,9 @@ Renderer::Renderer(int width, int height, const std::string& path) :
     lastX(INFINITY),
     lastY(INFINITY),
     scaling(1.0f),
-    rotation(1.0f) {
+    rotation(1.0f),
+    lightDirection(0.0f, 0.0f, 1.0f), 
+    cameraPosition(0.0f, -0.25f, 2.0f) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -46,13 +48,10 @@ Renderer::Renderer(int width, int height, const std::string& path) :
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(1.0f, 1.0f);
-
-    simulator = new Simulator(path);
 }
 
 Renderer::~Renderer() {
     glfwTerminate();
-    delete simulator;
 }
 
 void Renderer::framebufferSizeCallback(int width, int height) {
@@ -68,12 +67,8 @@ void Renderer::mouseButtonCallback(int button, int action, int mods) {
         glfwGetCursorPos(window, &x, &y);
         pressX = (int)x;
         pressY = (int)y;
-    } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+    } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
         press = false;
-        glfwGetCursorPos(window, &x, &y);
-        if (pressX == (int)x && pressY == (int)y)
-            simulator->printDebugInfo(pressX, height - pressY);
-    }
 }
 
 void Renderer::cursorPosCallback(double x, double y) {
@@ -101,22 +96,30 @@ void Renderer::keyCallback(int key, int scancode, int action, int mods) {
         pause = !pause;
 }
 
-void Renderer::render() const {
-    while (!glfwWindowShouldClose(window)) {
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+GLFWwindow* Renderer::getWindow() const {
+    return window;
+}
 
-        Vector3f lightDirection(0.0f, 0.0f, 1.0f), cameraPosition(0.0f, -0.25f, 2.0f);
-        Matrix4x4f model, view, projection;
-        model = Transform::scale(static_cast<float>(scaling)) * rotation;
-        view = Transform::lookAt(cameraPosition, Vector3f(0.0f, -0.25f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
-        projection = Transform::perspective(45.0f, static_cast<float>(width) / height, 0.1f, 100.0f);
+bool Renderer::getPause() const {
+    return pause;
+}
 
-        simulator->render(width, height, model, view, projection, cameraPosition, lightDirection);
-        if (!pause)
-            simulator->step();
+Vector3f Renderer::getLightDirection() const {
+    return lightDirection;
+}
 
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
+Vector3f Renderer::getCameraPosition() const {
+    return cameraPosition;
+}
+
+Matrix4x4f Renderer::getModel() const {
+    return Transform::scale(static_cast<float>(scaling)) * rotation;
+}
+
+Matrix4x4f Renderer::getView() const {
+    return Transform::lookAt(cameraPosition, Vector3f(0.0f, -0.25f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
+}
+
+Matrix4x4f Renderer::getProjection() const {
+    return Transform::perspective(45.0f, static_cast<float>(width) / height, 0.1f, 100.0f);
 }

@@ -11,16 +11,15 @@
 #include "Vector.cuh"
 #include "Matrix.cuh"
 #include "Transform.cuh"
-#include "Simulator.cuh"
 
 class Renderer {
 private:
     bool press, pause;
     int width, height, pressX, pressY;
     double lastX, lastY, scaling;
+    Vector3f lightDirection, cameraPosition;
     Matrix4x4f rotation;
     GLFWwindow* window;
-    Simulator* simulator;
     void framebufferSizeCallback(int width, int height);
     void mouseButtonCallback(int button, int action, int mods);
     void cursorPosCallback(double x, double y);
@@ -28,9 +27,15 @@ private:
     void keyCallback(int key, int scancode, int action, int mods);
 
 public:
-    Renderer(int width, int height, const std::string& path);
+    Renderer(int width, int height);
     ~Renderer();
-    void render() const;
+    GLFWwindow* getWindow() const;
+    bool getPause() const;
+    Vector3f getLightDirection() const;
+    Vector3f getCameraPosition() const;
+    Matrix4x4f getModel() const;
+    Matrix4x4f getView() const;
+    Matrix4x4f getProjection() const;
 };
 
 #endif

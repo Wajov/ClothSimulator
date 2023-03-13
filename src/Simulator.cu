@@ -1,17 +1,20 @@
 #include "Simulator.cuh"
 
-Simulator::Simulator(const std::string& path) :
+Simulator::Simulator(SimulationMode mode, const std::string& path, const std::string& directory) :
+    mode(mode),
     nSteps(0),
-    selectedCloth(-1) {
+    nFrames(0),
+    directory(directory) {
     cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1 << 30);
+    if (mode == Simulate || mode == Resume || mode == Replay)
+        renderer = new Renderer(900, 900);
 
-    std::ifstream fin(path);
+    std::ifstream fin(mode == Simulate || mode == SimulateOffline ? path : directory + "/config.json");
     if (!fin.is_open()) {
         std::cerr << "Failed to open configuration file: " << path << std::endl;
         exit(1);
     }
 
-    Json::Value json;
     fin >> json;
 
     frameTime = parseFloat(json["frame_time"]);
@@ -20,7 +23,14 @@ Simulator::Simulator(const std::string& path) :
 
     gravity = parseVector3f(json["gravity"]);
     Wind* windTemp = new Wind();
-
+    if (!gpu)
+        wind = windTemp;
+    else {
+        CUDA_CHECK(cudaMalloc(&wind, sizeof(Wind)));
+        CUDA_CHECK(cudaMemcpy(wind, windTemp, sizeof(Wind), cudaMemcpyHostToDevice));
+        delete windTemp;
+    }
+    
     magic = new Magic(json["magic"]);
     
     cloths.resize(json["cloths"].size());
@@ -32,25 +42,6 @@ Simulator::Simulator(const std::string& path) :
         obstacles[i] = new Obstacle(json["obstacles"][i]);
 
     fin.close();
-
-    remeshingStep();
-    bind();
-
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glGenTextures(1, &indexTexture);
-    glGenRenderbuffers(1, &rbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    indexShader = new Shader("shader/Vertex.glsl", "shader/IndexFragment.glsl");
-
-    if (!gpu)
-        wind = windTemp;
-    else {
-        CUDA_CHECK(cudaMalloc(&wind, sizeof(Wind)));
-        CUDA_CHECK(cudaMemcpy(wind, windTemp, sizeof(Wind), cudaMemcpyHostToDevice));
-        delete windTemp;
-    }
 }
 
 Simulator::~Simulator() {
@@ -59,7 +50,7 @@ Simulator::~Simulator() {
         delete cloth;
     for (const Obstacle* obstacle : obstacles)
         delete obstacle;
-    delete indexShader;
+    delete renderer;
 
     if (!gpu)
         delete wind;
@@ -532,48 +523,9 @@ void Simulator::updateRenderingData(bool rebind) {
         cloth->getMesh()->updateRenderingData(rebind);
 }
 
-void Simulator::bind() {
-    for (Cloth* cloth : cloths)
-        cloth->getMesh()->bind();
-    for (Obstacle* obstacle : obstacles)
-        obstacle->getMesh()->bind();
-}
-
-void Simulator::render(int width, int height, const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
-    glBindTexture(GL_TEXTURE_2D, indexTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32I, width, height, 0, GL_RG_INTEGER, GL_INT, nullptr);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, indexTexture, 0);
-    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, width, height);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
-    int color[2] = {-1, -1};
-    glClearBufferiv(GL_COLOR, 0, color);
-    glClear(GL_DEPTH_BUFFER_BIT);
-    indexShader->use();
-    indexShader->setMat4("model", model);
-    indexShader->setMat4("view", view);
-    indexShader->setMat4("projection", projection);
-    for (int i = 0; i < cloths.size(); i++) {
-        indexShader->setInt("clothIndex", i);
-        cloths[i]->getMesh()->render();
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    for (int i = 0; i < cloths.size(); i++)
-        cloths[i]->render(model, view, projection, cameraPosition, lightDirection, selectedCloth == i ? selectedFace : -1);
-    
-    for (const Obstacle* obstacle : obstacles)
-        obstacle->render(model, view, projection, cameraPosition, lightDirection);
-}
-
-void Simulator::step() {
+void Simulator::step(bool offline) {
     nSteps++;
     std::cout << "Step [" << nSteps << "]:" << std::endl;
-
-    selectedCloth = -1;
 
     resetObstacles();
     
@@ -591,6 +543,7 @@ void Simulator::step() {
     std::cout << ", Collision Step: " << d.count() << "s";
     
     if (nSteps % frameSteps == 0) {
+        nFrames++;
         if (!gpu) {
             std::vector<std::vector<BackupFace>> faces(cloths.size());
             for (int i = 0; i < cloths.size(); i++)
@@ -621,24 +574,196 @@ void Simulator::step() {
             std::cout << ", Separation Step: " << d.count() << "s";
         }
 
-        updateRenderingData(true);
-    } else
+        if (!offline)
+            updateRenderingData(true);
+        else
+            save();
+    } else if (!offline)
         updateRenderingData(false);
 
     std::cout << std::endl;
 }
 
-void Simulator::printDebugInfo(int x, int y) {
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
+void Simulator::bind() {
+    for (Cloth* cloth : cloths)
+        cloth->bind();
+    for (Obstacle* obstacle : obstacles)
+        obstacle->bind();
+}
 
-    Pairii pixel;
-    glReadPixels(x, y, 1, 1, GL_RG_INTEGER, GL_INT, &pixel);
-    selectedCloth = pixel.first;
-    selectedFace = pixel.second;
-    if (selectedCloth != -1 && selectedFace != -1)
-        cloths[selectedCloth]->getMesh()->printDebugInfo(selectedFace);
+void Simulator::render() const {
+    Vector3f lightDirection = renderer->getLightDirection();
+    Vector3f cameraPosition = renderer->getCameraPosition();
+    Matrix4x4f model = renderer->getModel();
+    Matrix4x4f view = renderer->getView();
+    Matrix4x4f projection = renderer->getProjection();
 
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    for (const Cloth* cloth : cloths)
+        cloth->render(model, view, projection, cameraPosition, lightDirection);
+    
+    for (const Obstacle* obstacle : obstacles)
+        obstacle->render(model, view, projection, cameraPosition, lightDirection);
+}
+
+void Simulator::load() {
+    for (int i = 0; i < cloths.size(); i++) {
+        std::string path = directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj";
+        if (std::filesystem::exists(path))
+            cloths[i]->load(path);
+    }
+    nFrames++;
+}
+
+void Simulator::save() {
+    for (int i = 0; i < cloths.size(); i++)
+        cloths[i]->save(directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj", json["cloths"][i]);
+    
+    for (int i = 0; i < obstacles.size(); i++)
+        obstacles[i]->save(directory + "/frame" + std::to_string(nFrames) + "_obstacle" + std::to_string(i) + ".obj", json["obstacles"][i]);
+
+    std::ofstream fout(directory + "/config.json");
+    fout << json;
+}
+
+void Simulator::findLastFrame() {
+    bool flag;
+    do {
+        nFrames++;
+        flag = true;
+        for (int i = 0; i < cloths.size(); i++)
+            if (!std::filesystem::exists(directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj")) {
+                flag = false;
+                break;
+            }
+    } while (flag);
+
+    nFrames--;
+    nSteps = nFrames * frameSteps;
+}
+
+void Simulator::simulate() {
+    if (!gpu) {
+        std::vector<std::vector<BackupFace>> faces(cloths.size());
+        for (int i = 0; i < cloths.size(); i++)
+            faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
+
+        remeshingStep();
+        separationStep(faces);
+    } else {
+        std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
+        for (int i = 0; i < cloths.size(); i++)
+            faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
+
+        remeshingStep();
+        separationStep(faces);
+    }
+    bind();
+
+    while (!glfwWindowShouldClose(renderer->getWindow())) {
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        render();
+        if (!renderer->getPause())
+            step(false);
+
+        glfwSwapBuffers(renderer->getWindow());
+        glfwPollEvents();
+    }
+}
+
+void Simulator::simulateOffline() {
+    if (!std::filesystem::is_directory(directory))
+        std::filesystem::create_directories(directory);
+
+    if (!gpu) {
+        std::vector<std::vector<BackupFace>> faces(cloths.size());
+        for (int i = 0; i < cloths.size(); i++)
+            faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
+
+        remeshingStep();
+        separationStep(faces);
+    } else {
+        std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
+        for (int i = 0; i < cloths.size(); i++)
+            faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
+
+        remeshingStep();
+        separationStep(faces);
+    }
+    save();
+
+    while (true)
+        step(true);
+}
+
+void Simulator::resume() {
+    findLastFrame();
+    bind();
+    
+    while (!glfwWindowShouldClose(renderer->getWindow())) {
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        render();
+        if (!renderer->getPause())
+            step(false);
+
+        glfwSwapBuffers(renderer->getWindow());
+        glfwPollEvents();
+    }
+}
+
+void Simulator::resumeOffline() {
+    findLastFrame();
+
+    while (true)
+        step(true);
+}
+
+void Simulator::replay() {
+    load();
+    bind();
+
+    while (!glfwWindowShouldClose(renderer->getWindow())) {
+        auto t0 = std::chrono::high_resolution_clock::now();
+       
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        render();
+        if (!renderer->getPause()) {
+            load();
+            updateRenderingData(true);
+        }
+
+        glfwSwapBuffers(renderer->getWindow());
+        glfwPollEvents();
+
+        std::chrono::duration<float> d;
+        do {
+            auto t1 = std::chrono::high_resolution_clock::now();
+            d = t1 - t0;
+        } while (d.count() < frameTime);
+    }
+}
+
+void Simulator::start() {
+    switch (mode) {
+    case Simulate:
+        simulate();
+        break;
+    case SimulateOffline:
+        simulateOffline();
+        break;
+    case Resume:
+        resume();
+        break;
+    case ResumeOffline:
+        resumeOffline();
+        break;
+    case Replay:
+        replay();
+        break;
+    }
 }

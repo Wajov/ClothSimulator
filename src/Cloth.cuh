@@ -82,10 +82,12 @@ public:
     Cloth(const Json::Value& json);
     ~Cloth();
     Mesh* getMesh() const;
-    void readDataFromFile(const std::string& path);
     void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
-    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection, int selectedFace) const;
+    void bind();
+    void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;
+    void load(const std::string& path);
+    void save(const std::string& path, Json::Value& json) const;
 };
 
 #endif

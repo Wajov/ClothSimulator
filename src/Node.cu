@@ -5,7 +5,6 @@ Node::Node(const Vector3f& x, bool isFree) :
     x0(x),
     x1(x),
     x(x),
-    v(0.0f, 0.0f, 0.0f),
     isFree(isFree),
     preserve(false) {}
 

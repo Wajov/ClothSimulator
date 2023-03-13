@@ -3,7 +3,13 @@
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}",
         "args": [
-            "conf/sphere.json",
+            "replay",
+            // "simulate",
+            // "simulate_offline",
+            // "resume",
+            // "resume_offline",
+            // "conf/sphere.json",
+            "sphere",
             "--gpu"
         ]
     },

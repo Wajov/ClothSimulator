@@ -32,7 +32,7 @@ struct NodeData {
     };
 };
 
-__global__ void initializeNodes(int nNodes, const Vector3f* x, bool isFree, Node** nodes);
+__global__ void initializeNodes(int nNodes, const Vector3f* x, bool isFree, int nVelocities, const Vector3f* v, Node** nodes);
 __global__ void initializeVertices(int nVertices, const Vector2f* u, Vertex** vertices);
 __device__ void setEdgeData(int index0, int index1, const Vertex* vertex, const Face* face, Pairii& index, EdgeData& edgeData);
 __global__ void initializeFaces(int nFaces, const int* xIndices, const int* uIndices, const Node* const* nodes, const Material* material, Vertex** vertices, Face** faces, Pairii* edgeIndices, EdgeData* edgeData);
@@ -56,7 +56,6 @@ __global__ void copyX(int nNodes, const Node* const* nodes, Vector3f* x);
 __global__ void copyV(int nNodes, const Node* const* nodes, Vector3f* v);
 __global__ void copyU(int nVertices, const Vertex* const* vertices, Vector2f* u);
 __global__ void copyFaceIndices(int nFaces, const Face* const* faces, Pairii* indices);
-__global__ void printDebugInfoGpu(const Face* const* faces, int index);
 __global__ void checkEdges(int nEdges, const Edge* const* edges);
 __global__ void checkFaces(int nFaces, const Face* const* faces);
 

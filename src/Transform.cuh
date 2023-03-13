@@ -14,7 +14,8 @@ private:
 public:
     Transform(const Json::Value& json);
     ~Transform();
-    Vector3f applyTo(const Vector3f& v) const;
+    Vector3f applyToPoint(const Vector3f& p) const;
+    Vector3f applyToVector(const Vector3f& v) const;
     static Matrix4x4f scale(float scaling);
     static Matrix4x4f rotate(const Vector3f& v, float angle);
     static Matrix4x4f translate(const Vector3f& v);

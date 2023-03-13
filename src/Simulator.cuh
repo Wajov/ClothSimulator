@@ -8,6 +8,7 @@
 #include <iostream>
 #include <unordered_set>
 #include <chrono>
+#include <filesystem>
 
 #include <glad/glad.h>
 #include <json/json.h>
@@ -21,6 +22,7 @@
 #include "BVHHelper.cuh"
 #include "CollisionHelper.cuh"
 #include "SeparationHelper.cuh"
+#include "Renderer.cuh"
 #include "Pair.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
@@ -37,17 +39,27 @@
 
 extern bool gpu;
 
+enum SimulationMode {
+    Simulate,
+    SimulateOffline,
+    Resume,
+    ResumeOffline,
+    Replay
+};
+
 class Simulator {
 private:
+    SimulationMode mode;
+    Json::Value json;
+    std::string directory;
     Magic* magic;
-    int frameSteps, nSteps, selectedCloth, selectedFace;
+    int frameSteps, nSteps, nFrames;
     float frameTime, dt;
     Vector3f gravity;
     Wind* wind;
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
-    unsigned int fbo, indexTexture, rbo;
-    Shader* indexShader;
+    Renderer* renderer;
     std::vector<BVH*> buildClothBvhs(bool ccd) const;
     std::vector<BVH*> buildObstacleBvhs(bool ccd) const;
     void updateBvhs(std::vector<BVH*>& bvhs) const;
@@ -75,14 +87,22 @@ private:
     void updateFaceGeometries();
     void updateVelocities();
     void updateRenderingData(bool rebind);
+    void step(bool offline);
+    void bind();
+    void render() const;
+    void load();
+    void save();
+    void findLastFrame();
+    void simulate();
+    void simulateOffline();
+    void resume();
+    void resumeOffline();
+    void replay();
 
 public:
-    Simulator(const std::string& path);
+    Simulator(SimulationMode mode, const std::string& path, const std::string& directory);
     ~Simulator();
-    void bind();
-    void render(int width, int height, const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;
-    void step();
-    void printDebugInfo(int x, int y);
+    void start();
 };
 
 #endif
