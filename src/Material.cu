@@ -2,9 +2,10 @@
 
 Material::Material(const Json::Value& json) {
     thicken = parseFloat(json["thicken"]);
-    std::ifstream fin(parseString(json["data"]));
+    std::string path = parseString(json["data"]);
+    std::ifstream fin(path);
     if (!fin.is_open()) {
-        std::cerr << "Failed to open material file: " << json["data"].asString() << std::endl;
+        std::cerr << "Failed to open material file: " << path << std::endl;
         exit(1);
     }
 

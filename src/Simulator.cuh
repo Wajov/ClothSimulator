@@ -28,6 +28,7 @@
 #include "Matrix.cuh"
 #include "Magic.cuh"
 #include "Wind.cuh"
+#include "Motion.cuh"
 #include "Cloth.cuh"
 #include "Obstacle.cuh"
 #include "BVH.cuh"
@@ -53,10 +54,11 @@ private:
     Json::Value json;
     std::string directory;
     Magic* magic;
-    int frameSteps, nSteps, nFrames;
-    float frameTime, dt;
+    int frameSteps, endFrame, nSteps, nFrames;
+    float frameTime, endTime, dt;
     Vector3f gravity;
     Wind* wind;
+    std::vector<Motion*> motions;
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
     Renderer* renderer;
@@ -76,23 +78,27 @@ private:
     Vector3f oldPosition(const Face* face, const Vector3f& b, const std::vector<std::vector<BackupFace>>& faces) const;
     void checkIntersection(const Face* face0, const Face* face1, std::vector<Intersection>& intersections, const std::vector<std::vector<BackupFace>>& faces) const;
     thrust::device_vector<Intersection> findIntersections(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<thrust::device_vector<BackupFace>>& faces) const;
-    void resetObstacles();
+    void obstacleStep();
     void physicsStep();
     void collisionStep();
     void remeshingStep();
     void separationStep(const std::vector<std::vector<BackupFace>>& faces);
     void separationStep(const std::vector<thrust::device_vector<BackupFace>>& faces);
     void updateStructures();
-    void updateNodeGeometries();
-    void updateFaceGeometries();
+    void updateClothNodeGeometries();
+    void updateObstacleNodeGeometries();
+    void updateClothFaceGeometries();
+    void updateObstacleFaceGeometries();
     void updateVelocities();
     void updateRenderingData(bool rebind);
-    void step(bool offline);
+    void simulateStep(bool offline);
+    void replayStep();
     void bind();
     void render() const;
-    void load();
+    bool load();
     void save();
-    void findLastFrame();
+    int lastFrame() const;
+    bool finished() const;
     void simulate();
     void simulateOffline();
     void resume();

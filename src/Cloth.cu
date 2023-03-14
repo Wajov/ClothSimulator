@@ -1,7 +1,7 @@
 #include "Cloth.cuh"
 
 Cloth::Cloth(const Json::Value& json) {
-    Transform* transform = new Transform(json["transform"]);
+    Transformation transformation(json["transform"]);
     Material* materialTemp = new Material(json["materials"]);
     Remeshing* remeshingTemp = new Remeshing(json["remeshing"]);
     if (!gpu) {
@@ -16,15 +16,13 @@ Cloth::Cloth(const Json::Value& json) {
         CUDA_CHECK(cudaMemcpy(remeshing, remeshingTemp, sizeof(Remeshing), cudaMemcpyHostToDevice));
         delete remeshingTemp;
     }
-    mesh = new Mesh(json["mesh"], transform, material);
+    mesh = new Mesh(json["mesh"], transformation, material);
 
     std::vector<int> handleIndices;
     for (const Json::Value& handleJson : json["handles"])
         for (const Json::Value& nodeJson : handleJson["nodes"])
             handleIndices.push_back(parseInt(nodeJson));
     
-    delete transform;
-
     if (!gpu) {
         std::vector<Node*>& nodes = mesh->getNodes();
         handles.resize(handleIndices.size());
@@ -843,8 +841,8 @@ void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix
 }
 
 void Cloth::load(const std::string& path) {
-    Transform* transform = new Transform(Json::nullValue);
-    mesh->load(path, transform, material);
+    Transformation transformation(Json::nullValue);
+    mesh->load(path, transformation, material);
 }
 
 void Cloth::save(const std::string& path, Json::Value& json) const {

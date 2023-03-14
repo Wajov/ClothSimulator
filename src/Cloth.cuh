@@ -25,7 +25,7 @@
 #include "Pair.cuh"
 #include "Vector.cuh"
 #include "Matrix.cuh"
-#include "Transform.cuh"
+#include "Transformation.cuh"
 #include "Mesh.cuh"
 #include "Material.cuh"
 #include "Handle.cuh"

@@ -20,3 +20,12 @@ Vector3f parseVector3f(const Json::Value& json, const Vector3f& d) {
         ans(i) = json[i].asFloat();
     return ans;
 }
+
+Vector4f parseVector4f(const Json::Value& json, const Vector4f& d) {
+    Vector4f ans;
+    if (json.isNull())
+        return d;
+    for (int i = 0; i < 4; i++)
+        ans(i) = json[i].asFloat();
+    return ans;
+}

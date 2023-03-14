@@ -26,7 +26,7 @@
 #include "Edge.cuh"
 #include "Face.cuh"
 #include "Renderable.cuh"
-#include "Transform.cuh"
+#include "Transformation.cuh"
 #include "BackupFace.cuh"
 #include "Operator.cuh"
 
@@ -49,7 +49,7 @@ private:
     void initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
 
 public:
-    Mesh(const Json::Value& json, const Transform* transform, const Material* material);
+    Mesh(const Json::Value& json, const Transformation& transformation, const Material* material);
     ~Mesh();
     std::vector<Node*>& getNodes();
     thrust::device_vector<Node*>& getNodesGpu();
@@ -61,7 +61,6 @@ public:
     thrust::device_vector<Face*>& getFacesGpu();
     bool contain(const Vertex* vertex) const;
     bool contain(const Face* face) const;
-    void reset();
     std::vector<BackupFace> backupFaces() const;
     thrust::device_vector<BackupFace> backupFacesGpu() const;
     void apply(const Operator& op);
@@ -73,7 +72,7 @@ public:
     void updateRenderingData(bool rebind);
     void bind();
     void render() const;
-    void load(const std::string& path, const Transform* transform, const Material* material);
+    void load(const std::string& path, const Transformation& transformation, const Material* material);
     void save(const std::string& path);
     void check() const;
 };

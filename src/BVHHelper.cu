@@ -292,8 +292,8 @@ __global__ void findNearestPointGpu(int nNodes, const Vector3f* x, const BVHNode
             const BVHNode* left = node->left;
             const BVHNode* right = node->right;
             
-            bool overlapLeft = left->bounds.distance(xt) >= point.d;
-            bool overlapRight = right->bounds.distance(xt) >= point.d;
+            bool overlapLeft = left->bounds.distance(xt) < point.d;
+            bool overlapRight = right->bounds.distance(xt) < point.d;
             if (overlapLeft && left->isLeaf())
                 checkNearestPoint(xt, left->face, point);
             if (overlapRight && right->isLeaf())

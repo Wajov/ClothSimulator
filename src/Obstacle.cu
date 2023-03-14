@@ -1,9 +1,25 @@
 #include "Obstacle.cuh"
 
-Obstacle::Obstacle(const Json::Value& json) {
-    Transform* transform = new Transform(json["transform"]);
-    mesh = new Mesh(json["mesh"], transform, nullptr);
-    delete transform;
+Obstacle::Obstacle(const Json::Value& json, const std::vector<Motion*>& motions) {
+    Transformation transformation(json["transform"]);
+    mesh = new Mesh(json["mesh"], transformation, nullptr);
+
+    if (!gpu) {
+        std::vector<Node*>& nodes = mesh->getNodes();
+        int nNodes = nodes.size();
+        base.resize(nNodes);
+        for (int i = 0; i < nNodes; i++)
+            base[i] = nodes[i]->x;
+    } else {
+        thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
+        int nNodes = nodes.size();
+        baseGpu.resize(nNodes);
+        setBase<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodes), pointer(baseGpu));
+        CUDA_CHECK_LAST();
+    }
+
+    motion = json["motion"].isNull() ? nullptr : motions[parseInt(json["motion"])];
+    transform(0.0f);
 }
 
 Obstacle::~Obstacle() {
@@ -13,6 +29,26 @@ Obstacle::~Obstacle() {
 
 Mesh* Obstacle::getMesh() const {
     return mesh;
+}
+
+void Obstacle::transform(float time) {
+    if (motion != nullptr) {
+        Transformation transformation = motion->computeTransformation(time);
+        if (!gpu) {
+            std::vector<Node*>& nodes = mesh->getNodes();
+
+            for (int i = 0; i < nodes.size(); i++) {
+                Node* node = nodes[i];
+                node->x0 = node->x;
+                node->x = transformation.applyToPoint(base[i]);
+            }
+        } else {
+            thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
+            
+            transformGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodes.size(), pointer(baseGpu), transformation, pointer(nodes));
+            CUDA_CHECK_LAST();
+        }
+    }
 }
 
 void Obstacle::bind() {
@@ -28,17 +64,5 @@ void Obstacle::render(const Matrix4x4f& model, const Matrix4x4f& view, const Mat
     shader->setVec3("color", Vector3f(0.8f, 0.8f, 0.8f));
     shader->setVec3("cameraPosition", cameraPosition);
     shader->setVec3("lightDirection", lightDirection);
-    shader->setInt("selectedFace", -1);
     mesh->render();
-}
-
-void Obstacle::load(const std::string& path) {
-    Transform* transform = new Transform(Json::nullValue);
-    mesh->load(path, transform, nullptr);
-}
-
-void Obstacle::save(const std::string& path, Json::Value& json) {
-    json["mesh"] = path;
-    json["transform"] = Json::nullValue;
-    mesh->save(path);
 }

@@ -1,7 +1,8 @@
 #include "Mesh.cuh"
 
-Mesh::Mesh(const Json::Value &json, const Transform* transform, const Material* material) {
-    load(json.asString(), transform, material);
+Mesh::Mesh(const Json::Value &json, const Transformation& transformation, const Material* material) {
+    std::string path = parseString(json);
+    load(path, transformation, material);
 }
 
 Mesh::~Mesh() {
@@ -189,16 +190,6 @@ bool Mesh::contain(const Vertex* vertex) const {
 
 bool Mesh::contain(const Face* face) const {
     return contain(face->vertices[0]) && contain(face->vertices[1]) && contain(face->vertices[2]);
-}
-
-void Mesh::reset() {
-    if (!gpu)
-        for (Node* node : nodes)
-            node->x = node->x0;
-    else {
-        resetGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
-        CUDA_CHECK_LAST();
-    }
 }
 
 std::vector<BackupFace> Mesh::backupFaces() const {
@@ -414,7 +405,7 @@ void Mesh::render() const {
     glBindVertexArray(0);
 }
 
-void Mesh::load(const std::string& path, const Transform* transform, const Material* material) {
+void Mesh::load(const std::string& path, const Transformation& transformation, const Material* material) {
     std::ifstream fin(path);
     if (!fin.is_open()) {
         std::cerr << "Failed to open mesh file: " << path << std::endl;
@@ -428,9 +419,9 @@ void Mesh::load(const std::string& path, const Transform* transform, const Mater
     while (getline(fin, line)) {
         std::vector<std::string> s = std::move(split(line, ' '));
         if (s[0] == "v")
-            x.push_back(transform->applyToPoint(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
+            x.push_back(transformation.applyToPoint(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
         else if (s[0] == "nv")
-            v.push_back(transform->applyToVector(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
+            v.push_back(transformation.applyToVector(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
         else if (s[0] == "vt")
             u.emplace_back(std::stof(s[1]), std::stof(s[2]));
         else if (s[0] == "f")

@@ -14,11 +14,12 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
         std::cerr << "Failed to open configuration file: " << path << std::endl;
         exit(1);
     }
-
     fin >> json;
+    fin.close();
 
     frameTime = parseFloat(json["frame_time"]);
     frameSteps = parseInt(json["frame_steps"]);
+    endTime = parseFloat(json["end_time"], INFINITY);
     dt =  frameTime / frameSteps;
 
     gravity = parseVector3f(json["gravity"]);
@@ -32,6 +33,10 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
     }
     
     magic = new Magic(json["magic"]);
+
+    motions.resize(json["motions"].size());
+    for (int i = 0; i < json["motions"].size(); i++)
+        motions[i] = new Motion(json["motions"][i]);
     
     cloths.resize(json["cloths"].size());
     for (int i = 0; i < json["cloths"].size(); i++)
@@ -39,13 +44,13 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
 
     obstacles.resize(json["obstacles"].size());
     for (int i = 0; i < json["obstacles"].size(); i++)
-        obstacles[i] = new Obstacle(json["obstacles"][i]);
-
-    fin.close();
+        obstacles[i] = new Obstacle(json["obstacles"][i], motions);
 }
 
 Simulator::~Simulator() {
     delete magic;
+    for (const Motion* motion : motions)
+        delete motion;
     for (const Cloth* cloth : cloths)
         delete cloth;
     for (const Obstacle* obstacle : obstacles)
@@ -315,26 +320,31 @@ thrust::device_vector<Intersection> Simulator::findIntersections(const std::vect
     return ans;
 }
 
-void Simulator::resetObstacles() {
+void Simulator::obstacleStep() {
     for (Obstacle* obstacle : obstacles)
-        obstacle->getMesh()->reset();
+        obstacle->transform(nSteps * dt);
+    
+    updateObstacleNodeGeometries();
+    updateObstacleFaceGeometries();
 }
 
 void Simulator::physicsStep() {
     for (Cloth* cloth : cloths)
         cloth->physicsStep(dt, magic->handleStiffness, gravity, wind);
-    updateNodeGeometries();
-    updateFaceGeometries();
+
+    updateClothNodeGeometries();
+    updateClothFaceGeometries();
 }
 
 void Simulator::collisionStep() {
     std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(true));
     std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(true));
+    int deform;
     float obstacleMass = 1e3f;
 
     if (!gpu) {
         std::vector<Impact> impacts;
-        for (int deform = 0; deform < 2; deform++) {
+        for (deform = 0; deform < 2; deform++) {
             impacts.clear();
             bool success = false;
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
@@ -367,7 +377,7 @@ void Simulator::collisionStep() {
         }
     } else {
         thrust::device_vector<Impact> impacts;
-        for (int deform = 0; deform < 2; deform++) {
+        for (deform = 0; deform < 2; deform++) {
             impacts.clear();
             bool success = false;
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
@@ -397,9 +407,13 @@ void Simulator::collisionStep() {
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
 
-    updateNodeGeometries();
-    updateFaceGeometries();
+    updateClothNodeGeometries();
+    updateClothFaceGeometries();
     updateVelocities();
+    if (deform == 1) {
+        updateObstacleNodeGeometries();
+        updateObstacleFaceGeometries();
+    }
 }
 
 void Simulator::remeshingStep() {
@@ -410,17 +424,18 @@ void Simulator::remeshingStep() {
     destroyBvhs(obstacleBvhs);
 
     updateStructures();
-    updateNodeGeometries();
-    updateFaceGeometries();
+    updateClothNodeGeometries();
+    updateClothFaceGeometries();
 }
 
 void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces) {
     std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(false));
     std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
+    int deform;
     float obstacleArea = 1e3f;
 
     std::vector<Intersection> intersections;
-    for (int deform = 0; deform < 2; deform++) {
+    for (deform = 0; deform < 2; deform++) {
         intersections.clear();
         bool success = false;
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
@@ -441,9 +456,10 @@ void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces
             optimization->solve();
             delete optimization;
 
-            updateFaceGeometries();
+            updateClothFaceGeometries();
             updateBvhs(clothBvhs);
             if (deform == 1) {
+                updateObstacleFaceGeometries();
                 updateBvhs(obstacleBvhs);
                 obstacleArea *= 0.5f;
             }
@@ -455,17 +471,20 @@ void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
 
-    updateNodeGeometries();
+    updateClothNodeGeometries();
     updateVelocities();
+    if (deform == 1)
+        updateObstacleNodeGeometries();
 }
 
 void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFace>>& faces) {
     std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(false));
     std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
+    int deform;
     float obstacleArea = 1e3f;
 
     thrust::device_vector<Intersection> intersections;
-    for (int deform = 0; deform < 2; deform++) {
+    for (deform = 0; deform < 2; deform++) {
         intersections.clear();
         bool success = false;
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
@@ -480,9 +499,10 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
             optimization->solve();
             delete optimization;
 
-            updateFaceGeometries();
+            updateClothFaceGeometries();
             updateBvhs(clothBvhs);
             if (deform == 1) {
+                updateObstacleFaceGeometries();
                 updateBvhs(obstacleBvhs);
                 obstacleArea *= 0.5f;
             }
@@ -494,8 +514,10 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
 
-    updateNodeGeometries();
+    updateClothNodeGeometries();
     updateVelocities();
+    if (deform == 1)
+        updateObstacleNodeGeometries();
 }
 
 void Simulator::updateStructures() {
@@ -503,14 +525,24 @@ void Simulator::updateStructures() {
         cloth->getMesh()->updateStructures();
 }
 
-void Simulator::updateNodeGeometries() {
+void Simulator::updateClothNodeGeometries() {
     for (Cloth* cloth : cloths)
         cloth->getMesh()->updateNodeGeometries();
 }
 
-void Simulator::updateFaceGeometries() {
+void Simulator::updateObstacleNodeGeometries() {
+    for (Obstacle* obstacle : obstacles)
+        obstacle->getMesh()->updateNodeGeometries();
+}
+
+void Simulator::updateClothFaceGeometries() {
     for (Cloth* cloth : cloths)
         cloth->getMesh()->updateFaceGeometries();
+}
+
+void Simulator::updateObstacleFaceGeometries() {
+    for (Obstacle* obstacle : obstacles)
+        obstacle->getMesh()->updateFaceGeometries();
 }
 
 void Simulator::updateVelocities() {
@@ -521,14 +553,17 @@ void Simulator::updateVelocities() {
 void Simulator::updateRenderingData(bool rebind) {
     for (Cloth* cloth : cloths)
         cloth->getMesh()->updateRenderingData(rebind);
+    for (Obstacle* obstacle : obstacles)
+        obstacle->getMesh()->updateRenderingData(false);
 }
 
-void Simulator::step(bool offline) {
-    nSteps++;
-    std::cout << "Step [" << nSteps << "]:" << std::endl;
+void Simulator::simulateStep(bool offline) {
+    if ((++nSteps) % frameSteps == 0)
+        nFrames++;
+    std::cout << "Frame [" << nFrames << "], Step [" << nSteps << "]:" << std::endl;
 
-    resetObstacles();
-    
+    obstacleStep();
+
     std::chrono::duration<float> d;
     auto t0 = std::chrono::high_resolution_clock::now();
     
@@ -543,7 +578,6 @@ void Simulator::step(bool offline) {
     std::cout << ", Collision Step: " << d.count() << "s";
     
     if (nSteps % frameSteps == 0) {
-        nFrames++;
         if (!gpu) {
             std::vector<std::vector<BackupFace>> faces(cloths.size());
             for (int i = 0; i < cloths.size(); i++)
@@ -584,6 +618,20 @@ void Simulator::step(bool offline) {
     std::cout << std::endl;
 }
 
+void Simulator::replayStep() {
+    if (nFrames == endFrame)
+        return;
+
+    nSteps += frameSteps;
+    nFrames++;
+    std::cout << "Frame [" << nFrames << "]" << std::endl;
+
+    if (load()) {
+        obstacleStep();
+        updateRenderingData(true);
+    }
+}
+
 void Simulator::bind() {
     for (Cloth* cloth : cloths)
         cloth->bind();
@@ -605,40 +653,45 @@ void Simulator::render() const {
         obstacle->render(model, view, projection, cameraPosition, lightDirection);
 }
 
-void Simulator::load() {
+bool Simulator::load() {
     for (int i = 0; i < cloths.size(); i++) {
         std::string path = directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj";
-        if (std::filesystem::exists(path))
-            cloths[i]->load(path);
+        if (!std::filesystem::exists(path))
+            return false;
     }
-    nFrames++;
+
+    for (int i = 0; i < cloths.size(); i++) {
+        std::string path = directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj";
+        cloths[i]->load(path);
+    }
 }
 
 void Simulator::save() {
     for (int i = 0; i < cloths.size(); i++)
         cloths[i]->save(directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj", json["cloths"][i]);
-    
-    for (int i = 0; i < obstacles.size(); i++)
-        obstacles[i]->save(directory + "/frame" + std::to_string(nFrames) + "_obstacle" + std::to_string(i) + ".obj", json["obstacles"][i]);
 
     std::ofstream fout(directory + "/config.json");
     fout << json;
 }
 
-void Simulator::findLastFrame() {
+int Simulator::lastFrame() const {
+    int ans = 0;
     bool flag;
     do {
-        nFrames++;
+        ans++;
         flag = true;
         for (int i = 0; i < cloths.size(); i++)
-            if (!std::filesystem::exists(directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj")) {
+            if (!std::filesystem::exists(directory + "/frame" + std::to_string(ans) + "_cloth" + std::to_string(i) + ".obj")) {
                 flag = false;
                 break;
             }
     } while (flag);
 
-    nFrames--;
-    nSteps = nFrames * frameSteps;
+    return ans - 1;
+}
+
+bool Simulator::finished() const {
+    return (nSteps + 1) * dt >= endTime;
 }
 
 void Simulator::simulate() {
@@ -659,13 +712,13 @@ void Simulator::simulate() {
     }
     bind();
 
-    while (!glfwWindowShouldClose(renderer->getWindow())) {
+    while (!glfwWindowShouldClose(renderer->getWindow()) && !finished()) {
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         render();
         if (!renderer->getPause())
-            step(false);
+            simulateStep(false);                
 
         glfwSwapBuffers(renderer->getWindow());
         glfwPollEvents();
@@ -693,21 +746,23 @@ void Simulator::simulateOffline() {
     }
     save();
 
-    while (true)
-        step(true);
+    while (!finished())
+        simulateStep(true);
 }
 
 void Simulator::resume() {
-    findLastFrame();
+    nFrames = lastFrame();
+    nSteps = nFrames * frameSteps;
+    obstacleStep();
     bind();
     
-    while (!glfwWindowShouldClose(renderer->getWindow())) {
+    while (!glfwWindowShouldClose(renderer->getWindow()) && !finished()) {
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         render();
         if (!renderer->getPause())
-            step(false);
+            simulateStep(false);
 
         glfwSwapBuffers(renderer->getWindow());
         glfwPollEvents();
@@ -715,13 +770,16 @@ void Simulator::resume() {
 }
 
 void Simulator::resumeOffline() {
-    findLastFrame();
+    nFrames = lastFrame();
+    nSteps = nFrames * frameSteps;
+    obstacleStep();
 
-    while (true)
-        step(true);
+    while (!finished())
+        simulateStep(true);
 }
 
 void Simulator::replay() {
+    endFrame = lastFrame();
     load();
     bind();
 
@@ -732,10 +790,8 @@ void Simulator::replay() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         render();
-        if (!renderer->getPause()) {
-            load();
-            updateRenderingData(true);
-        }
+        if (!renderer->getPause())
+            replayStep();
 
         glfwSwapBuffers(renderer->getWindow());
         glfwPollEvents();

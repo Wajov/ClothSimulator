@@ -95,15 +95,6 @@ __global__ void setPreserve(int nEdges, const Edge* const* edges) {
     }
 }
 
-__global__ void resetGpu(int nNodes, Node** nodes) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        Node* node = nodes[i];
-        node->x = node->x0;
-    }
-}
-
 __global__ void setBackupFaces(int nFaces, const Face* const* faces, BackupFace* backupFaces) {
     int nThreads = gridDim.x * blockDim.x;
 

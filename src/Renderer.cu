@@ -54,6 +54,87 @@ Renderer::~Renderer() {
     glfwTerminate();
 }
 
+Matrix4x4f Renderer::scale(float scaling) const {
+    Matrix4x4f ans;
+
+    ans(0, 0) = ans(1, 1) = ans(2, 2) = scaling;
+    ans(3, 3) = 1.0f;
+
+    return ans;
+}
+
+Matrix4x4f Renderer::rotate(const Vector3f& v, float angle) const {
+    Vector3f axis = v.normalized();
+    float s = sin(angle);
+    float c = cos(angle);
+    Matrix4x4f ans;
+
+    ans(0, 0) = (1.0f - c) * axis(0) * axis(0) + c;
+    ans(0, 1) = (1.0f - c) * axis(1) * axis(0) - s * axis(2);
+    ans(0, 2) = (1.0f - c) * axis(2) * axis(0) + s * axis(1);
+
+    ans(1, 0) = (1.0f - c) * axis(0) * axis(1) + s * axis(2);
+    ans(1, 1) = (1.0f - c) * axis(1) * axis(1) + c;
+    ans(1, 2) = (1.0f - c) * axis(2) * axis(1) - s * axis(0);
+
+    ans(2, 0) = (1.0f - c) * axis(0) * axis(2) - s * axis(1);
+    ans(2, 1) = (1.0f - c) * axis(1) * axis(2) + s * axis(0);
+    ans(2, 2) = (1.0f - c) * axis(2) * axis(2) + c;
+
+    ans(3, 3) = 1.0f;
+
+    return ans;
+}
+
+Matrix4x4f Renderer::translate(const Vector3f& v) const {
+    Matrix4x4f ans(1.0f);
+
+    ans(0, 3) = v(0);
+    ans(1, 3) = v(1);
+    ans(2, 3) = v(2);
+
+    return ans;
+}
+
+Matrix4x4f Renderer::lookAt(const Vector3f& position, const Vector3f& center, const Vector3f& up) const {
+    Vector3f f = (center - position).normalized();
+    Vector3f s = f.cross(up).normalized();
+    Vector3f u = s.cross(f);
+    Matrix4x4f ans;
+
+    ans(0, 0) = s(0);
+    ans(0, 1) = s(1);
+    ans(0, 2) = s(2);
+    ans(0, 3) = -s.dot(position);
+
+    ans(1, 0) = u(0);
+    ans(1, 1) = u(1);
+    ans(1, 2) = u(2);
+    ans(1, 3) = -u.dot(position);
+
+    ans(2, 0) = -f(0);
+    ans(2, 1) = -f(1);
+    ans(2, 2) = -f(2);
+    ans(2, 3) = f.dot(position);
+
+    ans(3, 3) = 1.0f;
+
+    return ans;
+}
+
+Matrix4x4f Renderer::perspective(float fovy, float aspect, float zNear, float zFar) const {
+    float t = tan(fovy * 0.5f);
+    Matrix4x4f ans;
+
+    ans(0, 0) = 1.0f / (aspect * t);
+    ans(1, 1) = 1.0f / t;
+    ans(2, 2) = -(zNear + zFar) / (zFar - zNear);
+    ans(2, 3) = -2.0f * zNear * zFar / (zFar - zNear);
+    ans(3, 2) = -1.0f;
+
+    return ans;
+}
+
 void Renderer::framebufferSizeCallback(int width, int height) {
     this->width = width;
     this->height = height;
@@ -77,7 +158,7 @@ void Renderer::cursorPosCallback(double x, double y) {
         Vector3f b = (Vector3f(static_cast<float>(x) / width - 0.5f, 0.5f - static_cast<float>(y) / height, 1.0f)).normalized();
         Vector3f axis = a.cross(b);
         float angle = a.dot(b);
-        rotation = Transform::rotate(axis, 10.0f * acos(angle)) * rotation;
+        rotation = rotate(axis, 10.0f * acos(angle)) * rotation;
     }
 
     lastX = x;
@@ -113,13 +194,13 @@ Vector3f Renderer::getCameraPosition() const {
 }
 
 Matrix4x4f Renderer::getModel() const {
-    return Transform::scale(static_cast<float>(scaling)) * rotation;
+    return scale(static_cast<float>(scaling)) * rotation;
 }
 
 Matrix4x4f Renderer::getView() const {
-    return Transform::lookAt(cameraPosition, Vector3f(0.0f, -0.25f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
+    return lookAt(cameraPosition, Vector3f(0.0f, -0.25f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 }
 
 Matrix4x4f Renderer::getProjection() const {
-    return Transform::perspective(45.0f, static_cast<float>(width) / height, 0.1f, 100.0f);
+    return perspective(45.0f, static_cast<float>(width) / height, 0.1f, 100.0f);
 }

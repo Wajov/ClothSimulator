@@ -82,10 +82,9 @@ __global__ void setNearestPlane(int nNodes, const Vector3f* x, const NearPoint* 
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        Vector3f xt = points[i].x;
-        Vector3f n = x[i] - xt;
+        Vector3f n = x[i] - points[i].x;
         if (n.norm2() > 1e-8f)
-            planes[i] = Plane(xt, n.normalized());
+            planes[i] = Plane(points[i].x, n.normalized());
     }
 }
 
@@ -833,5 +832,14 @@ __global__ void collapseGpu(int nEdges, const Pairei* edges, const Material* mat
                 }
             }
         }
+    }
+}
+
+__global__ void printPlanes(int nPlanes, const Plane* planes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nPlanes; i += nThreads) {
+        const Plane& plane = planes[i];
+        printf("%f %f %f %f %f %f\n", plane.p(0), plane.p(1), plane.p(2), plane.n(0),  plane.n(1), plane.n(2));
     }
 }
