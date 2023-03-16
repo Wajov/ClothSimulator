@@ -39,7 +39,7 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     return ans;
 }
 
-Edge* Mesh::findEdge(int index0, int index1, std::map<Pairii, int>& edgeMap) {
+Edge* Mesh::findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap) {
     if (index0 > index1)
         mySwap(index0, index1);
     Pairii index(index0, index1);
@@ -68,7 +68,7 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f
         for (int i = 0; i < u.size(); i++)
             vertices[i] = new Vertex(u[i]);
 
-        std::map<Pairii, int> edgeMap;
+        std::unordered_map<Pairii, int, PairHash> edgeMap;
         for (int i = 0; i < xIndices.size(); i += 3) {
             int xIndex0 = xIndices[i];
             int xIndex1 = xIndices[i + 1];
@@ -84,11 +84,11 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f
             Edge* edge0 = findEdge(xIndex0, xIndex1, edgeMap);
             Edge* edge1 = findEdge(xIndex1, xIndex2, edgeMap);
             Edge* edge2 = findEdge(xIndex2, xIndex0, edgeMap);
-            Face* face = new Face(vertex0, vertex1, vertex2, material);
-
             vertex0->node = nodes[xIndex0];
             vertex1->node = nodes[xIndex1];
             vertex2->node = nodes[xIndex2];
+            Face* face = new Face(vertex0, vertex1, vertex2, material);
+
             edge0->initialize(vertex2, face);
             edge1->initialize(vertex0, face);
             edge2->initialize(vertex1, face);
@@ -146,9 +146,8 @@ void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f
     }
 
     updateIndices();
-    updateStructures();
-    updateNodeGeometries();
     updateFaceGeometries();
+    updateNodeGeometries();
 }
 
 std::vector<Node*>& Mesh::getNodes() {
@@ -181,6 +180,11 @@ std::vector<Face*>& Mesh::getFaces() {
 
 thrust::device_vector<Face*>& Mesh::getFacesGpu() {
     return facesGpu;
+}
+
+bool Mesh::contain(const Node* node) const {
+    int index = node->index;
+    return index < nodes.size() && nodes[index] == node;
 }
 
 bool Mesh::contain(const Vertex* vertex) const {
@@ -276,43 +280,26 @@ void Mesh::updateIndices() {
     }
 }
 
-void Mesh::updateStructures() {
-    if (!gpu) {
-        for (Node* node : nodes) {
-            node->mass = 0.0f;
-            node->area = 0.0f;
-        }        
-        for (const Face* face : faces) {
-            float mass = face->mass / 3.0f;
-            float area = face->area;
-            for (int i = 0; i < 3; i++) {
-                Node* node = face->vertices[i]->node;
-                node->mass += mass;
-                node->area += area;
-            }
-        }
-    } else {
-        initializeNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
-        CUDA_CHECK_LAST();
-
-        updateNodeStructures<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
-        CUDA_CHECK_LAST();
-    }
-}
-
 void Mesh::updateNodeGeometries() {
     if (!gpu) {
         for (Node* node : nodes) {
             node->x1 = node->x;
             node->n = Vector3f();
+            node->area = 0.0f;
+            node->mass = 0.0f;
         }
-        for (const Face* face : faces)
+        for (const Face* face : faces) {
+            float area = face->area / 3.0f;
+            float mass = face->mass / 3.0f;
             for (int i = 0; i < 3; i++) {
                 Node* node = face->vertices[i]->node;
                 Vector3f e0 = face->vertices[(i + 1) % 3]->node->x - node->x;
                 Vector3f e1 = face->vertices[(i + 2) % 3]->node->x - node->x;
                 node->n += e0.cross(e1) / (e0.norm2() * e1.norm2());
+                node->area += area;
+                node->mass += mass;
             }
+        }
         for (Node* node : nodes)
             node->n.normalize();
     } else {
@@ -333,6 +320,18 @@ void Mesh::updateFaceGeometries() {
             face->update();
     else {
         updateFaceGeometriesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
+        CUDA_CHECK_LAST();
+    }
+}
+
+void Mesh::updatePositions(float dt) {
+    if (!gpu)
+        for (Node* node : nodes) {
+            node->x0 = node->x;
+            node->x += dt * node->v;
+        }
+    else {
+        updatePositionsGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), dt, pointer(nodesGpu));
         CUDA_CHECK_LAST();
     }
 }

@@ -10,5 +10,6 @@
 
 __global__ void setBase(int nNodes, const Node* const* nodes, Vector3f* base);
 __global__ void transformGpu(int nNodes, const Vector3f* base, const Transformation transformation, Node** nodes);
+__global__ void stepGpu(int nNodes, float invDt, const Vector3f* base, const Transformation transformation, Node** nodes);
 
 #endif

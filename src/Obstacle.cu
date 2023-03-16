@@ -39,13 +39,36 @@ void Obstacle::transform(float time) {
 
             for (int i = 0; i < nodes.size(); i++) {
                 Node* node = nodes[i];
-                node->x0 = node->x;
-                node->x = transformation.applyToPoint(base[i]);
+                node->x0 = node->x = transformation.applyToPoint(base[i]);
             }
         } else {
             thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
             
             transformGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodes.size(), pointer(baseGpu), transformation, pointer(nodes));
+            CUDA_CHECK_LAST();
+        }
+    }
+
+    mesh->updateFaceGeometries();
+    mesh->updateNodeGeometries();
+}
+
+void Obstacle::step(float time, float dt) {
+    if (motion != nullptr) {
+        float invDt = 1.0f / dt;
+        Transformation transformation = motion->computeTransformation(time);
+        if (!gpu) {
+            std::vector<Node*>& nodes = mesh->getNodes();
+
+            for (int i = 0; i < nodes.size(); i++) {
+                Node* node = nodes[i];
+                Vector3f x = transformation.applyToPoint(base[i]);
+                node->v = (x - node->x0) * invDt;
+            }
+        } else {
+            thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
+            
+            stepGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodes.size(), invDt, pointer(baseGpu), transformation, pointer(nodes));
             CUDA_CHECK_LAST();
         }
     }

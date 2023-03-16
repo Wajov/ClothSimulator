@@ -119,7 +119,7 @@ __global__ void computeInternalBounds(int nNodes, BVHNode* nodes) {
     }
 }
 
-__global__ void countProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num) {
+__global__ void countPairsSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num) {
     int nThreads = gridDim.x * blockDim.x;
 
     const BVHNode* stack[64];
@@ -155,7 +155,7 @@ __global__ void countProximitiesSelf(int nLeaves, const BVHNode* leaves, const B
     }
 }
 
-__global__ void findProximitiesSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities) {
+__global__ void findPairsSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, PairFF* pairs) {
     int nThreads = gridDim.x * blockDim.x;
 
     const BVHNode* stack[64];
@@ -175,14 +175,14 @@ __global__ void findProximitiesSelf(int nLeaves, const BVHNode* leaves, const BV
             bool overlapLeft = i < left->maxIndex && bounds.overlap(left->bounds, thickness);
             bool overlapRight = i < right->maxIndex && bounds.overlap(right->bounds, thickness);
             if (overlapLeft && left->isLeaf()) {
-                Proximity& proximity = proximities[index--];
-                proximity.first = face;
-                proximity.second = left->face;
+                PairFF& pair = pairs[index--];
+                pair.first = face;
+                pair.second = left->face;
             }
             if (overlapRight && right->isLeaf()) {
-                Proximity& proximity = proximities[index--];
-                proximity.first = face;
-                proximity.second = right->face;
+                PairFF& pair = pairs[index--];
+                pair.first = face;
+                pair.second = right->face;
             }
             
             bool traverseLeft = (overlapLeft && !left->isLeaf());
@@ -198,7 +198,7 @@ __global__ void findProximitiesSelf(int nLeaves, const BVHNode* leaves, const BV
     }
 }
 
-__global__ void countProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num) {
+__global__ void countPairs(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num) {
     int nThreads = gridDim.x * blockDim.x;
 
     const BVHNode* stack[64];
@@ -234,7 +234,7 @@ __global__ void countProximities(int nLeaves, const BVHNode* leaves, const BVHNo
     }
 }
 
-__global__ void findProximities(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, Proximity* proximities) {
+__global__ void findPairs(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, PairFF* pairs) {
     int nThreads = gridDim.x * blockDim.x;
 
     const BVHNode* stack[64];
@@ -254,14 +254,14 @@ __global__ void findProximities(int nLeaves, const BVHNode* leaves, const BVHNod
             bool overlapLeft = bounds.overlap(left->bounds, thickness);
             bool overlapRight = bounds.overlap(right->bounds, thickness);
             if (overlapLeft && left->isLeaf()) {
-                Proximity& proximity = proximities[index--];
-                proximity.first = face;
-                proximity.second = left->face;
+                PairFF& pair = pairs[index--];
+                pair.first = face;
+                pair.second = left->face;
             }
             if (overlapRight && right->isLeaf()) {
-                Proximity& proximity = proximities[index--];
-                proximity.first = face;
-                proximity.second = right->face;
+                PairFF& pair = pairs[index--];
+                pair.first = face;
+                pair.second = right->face;
             }
             
             bool traverseLeft = (overlapLeft && !left->isLeaf());

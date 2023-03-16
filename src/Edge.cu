@@ -59,6 +59,10 @@ void Edge::replaceAdjacent(const Face* f, const Face* face) {
         }
 }
 
+bool Edge::isFree() const {
+    return nodes[0]->isFree && nodes[1]->isFree;
+}
+
 bool Edge::isBoundary() const {
     return adjacents[0] == nullptr || adjacents[1] == nullptr;
 }
@@ -75,6 +79,14 @@ Bounds Edge::bounds(bool ccd) const {
         if (ccd)
             ans += node->x0;
     }
+    return ans;
+}
+
+__host__ __device__ float Edge::area() const {
+    float ans = 0.0f;
+    for (int i = 0; i < 2; i++)
+        if (adjacents[i] != nullptr)
+            ans += adjacents[i]->area;
     return ans;
 }
 

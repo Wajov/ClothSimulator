@@ -15,7 +15,9 @@
 #include "Wind.cuh"
 #include "Handle.cuh"
 #include "Material.cuh"
+#include "Proximity.cuh"
 
+__host__ __device__ bool inEdge(float w, const Edge* edge0, const Edge* edge1);
 __global__ void addMass(int nNodes, const Node* const* nodes, Pairii* aIndices, float* aValues);
 __global__ void addGravity(int nNodes, const Node* const* nodes, float dt, const Vector3f gravity, int* bIndices, float* bValues);
 __global__ void addWindForces(int nFaces, const Face* const* faces, float dt, const Wind* wind, int* bIndices, float* bValues);
@@ -26,6 +28,7 @@ __host__ __device__ Vector2f barycentricWeights(const Vector3f& x, const Vector3
 __host__ __device__ void bendingForce(const Edge* edge, const Material* material, Vector12f& f, Matrix12x12f& J);
 __global__ void addBendingForces(int nEdges, const Edge* const* edges, float dt, const Material* material, Pairii* aIndices, float* aValues, int* bIndices, float* bValues);
 __global__ void addHandleForcesGpu(int nHandles, const Handle* handles, float dt, float stiffness, Pairii* aIndices, float* aValues, int* bIndices, float* bValues);
+__host__ __device__ void impulseForce(const Proximity& proximity, float thickness, Vector12f& f, Matrix12x12f& J);
 __global__ void splitIndices(int nIndices, const Pairii* indices, int* rowIndices, int* colIndices);
 __global__ void setVector(int nIndices, const int* indices, const float* values, float* v);
 __global__ void updateNodes(int nNodes, float dt, const float* dv, Node** nodes);

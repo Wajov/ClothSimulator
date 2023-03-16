@@ -45,7 +45,7 @@ private:
     thrust::device_vector<Face*> facesGpu;
     cudaGraphicsResource* vboCuda;
     std::vector<std::string> split(const std::string& s, char c) const;
-    Edge* findEdge(int index0, int index1, std::map<Pairii, int>& edgeMap);
+    Edge* findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap);
     void initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
 
 public:
@@ -59,15 +59,16 @@ public:
     thrust::device_vector<Edge*>& getEdgesGpu();
     std::vector<Face*>& getFaces();
     thrust::device_vector<Face*>& getFacesGpu();
+    bool contain(const Node* node) const;
     bool contain(const Vertex* vertex) const;
     bool contain(const Face* face) const;
     std::vector<BackupFace> backupFaces() const;
     thrust::device_vector<BackupFace> backupFacesGpu() const;
     void apply(const Operator& op);
     void updateIndices();
-    void updateStructures();
     void updateNodeGeometries();
     void updateFaceGeometries();
+    void updatePositions(float dt);
     void updateVelocities(float dt);
     void updateRenderingData(bool rebind);
     void bind();

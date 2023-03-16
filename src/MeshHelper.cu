@@ -130,31 +130,6 @@ __global__ void updateVertexIndices(int nVertices, Vertex** vertices) {
         vertices[i]->index = i;
 }
 
-__global__ void initializeNodeStructures(int nNodes, Node** nodes) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        Node* node = nodes[i];
-        node->mass = 0.0f;
-        node->area = 0.0f;
-    }
-}
-
-__global__ void updateNodeStructures(int nFaces, const Face* const* faces) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
-        const Face* face = faces[i];
-        float mass = face->mass / 3.0f;
-        float area = face->area;
-        for (int j = 0; j < 3; j++) {
-            Node* node = face->vertices[j]->node;
-            atomicAdd(&node->mass, mass);
-            atomicAdd(&node->area, area);
-        }
-    }
-}
-
 __global__ void initializeNodeGeometries(int nNodes, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
@@ -162,6 +137,8 @@ __global__ void initializeNodeGeometries(int nNodes, Node** nodes) {
         Node* node = nodes[i];
         node->x1 = node->x;
         node->n = Vector3f();
+        node->area = 0.0f;
+        node->mass = 0.0f;
     }
 }
 
@@ -170,6 +147,8 @@ __global__ void updateNodeGeometriesGpu(int nFaces, const Face* const* faces) {
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
         const Face* face = faces[i];
+        float area = face->area / 3.0f;
+        float mass = face->mass / 3.0f;
         for (int j = 0; j < 3; j++) {
             Node* node = face->vertices[j]->node;
             Vector3f e0 = face->vertices[(j + 1) % 3]->node->x - node->x;
@@ -177,6 +156,8 @@ __global__ void updateNodeGeometriesGpu(int nFaces, const Face* const* faces) {
             Vector3f n = e0.cross(e1) / (e0.norm2() * e1.norm2());
             for (int k = 0; k < 3; k++)
                 atomicAdd(&node->n(k), n(k));
+            atomicAdd(&node->area, area);
+            atomicAdd(&node->mass, mass);
         }
     }
 }
@@ -193,6 +174,16 @@ __global__ void updateFaceGeometriesGpu(int nFaces, Face** faces) {
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads)
         faces[i]->update();
+}
+
+__global__ void updatePositionsGpu(int nNodes, float dt, Node** nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Node* node = nodes[i];
+        node->x0 = node->x;
+        node->x += dt * node->v;
+    }
 }
 
 __global__ void updateVelocitiesGpu(int nNodes, float invDt, Node** nodes) {

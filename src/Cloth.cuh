@@ -31,12 +31,13 @@
 #include "Handle.cuh"
 #include "Remeshing.cuh"
 #include "Wind.cuh"
-#include "Shader.cuh"
 #include "BVH.cuh"
+#include "Proximity.cuh"
 #include "NearPoint.cuh"
 #include "Plane.cuh"
 #include "Disk.cuh"
 #include "Operator.cuh"
+#include "Shader.cuh"
 
 extern bool gpu;
 
@@ -58,6 +59,7 @@ private:
     void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
+    void addImpulseForces(float dt, const std::vector<Proximity>& proximities, float repulsionThickness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     std::vector<Plane> findNearestPlane(const std::vector<BVH*>& obstacleBvhs, float thickness) const;
     thrust::device_vector<Plane> findNearestPlaneGpu(const std::vector<BVH*>& obstacleBvhs, float thickness) const;
     void computeSizing(const std::vector<Plane>& planes);
@@ -73,8 +75,8 @@ private:
     void buildAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
     void buildAdjacents(thrust::device_vector<int>& edgeBegin, thrust::device_vector<int>& edgeEnd, thrust::device_vector<Edge*>& adjacentEdges, thrust::device_vector<int>& faceBegin, thrust::device_vector<int>& faceEnd, thrust::device_vector<Face*>& adjacentFaces) const;
     bool shouldCollapse(const Edge* edge, int side, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
-    std::vector<Pairei> findEdgesToCollapse(const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
-    thrust::device_vector<Pairei> findEdgesToCollapse(const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) const;
+    std::vector<PairEi> findEdgesToCollapse(const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const;
+    thrust::device_vector<PairEi> findEdgesToCollapse(const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) const;
     bool collapseSomeEdges();
     void collapseEdges();
 
@@ -82,7 +84,8 @@ public:
     Cloth(const Json::Value& json);
     ~Cloth();
     Mesh* getMesh() const;
-    void physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind);
+    void physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness, const std::vector<Proximity>& proximities, float repulsionThickness);
+    void physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;

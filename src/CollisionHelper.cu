@@ -59,55 +59,6 @@ int solveCubic(float a, float b, float c, float d, float x[]) {
     }
 }
 
-float signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w) {
-    n = (y1 - y0).normalized().cross((y2 - y0).normalized());
-    if (n.norm2() < 1e-6f)
-        return INFINITY;
-    n.normalize();
-    float h = (x - y0).dot(n);
-    float b0 = mixed(y1 - x, y2 - x, n);
-    float b1 = mixed(y2 - x, y0 - x, n);
-    float b2 = mixed(y0 - x, y1 - x, n);
-    w[0] = 1.0f;
-    w[1] = -b0 / (b0 + b1 + b2);
-    w[2] = -b1 / (b0 + b1 + b2);
-    w[3] = -b2 / (b0 + b1 + b2);
-    return h;
-}
-
-float signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float* w) {
-    n = (x1 - x0).normalized().cross((y1 - y0).normalized());
-    if (n.norm2() < 1e-8f) {
-        Vector3f e0 = (x1 - x0).normalized(), e1 = (y1 - y0).normalized();
-        float p0min = x0.dot(e0), p0max = x1.dot(e0), p1min = y0.dot(e0), p1max = y1.dot(e0);
-        if (p1max < p1min)
-            mySwap(p1max, p1min);
-        
-        float a = max(p0min, p1min), b = min(p0max, p1max), c = 0.5f * (a + b);
-        if (a > b)
-            return INFINITY;
-        
-        Vector3f d = y0 - x0 - (y0-x0).dot(e0) * e0;
-        n = (-d).normalized();
-        w[1] = (c - x0.dot(e0)) / (x1 - x0).norm();
-        w[0] = 1.0f - w[1];
-        w[3] = -(e0.dot(e1) * c - y0.dot(e1)) / (y1-y0).norm();
-        w[2] = -1.0f - w[3];
-        return d.norm();
-    }
-    n = n.normalized();
-    float h = (x0 - y0).dot(n);
-    float a0 = mixed(y1 - x1, y0 - x1, n);
-    float a1 = mixed(y0 - x0, y1 - x0, n);
-    float b0 = mixed(x0 - y1, x1 - y1, n);
-    float b1 = mixed(x1 - y0, x0 - y0, n);
-    w[0] = a0 / (a0 + a1);
-    w[1] = a1 / (a0 + a1);
-    w[2] = -b0 / (b0 + b1);
-    w[3] = -b1 / (b0 + b1);
-    return h;
-}
-
 bool checkImpact(ImpactType type, const Node* node0, const Node* node1, const Node* node2, const Node* node3, Impact& impact) {
     impact.nodes[0] = const_cast<Node*>(node0);
     impact.nodes[1] = const_cast<Node*>(node1);
@@ -186,13 +137,13 @@ bool checkEdgeEdgeImpact(const Edge* edge0, const Edge* edge1, float thickness, 
     return checkImpact(EdgeEdge, node0, node1, node2, node3, impact);
 }
 
-__global__ void checkImpactsGpu(int nProximities, const Proximity* proximities, float thickness, Impact* impacts) {
+__global__ void checkImpactsGpu(int nPairs, const PairFF* pairs, float thickness, Impact* impacts) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nProximities; i += nThreads) {
-        const Proximity& proximity = proximities[i];
-        const Face* face0 = proximity.first;
-        const Face* face1 = proximity.second;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nPairs; i += nThreads) {
+        const PairFF& pair = pairs[i];
+        const Face* face0 = pair.first;
+        const Face* face1 = pair.second;
         int n = 15 * i;
         for (int j = 0; j < 3; j++) {
             Impact& impact = impacts[n++];

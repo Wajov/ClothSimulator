@@ -116,17 +116,17 @@ void BVH::traverse(float thickness, std::function<void(const Face*, const Face*,
     root->traverse(thickness, callback);
 }
 
-thrust::device_vector<Proximity> BVH::traverse(float thickness) const {
+thrust::device_vector<PairFF> BVH::traverse(float thickness) const {
     int nLeaves = leaves.size();
     const BVHNode* leavsPointer = pointer(leaves);
     thrust::device_vector<int> num(nLeaves);
     int* numPointer = pointer(num);
-    countProximitiesSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer);
+    countPairsSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer);
     CUDA_CHECK_LAST();
 
     thrust::inclusive_scan(num.begin(), num.end(), num.begin());
-    thrust::device_vector<Proximity> ans(num.back());
-    findProximitiesSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer, pointer(ans));
+    thrust::device_vector<PairFF> ans(num.back());
+    findPairsSelf<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavsPointer, root, thickness, numPointer, pointer(ans));
     CUDA_CHECK_LAST();
 
     return ans;
@@ -136,7 +136,7 @@ void BVH::traverse(const BVH* bvh, float thickness, std::function<void(const Fac
     root->traverse(bvh->root, thickness, callback);
 }
 
-thrust::device_vector<Proximity> BVH::traverse(const BVH* bvh, float thickness) const {
+thrust::device_vector<PairFF> BVH::traverse(const BVH* bvh, float thickness) const {
     int nLeaves;
     const BVHNode* leavesPointer, * startRoot;
     if (leaves.size() > bvh->leaves.size()) {
@@ -151,12 +151,12 @@ thrust::device_vector<Proximity> BVH::traverse(const BVH* bvh, float thickness) 
 
     thrust::device_vector<int> num(nLeaves);
     int* numPointer = pointer(num);
-    countProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer);
+    countPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer);
     CUDA_CHECK_LAST();
     
     thrust::inclusive_scan(num.begin(), num.end(), num.begin());
-    thrust::device_vector<Proximity> ans(num.back());
-    findProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer, pointer(ans));
+    thrust::device_vector<PairFF> ans(num.back());
+    findPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer, pointer(ans));
     CUDA_CHECK_LAST();
 
     return ans;

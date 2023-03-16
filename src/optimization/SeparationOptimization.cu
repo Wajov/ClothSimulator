@@ -5,7 +5,7 @@ SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& 
     thickness(thickness),
     obstacleArea(obstacleArea) {
     nConstraints = intersections.size();
-    std::vector<Pairni> intersectionNodes;
+    std::vector<PairNi> intersectionNodes;
     for (int i = 0; i < intersections.size(); i++) {
         const Intersection& intersection = intersections[i];
         for (int j = 0; j < 3; j++) {

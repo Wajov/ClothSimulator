@@ -7,7 +7,7 @@
 
 class Magic {
 public:
-    float handleStiffness;
+    float handleStiffness, collisionStiffness;
     float repulsionThickness, collisionThickness;
     Magic(const Json::Value& json);
     ~Magic();

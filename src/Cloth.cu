@@ -75,12 +75,14 @@ void Cloth::addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::Sp
 void Cloth::addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::SparseMatrix<float>& A) const {
     for (int i = 0; i < 4; i++) {
         int x = indices(i);
-        for (int j = 0; j < 4; j++) {
-            int y = indices(j);
-            for (int k = 0; k < 3; k++)
-                for (int h = 0; h < 3; h++)
-                    A.coeffRef(3 * x + k, 3 * y + h) += B(3 * i + k, 3 * j + h);
-        }
+        if (x > -1)
+            for (int j = 0; j < 4; j++) {
+                int y = indices(j);
+                if (y > -1)
+                    for (int k = 0; k < 3; k++)
+                        for (int h = 0; h < 3; h++)
+                            A.coeffRef(3 * x + k, 3 * y + h) += B(3 * i + k, 3 * j + h);
+            }
     }
 }
 
@@ -95,8 +97,9 @@ void Cloth::addSubVector(const Vector9f& b, const Vector3i& indices, Eigen::Vect
 void Cloth::addSubVector(const Vector12f& b, const Vector4i& indices, Eigen::VectorXf& a) const {
     for (int i = 0; i < 4; i++) {
         int x = indices(i);
-        for (int j = 0; j < 3; j++)
-            a(3 * x + j) += b(3 * i + j);
+        if (x > -1)
+            for (int j = 0; j < 3; j++)
+                a(3 * x + j) += b(3 * i + j);
     }
 }
 
@@ -193,6 +196,23 @@ void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float
         Vector3f f = dt * ((handle.position - node->x) - dt * node->v) * stiffness;
         for (int i = 0; i < 3; i++)
             b(3 * index + i, 0) += f(i);
+    }
+}
+
+void Cloth::addImpulseForces(float dt, const std::vector<Proximity>& proximities, float repulsionThickness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
+    for (const Proximity& proximity : proximities) {
+        Node* const* nodes = proximity.nodes;
+        Vector12f v(nodes[0]->v, nodes[1]->v, nodes[2]->v, nodes[3]->v);
+
+        Vector12f f;
+        Matrix12x12f J;
+        impulseForce(proximity, repulsionThickness, f, J);
+
+        Vector4i indices(nodes[0]->index, nodes[1]->index, nodes[2]->index, nodes[3]->index);
+        for (int i = 0; i < 4; i++)
+            indices(i) = mesh->contain(nodes[i]) ? nodes[i]->index : -1;
+        addSubMatrix(-dt * dt * J, indices, A);
+        addSubVector(dt * (f + dt * J * v), indices, b);
     }
 }
 
@@ -356,27 +376,29 @@ void Cloth::flipEdges() {
 
 std::vector<Edge*> Cloth::findEdgesToSplit() const {
     std::vector<Edge*>& edges = mesh->getEdges();
-    std::vector<Pairfe> sorted;
+    std::vector<PairfE> sorted;
     for (Edge* edge : edges) {
         float m = edgeMetric(edge);
         if (m > 1.0f)
             sorted.emplace_back(m, edge);
     }
-    std::sort(sorted.begin(), sorted.end(), [](const Pairfe& a, const Pairfe& b) {
+    std::sort(sorted.begin(), sorted.end(), [](const PairfE& a, const PairfE& b) {
         return a.first > b.first;
     });
 
     std::unordered_set<Node*> nodes;
     std::vector<Edge*> ans;
-    for (const Pairfe& p : sorted) {
-        Edge* edge = p.second;
-        Node* node0 = edge->nodes[0];
-        Node* node1 = edge->nodes[1];
-        if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
-            ans.push_back(edge);
-            nodes.insert(node0);
-            nodes.insert(node1);
-        }
+    for (const PairfE& p : sorted) {
+        ans.push_back(p.second);
+        break;
+        // Edge* edge = p.second;
+        // Node* node0 = edge->nodes[0];
+        // Node* node1 = edge->nodes[1];
+        // if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
+        //     ans.push_back(edge);
+        //     nodes.insert(node0);
+        //     nodes.insert(node1);
+        // }
     }
 
     return ans;
@@ -512,31 +534,24 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
             
             const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
             for (const Face* adjacentFace : faces) {
-                Vertex* v0 = adjacentFace->vertices[0];
-                Vertex* v1 = adjacentFace->vertices[1];
-                Vertex* v2 = adjacentFace->vertices[2];
-                if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
+                Vertex* vertices[3] = {adjacentFace->vertices[0], adjacentFace->vertices[1], adjacentFace->vertices[2]};
+                if (vertices[0] == vertex1 || vertices[1] == vertex1 || vertices[2] == vertex1)
                     continue;
                 
-                if (v0 == vertex0)
-                    v0 = vertex1;
-                else if (v1 == vertex0) {
-                    v1 = vertex1;
-                    mySwap(v0, v1);
-                } else {
-                    v2 = vertex1;
-                    mySwap(v0, v2);
-                }
-                Vector2f u0 = v0->u;
-                Vector2f u1 = v1->u;
-                Vector2f u2 = v2->u;
+                for (int j = 0; j < 3; j++)
+                    if (vertices[j] == vertex0)
+                        vertices[j] = vertex1;
+                Vector2f u0 = vertices[0]->u;
+                Vector2f u1 = vertices[1]->u;
+                Vector2f u2 = vertices[2]->u;
                 float a = 0.5f * (u1 - u0).cross(u2 - u0);
                 float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
                 float aspect = 12.0f * sqrt(3.0f) * a / sqr(p);
                 if (a < 1e-6f || aspect < remeshing->aspectMin)
                     return false;
-                if (edgeMetric(v0, v1) > 0.9f || edgeMetric(v0, v2) > 0.9f)
-                    return false;
+                for (int j = 0; j < 3; j++)
+                    if (vertices[j] != vertex1 && edgeMetric(vertices[(j + 1) % 3], vertices[(j + 2) % 3]) > 0.9f)
+                        return false;
             }
         }
     else {
@@ -546,41 +561,34 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
 
         const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
         for (const Face* adjacentFace : faces) {
-            Vertex* v0 = adjacentFace->vertices[0];
-            Vertex* v1 = adjacentFace->vertices[1];
-            Vertex* v2 = adjacentFace->vertices[2];
-            if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
+            Vertex* vertices[3] = {adjacentFace->vertices[0], adjacentFace->vertices[1], adjacentFace->vertices[2]};
+            if (vertices[0] == vertex1 || vertices[1] == vertex1 || vertices[2] == vertex1)
                 continue;
             
-            if (v0 == vertex0)
-                v0 = vertex1;
-            else if (v1 == vertex0) {
-                v1 = vertex1;
-                mySwap(v0, v1);
-            } else {
-                v2 = vertex1;
-                mySwap(v0, v2);
-            }
-            Vector2f u0 = v0->u;
-            Vector2f u1 = v1->u;
-            Vector2f u2 = v2->u;
+            for (int j = 0; j < 3; j++)
+                if (vertices[j] == vertex0)
+                    vertices[j] = vertex1;
+            Vector2f u0 = vertices[0]->u;
+            Vector2f u1 = vertices[1]->u;
+            Vector2f u2 = vertices[2]->u;
             float a = 0.5f * (u1 - u0).cross(u2 - u0);
             float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
             float aspect = 12.0f * sqrt(3.0f) * a / sqr(p);
             if (a < 1e-6f || aspect < remeshing->aspectMin)
                 return false;
-            if (edgeMetric(v0, v1) > 0.9f || edgeMetric(v0, v2) > 0.9f)
-                return false;
+            for (int j = 0; j < 3; j++)
+                if (vertices[j] != vertex1 && edgeMetric(vertices[(j + 1) % 3], vertices[(j + 2) % 3]) > 0.9f)
+                    return false;
         }
     }
 
     return true;
 }
 
-std::vector<Pairei> Cloth::findEdgesToCollapse(const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
+std::vector<PairEi> Cloth::findEdgesToCollapse(const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) const {
     std::vector<Edge*>& edges = mesh->getEdges();
     std::unordered_set<Node*> nodes;
-    std::vector<Pairei> ans;
+    std::vector<PairEi> ans;
     for (Edge* edge : edges) {
         int side = -1;
         if (shouldCollapse(edge, 0, adjacentEdges, adjacentFaces))
@@ -616,7 +624,7 @@ std::vector<Pairei> Cloth::findEdgesToCollapse(const std::unordered_map<Node*, s
     return ans;
 }
 
-thrust::device_vector<Pairei> Cloth::findEdgesToCollapse(const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) const {
+thrust::device_vector<PairEi> Cloth::findEdgesToCollapse(const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) const {
     const int* edgeBeginPointer = pointer(edgeBegin);
     const int* edgeEndPointer = pointer(edgeEnd);
     Edge* const* adjacentEdgesPointer = pointer(adjacentEdges);
@@ -626,16 +634,16 @@ thrust::device_vector<Pairei> Cloth::findEdgesToCollapse(const thrust::device_ve
 
     thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
     int nEdges = edges.size();
-    thrust::device_vector<Pairei> edgesToCollapse(nEdges);
-    Pairei* edgesToCollapsePointer = pointer(edgesToCollapse);
+    thrust::device_vector<PairEi> edgesToCollapse(nEdges);
+    PairEi* edgesToCollapsePointer = pointer(edgesToCollapse);
     thrust::device_vector<float> metrics(nEdges);
     checkEdgesToCollapse<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, pointer(edges), edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer, faceBeginPointer, faceEndPointer, adjacentFacesPointer, remeshing,edgesToCollapsePointer);
     CUDA_CHECK_LAST();
 
     edgesToCollapse.erase(thrust::remove_if(edgesToCollapse.begin(), edgesToCollapse.end(), IsNull()), edgesToCollapse.end());
     int nEdgesToCollapse = edgesToCollapse.size();
-    thrust::device_vector<Pairei> ans(nEdgesToCollapse, Pairei(nullptr, -1));
-    Pairei* ansPointer = pointer(ans);
+    thrust::device_vector<PairEi> ans(nEdgesToCollapse, PairEi(nullptr, -1));
+    PairEi* ansPointer = pointer(ans);
     initializeCollapseNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToCollapse, edgesToCollapsePointer, edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer);
     CUDA_CHECK_LAST();
 
@@ -666,11 +674,11 @@ bool Cloth::collapseSomeEdges() {
         std::unordered_map<Vertex*, std::vector<Face*>> adjacentFaces;
         buildAdjacents(adjacentEdges, adjacentFaces);
 
-        std::vector<Pairei> edgesToCollapse = std::move(findEdgesToCollapse(adjacentEdges, adjacentFaces));
+        std::vector<PairEi> edgesToCollapse = std::move(findEdgesToCollapse(adjacentEdges, adjacentFaces));
         if (edgesToCollapse.empty())
             return false;
 
-        for (const Pairei& edge : edgesToCollapse)
+        for (const PairEi& edge : edgesToCollapse)
             op.collapse(edge.first, edge.second, material, adjacentEdges, adjacentFaces);
     } else {
         mesh->updateIndices();
@@ -680,7 +688,7 @@ bool Cloth::collapseSomeEdges() {
         thrust::device_vector<Face*> adjacentFaces;
         buildAdjacents(edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces);
 
-        thrust::device_vector<Pairei> edgesToCollapse = std::move(findEdgesToCollapse(edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces));
+        thrust::device_vector<PairEi> edgesToCollapse = std::move(findEdgesToCollapse(edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces));
         if (edgesToCollapse.empty())
             return false;
 
@@ -693,106 +701,104 @@ bool Cloth::collapseSomeEdges() {
 }
 
 void Cloth::collapseEdges() {
-    while (collapseSomeEdges());
+    while (collapseSomeEdges())
+        mesh->check();
 }
 
 Mesh* Cloth::getMesh() const {
     return mesh;
 }
 
-void Cloth::physicsStep(float dt, float handleStiffness, const Vector3f& gravity, const Wind* wind) {
-    if (!gpu) {
-        Eigen::SparseMatrix<float> A;
-        Eigen::VectorXf b;
+void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness, const std::vector<Proximity>& proximities, float repulsionThickness) {
+    Eigen::SparseMatrix<float> A;
+    Eigen::VectorXf b;
 
-        initializeForces(A, b);
-        addExternalForces(dt, gravity, wind, A, b);
-        addInternalForces(dt, A, b);
-        addHandleForces(dt, handleStiffness, A, b);
+    initializeForces(A, b);
+    addExternalForces(dt, gravity, wind, A, b);
+    addInternalForces(dt, A, b);
+    addHandleForces(dt, handleStiffness, A, b);
+    addImpulseForces(dt, proximities, repulsionThickness, A, b);
 
-        Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky;
-        cholesky.compute(A);
-        Eigen::VectorXf dv = cholesky.solve(b);
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky;
+    cholesky.compute(A);
+    Eigen::VectorXf dv = cholesky.solve(b);
 
-        std::vector<Node*>& nodes = mesh->getNodes();
-        for (int i = 0; i < nodes.size(); i++) {
-            Node* node = nodes[i];
-            node->x0 = node->x;
-            node->v += Vector3f(dv(3 * i), dv(3 * i + 1), dv(3 * i + 2));
-            node->x += node->v * dt;
-        }
-    } else {
-        thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
-        thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
-        thrust::device_vector<Face*>& faces = mesh->getFacesGpu();
+    std::vector<Node*>& nodes = mesh->getNodes();
+    for (int i = 0; i < nodes.size(); i++)
+        nodes[i]->v += Vector3f(dv(3 * i), dv(3 * i + 1), dv(3 * i + 2));
+}
 
-        int nNodes = nodes.size();
-        Node** nodesPointer = pointer(nodes);
-        int nEdges = edges.size();
-        Edge** edgesPointer = pointer(edges);
-        int nFaces = faces.size();
-        Face** facesPointer = pointer(faces);
-        int nHandles = handlesGpu.size();
+void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness) {
+    thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
+    thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
+    thrust::device_vector<Face*>& faces = mesh->getFacesGpu();
 
-        int aSize = 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles;
-        int bSize = 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles;
+    int nNodes = nodes.size();
+    Node** nodesPointer = pointer(nodes);
+    int nEdges = edges.size();
+    Edge** edgesPointer = pointer(edges);
+    int nFaces = faces.size();
+    Face** facesPointer = pointer(faces);
+    int nHandles = handlesGpu.size();
 
-        thrust::device_vector<Pairii> aIndices(aSize);
-        thrust::device_vector<int> bIndices(bSize);
-        thrust::device_vector<float> aValues(aSize), bValues(bSize);
+    int aSize = 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles;
+    int bSize = 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles;
 
-        addMass<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, nodesPointer, pointer(aIndices), pointer(aValues));
-        CUDA_CHECK_LAST();
+    thrust::device_vector<Pairii> aIndices(aSize);
+    thrust::device_vector<int> bIndices(bSize);
+    thrust::device_vector<float> aValues(aSize), bValues(bSize);
 
-        addGravity<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, nodesPointer, dt, gravity, pointer(bIndices), pointer(bValues));
-        CUDA_CHECK_LAST();
+    addMass<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, nodesPointer, pointer(aIndices), pointer(aValues));
+    CUDA_CHECK_LAST();
 
-        addWindForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, wind, pointer(bIndices, 3 * nNodes), pointer(bValues, 3 * nNodes));
-        CUDA_CHECK_LAST();
+    addGravity<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, nodesPointer, dt, gravity, pointer(bIndices), pointer(bValues));
+    CUDA_CHECK_LAST();
 
-        addStretchingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, material, pointer(aIndices, 3 * nNodes), pointer(aValues, 3 * nNodes), pointer(bIndices, 3 * nNodes + 9 * nFaces), pointer(bValues, 3 * nNodes + 9 * nFaces));
-        CUDA_CHECK_LAST();
+    addWindForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, wind, pointer(bIndices, 3 * nNodes), pointer(bValues, 3 * nNodes));
+    CUDA_CHECK_LAST();
 
-        addBendingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, dt, material, pointer(aIndices, 3 * nNodes + 81 * nFaces), pointer(aValues, 3 * nNodes + 81 * nFaces), pointer(bIndices, 3 * nNodes + 18 * nFaces), pointer(bValues, 3 * nNodes + 18 * nFaces));
-        CUDA_CHECK_LAST();
+    addStretchingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, facesPointer, dt, material, pointer(aIndices, 3 * nNodes), pointer(aValues, 3 * nNodes), pointer(bIndices, 3 * nNodes + 9 * nFaces), pointer(bValues, 3 * nNodes + 9 * nFaces));
+    CUDA_CHECK_LAST();
 
-        addHandleForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), dt, handleStiffness, pointer(aIndices, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(aValues, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(bIndices, 3 * nNodes + 12 * nEdges + 18 * nFaces), pointer(bValues, 3 * nNodes + 12 * nEdges + 18 * nFaces));
-        CUDA_CHECK_LAST();
+    addBendingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, dt, material, pointer(aIndices, 3 * nNodes + 81 * nFaces), pointer(aValues, 3 * nNodes + 81 * nFaces), pointer(bIndices, 3 * nNodes + 18 * nFaces), pointer(bValues, 3 * nNodes + 18 * nFaces));
+    CUDA_CHECK_LAST();
 
-        int n = 3 * nNodes;
+    addHandleForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), dt, handleStiffness, pointer(aIndices, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(aValues, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(bIndices, 3 * nNodes + 12 * nEdges + 18 * nFaces), pointer(bValues, 3 * nNodes + 12 * nEdges + 18 * nFaces));
+    CUDA_CHECK_LAST();
 
-        thrust::sort_by_key(aIndices.begin(), aIndices.end(), aValues.begin());
-        thrust::device_vector<Pairii> outputAIndices(aSize);
-        thrust::device_vector<float> values(aSize);
-        auto iter = thrust::reduce_by_key(aIndices.begin(), aIndices.end(), aValues.begin(), outputAIndices.begin(), values.begin());
-        int nNonZero = iter.first - outputAIndices.begin();
-        thrust::device_vector<int> rowIndices(nNonZero), colIndies(nNonZero);
-        splitIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nNonZero, pointer(outputAIndices), pointer(rowIndices), pointer(colIndies));
-        CUDA_CHECK_LAST();
+    int n = 3 * nNodes;
 
-        thrust::sort_by_key(bIndices.begin(), bIndices.end(), bValues.begin());
-        thrust::device_vector<int> outputBIndices(bSize);
-        thrust::device_vector<float> outputBValues(bSize);
-        auto jter = thrust::reduce_by_key(bIndices.begin(), bIndices.end(), bValues.begin(), outputBIndices.begin(), outputBValues.begin());
-        int outputBSize = jter.first - outputBIndices.begin();
-        thrust::device_vector<float> b(n);
-        setVector<<<GRID_SIZE, BLOCK_SIZE>>>(outputBSize, pointer(outputBIndices), pointer(outputBValues), pointer(b));
-        CUDA_CHECK_LAST();
+    thrust::sort_by_key(aIndices.begin(), aIndices.end(), aValues.begin());
+    thrust::device_vector<Pairii> outputAIndices(aSize);
+    thrust::device_vector<float> values(aSize);
+    auto iter = thrust::reduce_by_key(aIndices.begin(), aIndices.end(), aValues.begin(), outputAIndices.begin(), values.begin());
+    int nNonZero = iter.first - outputAIndices.begin();
+    thrust::device_vector<int> rowIndices(nNonZero), colIndies(nNonZero);
+    splitIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nNonZero, pointer(outputAIndices), pointer(rowIndices), pointer(colIndies));
+    CUDA_CHECK_LAST();
 
-        thrust::device_vector<int> rowPointer(n + 1);
-        CUSPARSE_CHECK(cusparseXcoo2csr(cusparseHandle, pointer(rowIndices), nNonZero, n, pointer(rowPointer), CUSPARSE_INDEX_BASE_ZERO));
+    thrust::sort_by_key(bIndices.begin(), bIndices.end(), bValues.begin());
+    thrust::device_vector<int> outputBIndices(bSize);
+    thrust::device_vector<float> outputBValues(bSize);
+    auto jter = thrust::reduce_by_key(bIndices.begin(), bIndices.end(), bValues.begin(), outputBIndices.begin(), outputBValues.begin());
+    int outputBSize = jter.first - outputBIndices.begin();
+    thrust::device_vector<float> b(n);
+    setVector<<<GRID_SIZE, BLOCK_SIZE>>>(outputBSize, pointer(outputBIndices), pointer(outputBValues), pointer(b));
+    CUDA_CHECK_LAST();
 
-        cusparseMatDescr_t descr;
-        CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
-        thrust::device_vector<float> dv(n);
-        int singularity;
-        CUSOLVER_CHECK(cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, pointer(values), pointer(rowPointer), pointer(colIndies), pointer(b), 1e-5f, 0, pointer(dv), &singularity));
-        if (singularity != -1)
-            std::cerr << "Not SPD! " << std::endl;
+    thrust::device_vector<int> rowPointer(n + 1);
+    CUSPARSE_CHECK(cusparseXcoo2csr(cusparseHandle, pointer(rowIndices), nNonZero, n, pointer(rowPointer), CUSPARSE_INDEX_BASE_ZERO));
 
-        updateNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, dt, pointer(dv), nodesPointer);
-        CUDA_CHECK_LAST();
-    }
+    cusparseMatDescr_t descr;
+    CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
+    thrust::device_vector<float> dv(n);
+    int singularity;
+    CUSOLVER_CHECK(cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, pointer(values), pointer(rowPointer), pointer(colIndies), pointer(b), 1e-5f, 0, pointer(dv), &singularity));
+    if (singularity != -1)
+        std::cerr << "Not SPD! " << std::endl;
+
+    updateNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, dt, pointer(dv), nodesPointer);
+    CUDA_CHECK_LAST();
 }
 
 void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness) {

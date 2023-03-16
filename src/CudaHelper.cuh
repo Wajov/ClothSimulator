@@ -34,7 +34,7 @@ struct IsNull {
         return intersection.face0 == nullptr && intersection.face1 == nullptr;
     };
 
-    __device__ bool operator()(const Pairei& p) const {
+    __device__ bool operator()(const PairEi& p) const {
         return p.first == nullptr && p.second < 0;
     };
 };

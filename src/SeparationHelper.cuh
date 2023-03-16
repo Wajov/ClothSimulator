@@ -16,7 +16,7 @@ const int MAX_SEPARATION_ITERATION = 100;
 __host__ __device__ int majorAxis(const Vector3f& v);
 __host__ __device__ bool facePlaneIntersection(const Face* face, const Face* plane, Vector3f& b0, Vector3f& b1);
 __host__ __device__ bool checkIntersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b0, Vector3f& b1);
-__global__ void checkIntersectionsGpu(int nProximities, const Proximity* proximities, Intersection* intersections);
+__global__ void checkIntersectionsGpu(int nPairs, const PairFF* pairs, Intersection* intersections);
 __global__ void initializeOldPosition(int nIntersections, const Intersection* intersections, Vector3f* x);
 __device__ bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices);
 __device__ bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices);

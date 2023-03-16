@@ -1,5 +1,22 @@
 #include "PhysicsHelper.cuh"
 
+bool inEdge(float w, const Edge* edge0, const Edge* edge1) {
+    Vector3f x = (1.0f - w) * edge0->nodes[0]->x + w * edge0->nodes[1]->x;
+    bool in = true;
+    for (int i = 0; i < 2; i++) {
+        Face* face = edge1->adjacents[i];
+        if (face == nullptr)
+            continue;
+        Node* node0 = edge1->nodes[i];
+        Node* node1 = edge1->nodes[1 - i];
+        Vector3f e = node1->x - node0->x;
+        Vector3f n = face->n;
+        Vector3f r = x - node0->x;
+        in &= (mixed(e, n, r) >= 0.0f);
+    }
+    return in;
+}
+
 __global__ void addMass(int nNodes, const Node* const* nodes, Pairii* aIndices, float* aValues) {
     int nThreads = gridDim.x * blockDim.x;
 
@@ -229,6 +246,20 @@ __global__ void addHandleForcesGpu(int nHandles, const Handle* handles, float dt
     }
 }
 
+__host__ __device__ void impulseForce(const Proximity& proximity, float thickness, Vector12f& f, Matrix12x12f& J) {
+    Node* const* nodes = proximity.nodes;
+    float const* w = proximity.w;
+    Vector3f n = proximity.n;
+    float stiffness = proximity.stiffness;
+    float d = -thickness;
+    for (int i = 0; i < 4; i++)
+        d += w[i] * n.dot(nodes[i]->x);
+    d = max(-d, 0.0f);
+    Vector12f N(w[0] * n, w[1] * n, w[2] * n, w[3] * n);
+    f = 0.5f * stiffness / thickness * sqr(d) * N;
+    J = -stiffness / thickness * d * N.outer(N);
+}
+
 __global__ void splitIndices(int nIndices, const Pairii* indices, int* rowIndices, int* colIndices) {
     int nThreads = gridDim.x * blockDim.x;
 
@@ -248,10 +279,6 @@ __global__ void setVector(int nIndices, const int* indices, const float* values,
 __global__ void updateNodes(int nNodes, float dt, const float* dv, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        Node* node = nodes[i];
-        node->x0 = node->x;
-        node->v += Vector3f(dv[3 * i], dv[3 * i + 1], dv[3 * i + 2]);
-        node->x += node->v * dt;
-    }
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
+        nodes[i]->v += Vector3f(dv[3 * i], dv[3 * i + 1], dv[3 * i + 2]);
 }

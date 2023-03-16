@@ -10,7 +10,7 @@ class Node {
 public:
     int index, minIndex;
     Vector3f x0, x1, x, n, v;
-    float mass, area;
+    float area, mass;
     bool isFree, preserve, removed;
     __host__ __device__ Node(const Vector3f& x, bool isFree);
     __host__ __device__ ~Node();

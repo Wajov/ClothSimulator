@@ -5,12 +5,12 @@
         "args": [
             // "replay",
             // "simulate",
-            "simulate_offline",
-            // "resume",
+            // "simulate_offline",
+            "resume",
             // "resume_offline",
-            "conf/sphere.json",
-            "sphere",
-            "--gpu"
+            // "conf/sphere.json",
+            "output",
+            // "--gpu"
         ]
     },
     "files.associations": {

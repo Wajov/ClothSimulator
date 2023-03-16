@@ -43,12 +43,11 @@ __global__ void setBackupFaces(int nFaces, const Face* const* faces, BackupFace*
 __global__ void initializeIndices(int n, int* indices);
 __global__ void updateNodeIndices(int nNodes, Node** nodes);
 __global__ void updateVertexIndices(int nVertices, Vertex** vertices);
-__global__ void initializeNodeStructures(int nNodes, Node** nodes);
-__global__ void updateNodeStructures(int nFaces, const Face* const* faces);
 __global__ void initializeNodeGeometries(int nNodes, Node** nodes);
 __global__ void updateNodeGeometriesGpu(int nFaces, const Face* const* faces);
 __global__ void finalizeNodeGeometries(int nNodes, Node** nodes);
 __global__ void updateFaceGeometriesGpu(int nFaces, Face** faces);
+__global__ void updatePositionsGpu(int nNodes, float dt, Node** nodes);
 __global__ void updateVelocitiesGpu(int nNodes, float invDt, Node** nodes);
 __global__ void updateRenderingDataGpu(int nFaces, const Face* const* faces, Renderable* renderables);
 __global__ void copyX(int nNodes, const Node* const* nodes, Vector3f* x);

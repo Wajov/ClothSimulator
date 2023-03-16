@@ -5,7 +5,7 @@ CollisionOptimization::CollisionOptimization(const std::vector<Impact>& impacts,
     thickness(thickness),
     obstacleMass(obstacleMass) {
     nConstraints = impacts.size();
-    std::vector<Pairni> impactNodes;
+    std::vector<PairNi> impactNodes;
     for (int i = 0; i < impacts.size(); i++) {
         const Impact& impact = impacts[i];
         for (int j = 0; j < 4; j++) {

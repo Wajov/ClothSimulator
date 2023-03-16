@@ -14,56 +14,6 @@ __global__ void initializeNearPoints(int nNodes, const Vector3f* x, NearPoint* p
         points[i].x = x[i];
 }
 
-float unsignedVertexEdgeDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float& wx, float& wy0, float& wy1) {
-    float t = clamp((x - y0).dot(y1 - y0)/(y1 - y0).dot(y1 - y0), 0.0f, 1.0f);
-    Vector3f y = y0 + t * (y1 - y0);
-    float d = (x - y).norm();
-    n = (x - y).normalized();
-    wx = 1.0f;
-    wy0 = 1.0f - t;
-    wy1 = t;
-    return d;
-}
-
-float unsignedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w) {
-    Vector3f nt = (y1 - y0).cross(y2 - y0).normalized();
-    float d = abs((x - y0).dot(nt));
-    float b0 = mixed(y1 - x, y2 - x, nt);
-    float b1 = mixed(y2 - x, y0 - x, nt);
-    float b2 = mixed(y0 - x, y1 - x, nt);
-    if (b0 >= 0.0f && b1 >= 0.0f && b2 >= 0.0f) {
-        n = nt;
-        w[0] = 1.0f;
-        w[1] = -b0 / (b0 + b1 + b2);
-        w[2] = -b1 / (b0 + b1 + b2);
-        w[3] = -b2 / (b0 + b1 + b2);
-        return d;
-    }
-    d = INFINITY;
-    if (b0 < 0.0f) {
-        float dt = unsignedVertexEdgeDistance(x, y1, y2, n, w[0], w[2], w[3]);
-        if (dt < d) {
-            d = dt;
-            w[1] = 0.0f;
-        }
-    }
-    if (b1 < 0.0f) {
-        float dt = unsignedVertexEdgeDistance(x, y2, y0, n, w[0], w[3], w[1]);
-        if (dt < d) {
-            d = dt;
-            w[2] = 0.0f;
-        }
-    }
-    if (b2 < 0.0f) {
-        float dt = unsignedVertexEdgeDistance(x, y0, y1, n, w[0], w[1], w[2]);
-        if (dt < d) {
-            d = dt;
-            w[3] = 0.0f;
-        }
-    }
-    return d;
-}
-
 void checkNearestPoint(const Vector3f& x, const Face* face, NearPoint& point) {
     Vector3f n;
     float w[4];
@@ -550,31 +500,24 @@ __device__ bool shouldCollapseGpu(const Edge* edge, int side, const int* edgeBeg
             int l = faceBegin[vertex0->index], r = faceEnd[vertex0->index];
             for (int j = l; j < r; j++) {
                 const Face* adjacentFace = adjacentFaces[j];
-                Vertex* v0 = adjacentFace->vertices[0];
-                Vertex* v1 = adjacentFace->vertices[1];
-                Vertex* v2 = adjacentFace->vertices[2];
-                if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
+                Vertex* vertices[3] = {adjacentFace->vertices[0], adjacentFace->vertices[1], adjacentFace->vertices[2]};
+                if (vertices[0] == vertex1 || vertices[1] == vertex1 || vertices[2] == vertex1)
                     continue;
                 
-                if (v0 == vertex0)
-                    v0 = vertex1;
-                else if (v1 == vertex0) {
-                    v1 = vertex1;
-                    mySwap(v0, v1);
-                } else {
-                    v2 = vertex1;
-                    mySwap(v0, v2);
-                }
-                Vector2f u0 = v0->u;
-                Vector2f u1 = v1->u;
-                Vector2f u2 = v2->u;
+                for (int k = 0; k < 3; k++)
+                    if (vertices[k] == vertex0)
+                        vertices[k] = vertex1;
+                Vector2f u0 = vertices[0]->u;
+                Vector2f u1 = vertices[1]->u;
+                Vector2f u2 = vertices[2]->u;
                 float a = 0.5f * (u1 - u0).cross(u2 - u0);
                 float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
                 float aspect = 12.0f * sqrt(3.0f) * a / sqr(p);
                 if (a < 1e-6f || aspect < remeshing->aspectMin)
                     return false;
-                if (edgeMetric(v0, v1) > 0.9f || edgeMetric(v0, v2) > 0.9f)
-                    return false;
+                for (int k = 0; k < 3; k++)
+                    if (vertices[k] != vertex1 && edgeMetric(vertices[(k + 1) % 3], vertices[(k + 2) % 3]) > 0.9f)
+                        return false;
             }
         }
     else {
@@ -585,52 +528,45 @@ __device__ bool shouldCollapseGpu(const Edge* edge, int side, const int* edgeBeg
         int l = faceBegin[vertex0->index], r = faceEnd[vertex0->index];
         for (int i = l; i < r; i++) {
             const Face* adjacentFace = adjacentFaces[i];
-            Vertex* v0 = adjacentFace->vertices[0];
-            Vertex* v1 = adjacentFace->vertices[1];
-            Vertex* v2 = adjacentFace->vertices[2];
-            if (v0 == vertex1 || v1 == vertex1 || v2 == vertex1)
+            Vertex* vertices[3] = {adjacentFace->vertices[0], adjacentFace->vertices[1], adjacentFace->vertices[2]};
+            if (vertices[0] == vertex1 || vertices[1] == vertex1 || vertices[2] == vertex1)
                 continue;
             
-            if (v0 == vertex0)
-                v0 = vertex1;
-            else if (v1 == vertex0) {
-                v1 = vertex1;
-                mySwap(v0, v1);
-            } else {
-                v2 = vertex1;
-                mySwap(v0, v2);
-            }
-            Vector2f u0 = v0->u;
-            Vector2f u1 = v1->u;
-            Vector2f u2 = v2->u;
+            for (int k = 0; k < 3; k++)
+                if (vertices[k] == vertex0)
+                    vertices[k] = vertex1;
+            Vector2f u0 = vertices[0]->u;
+            Vector2f u1 = vertices[1]->u;
+            Vector2f u2 = vertices[2]->u;
             float a = 0.5f * (u1 - u0).cross(u2 - u0);
             float p = (u0 - u1).norm() + (u1 - u2).norm() + (u2 - u0).norm();
             float aspect = 12.0f * sqrt(3.0f) * a / sqr(p);
             if (a < 1e-6f || aspect < remeshing->aspectMin)
                 return false;
-            if (edgeMetric(v0, v1) > 0.9f || edgeMetric(v0, v2) > 0.9f)
-                return false;
+            for (int k = 0; k < 3; k++)
+                if (vertices[k] != vertex1 && edgeMetric(vertices[(k + 1) % 3], vertices[(k + 2) % 3]) > 0.9f)
+                    return false;
         }
     }
 
     return true;
 }
 
-__global__ void checkEdgesToCollapse(int nEdges, const Edge* const* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing, Pairei* edgesToCollapse) {
+__global__ void checkEdgesToCollapse(int nEdges, const Edge* const* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing, PairEi* edgesToCollapse) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
         const Edge* edge = edges[i];
         if (shouldCollapseGpu(edge, 0, edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces, remeshing))
-            edgesToCollapse[i] = Pairei(const_cast<Edge*>(edge), 0);
+            edgesToCollapse[i] = PairEi(const_cast<Edge*>(edge), 0);
         else if (shouldCollapseGpu(edge, 1, edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces, remeshing))
-            edgesToCollapse[i] = Pairei(const_cast<Edge*>(edge), 1);
+            edgesToCollapse[i] = PairEi(const_cast<Edge*>(edge), 1);
         else
-            edgesToCollapse[i] = Pairei(nullptr, -1);
+            edgesToCollapse[i] = PairEi(nullptr, -1);
     }
 }
 
-__global__ void initializeCollapseNodes(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
+__global__ void initializeCollapseNodes(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -648,7 +584,7 @@ __global__ void initializeCollapseNodes(int nEdges, const Pairei* edges, const i
     }
 }
 
-__global__ void resetCollapseNodes(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
+__global__ void resetCollapseNodes(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -680,7 +616,7 @@ __global__ void resetCollapseNodes(int nEdges, const Pairei* edges, const int* e
     }
 }
 
-__global__ void computeCollapseMinIndices(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
+__global__ void computeCollapseMinIndices(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -712,7 +648,7 @@ __global__ void computeCollapseMinIndices(int nEdges, const Pairei* edges, const
     }
 }
 
-__global__ void checkIndependentEdgesToCollapse(int nEdges, const Pairei* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, Pairei* edgesToCollapse) {
+__global__ void checkIndependentEdgesToCollapse(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, PairEi* edgesToCollapse) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -745,7 +681,7 @@ __global__ void checkIndependentEdgesToCollapse(int nEdges, const Pairei* edges,
     }
 }
 
-__global__ void collapseGpu(int nEdges, const Pairei* edges, const Material* material, const int* edgeBegin, const int* edgeEnd, Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces, Node** removedNodes, Vertex** removedVertices, Edge** removedEdges, Face** removedFaces) {
+__global__ void collapseGpu(int nEdges, const PairEi* edges, const Material* material, const int* edgeBegin, const int* edgeEnd, Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces, Node** removedNodes, Vertex** removedVertices, Edge** removedEdges, Face** removedFaces) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -767,18 +703,24 @@ __global__ void collapseGpu(int nEdges, const Pairei* edges, const Material* mat
                 Edge* edge0 = face->findEdge(vertex1, vertex2);
                 Edge* edge1 = face->findEdge(vertex2, vertex0);
 
+                Vertex* v;
+                Face* f;
                 if (!edge1->isBoundary()) {
-                    Vertex* v = edge1->opposites[0];
-                    Face* f = edge1->adjacents[0];
-                    if (f == face) {
+                    if (edge1->opposites[0] != vertex1) {
+                        v = edge1->opposites[0];
+                        f = edge1->adjacents[0];
+                    } else {
                         v = edge1->opposites[1];
                         f = edge1->adjacents[1];
                     }
 
-                    edge0->replaceOpposite(vertex0, v);
-                    edge0->replaceAdjacent(face, f);
                     f->replaceEdge(edge1, edge0);
+                } else {
+                    v = nullptr;
+                    f = nullptr;
                 }
+                edge0->replaceOpposite(vertex0, v);
+                edge0->replaceAdjacent(face, f);
 
                 removedEdges[3 * i + j + 1] = edge1;
                 removedFaces[2 * i + j] = face;

@@ -20,6 +20,10 @@ template<typename T> __host__ __device__ static T max(T a, T b) {
     return a > b ? a : b;
 }
 
+template<typename T> __host__ __device__ static T abs(T x) {
+    return x < static_cast<T>(0) ? -x : x;
+}
+
 template<typename T> __host__ __device__ static T clamp(T x , T a, T b) {
     return x < a ? a : (x > b ? b : x);
 }
@@ -45,5 +49,9 @@ template<typename T> __host__ __device__ static int sign(T x) {
 }
 
 __host__ __device__ void eigenvalueDecomposition(const Matrix2x2f& A, Matrix2x2f& Q, Vector2f& l);
+__host__ __device__ float signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w);
+__host__ __device__ float signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float* w);
+__host__ __device__ float unsignedVertexEdgeDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float& wx, float& wy0, float& wy1);
+__host__ __device__ float unsignedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vector3f& y1, const Vector3f& y2, Vector3f& n, float* w);
 
 #endif

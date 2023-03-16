@@ -12,9 +12,9 @@
                        "thicken": 2},
         "handles": [{"nodes": [2,3], "end_time": 7}],
         "remeshing": {
-            "refine_angle": 0.3,
-            "refine_compression": 0.005,
-            "refine_velocity": 0.5,
+            "refine_angle": 10.0,
+            "refine_compression": 0.02,
+            "refine_velocity": 2.0,
             "size": [10e-3, 200e-3],
             "aspect_min": 0.2
         }

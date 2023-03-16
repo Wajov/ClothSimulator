@@ -149,18 +149,24 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, co
             Edge* edge0 = face->findEdge(vertex1, vertex2);
             Edge* edge1 = face->findEdge(vertex2, vertex0);
 
+            Vertex* v;
+            Face* f;
             if (!edge1->isBoundary()) {
-                Vertex* v = edge1->opposites[0];
-                Face* f = edge1->adjacents[0];
-                if (f == face) {
+                if (edge1->opposites[0] != vertex1) {
+                    v = edge1->opposites[0];
+                    f = edge1->adjacents[0];
+                } else {
                     v = edge1->opposites[1];
                     f = edge1->adjacents[1];
                 }
 
-                edge0->replaceOpposite(vertex0, v);
-                edge0->replaceAdjacent(face, f);
                 f->replaceEdge(edge1, edge0);
+            } else {
+                v = nullptr;
+                f = nullptr;
             }
+            edge0->replaceOpposite(vertex0, v);
+            edge0->replaceAdjacent(face, f);
 
             removedEdges.push_back(edge1);
             removedFaces.push_back(face);
@@ -204,7 +210,7 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, co
     }
 }
 
-void Operator::collapse(const thrust::device_vector<Pairei>& edges, const Material* material, const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) {
+void Operator::collapse(const thrust::device_vector<PairEi>& edges, const Material* material, const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) {
     int nEdges = edges.size();
     removedNodesGpu.resize(nEdges);
     removedVerticesGpu.resize(2 * nEdges);

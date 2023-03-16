@@ -63,13 +63,13 @@ bool checkIntersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b
     return true;
 }
 
-__global__ void checkIntersectionsGpu(int nProximities, const Proximity* proximities, Intersection* intersections) {
+__global__ void checkIntersectionsGpu(int nPairs, const PairFF* pairs, Intersection* intersections) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nProximities; i += nThreads) {
-        const Proximity& proximity = proximities[i];
-        Face* face0 = proximity.first;
-        Face* face1 = proximity.second;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nPairs; i += nThreads) {
+        const PairFF& pair = pairs[i];
+        Face* face0 = pair.first;
+        Face* face1 = pair.second;
         Intersection& intersection = intersections[i];
         if (checkIntersectionMidpoint(face0, face1, intersection.b0, intersection.b1)) {
             intersection.face0 = face0;

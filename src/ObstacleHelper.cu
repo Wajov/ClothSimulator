@@ -12,7 +12,16 @@ __global__ void transformGpu(int nNodes, const Vector3f* base, const Transformat
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
         Node* node = nodes[i];
-        node->x0 = node->x;
-        node->x = transformation.applyToPoint(base[i]);
+        node->x0 = node->x = transformation.applyToPoint(base[i]);
+    }
+}
+
+__global__ void stepGpu(int nNodes, float invDt, const Vector3f* base, const Transformation transformation, Node** nodes) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Node* node = nodes[i];
+        Vector3f x = transformation.applyToPoint(base[i]);
+        node->v = (x - node->x0) * invDt;
     }
 }

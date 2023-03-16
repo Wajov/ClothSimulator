@@ -28,6 +28,7 @@ public:
     ~Obstacle();
     Mesh* getMesh() const;
     void transform(float time);
+    void step(float time, float dt);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;
 };

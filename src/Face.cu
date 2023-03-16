@@ -7,13 +7,14 @@ Face::Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, 
 
 Face::~Face() {}
 
-void Face::initialize(const Material* material) {
-    Vector2f d1 = vertices[1]->u - vertices[0]->u;
-    Vector2f d2 = vertices[2]->u - vertices[0]->u;
-    inverse = Matrix2x2f(d1, d2).inverse();
-    area = 0.5f * abs(d1.cross(d2));
-    if (material != nullptr)
+void Face::initialize(const Material* material) {   
+    if (material != nullptr) {
+        Vector2f d1 = vertices[1]->u - vertices[0]->u;
+        Vector2f d2 = vertices[2]->u - vertices[0]->u;
+        inverse = Matrix2x2f(d1, d2).inverse();
+        area = 0.5f * abs(d1.cross(d2));
         mass = material->getDensity() * material->getThicken() * area;
+    }
 }
 
 void Face::setEdge(const Edge* edge) {
@@ -56,19 +57,11 @@ bool Face::isFree() const {
 }
 
 bool Face::contain(const Vertex* vertex) const {
-    for (int i = 0; i < 3; i++)
-        if (vertices[i] == vertex)
-            return true;
-    
-    return false;
+    return vertices[0] == vertex || vertices[1] == vertex || vertices[2] == vertex;
 }
 
 bool Face::contain(const Edge* edge) const {
-    for (int i = 0; i < 3; i++)
-        if (edges[i] == edge)
-            return true;
-    
-    return false;
+    return edges[0] == edge || edges[1] == edge || edges[2] == edge;
 }
 
 bool Face::adjacent(const Face* face) const {
@@ -130,4 +123,8 @@ void Face::update() {
     Vector3f d1 = vertices[1]->node->x - vertices[0]->node->x;
     Vector3f d2 = vertices[2]->node->x - vertices[0]->node->x;
     n = d1.cross(d2).normalized();
+    if (!isFree()) {
+        area = 0.5f * d1.cross(d2).norm();
+        mass = 0.0f;
+    }
 }

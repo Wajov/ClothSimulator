@@ -42,15 +42,23 @@ public:
     __host__ __device__ Pair<S, T> operator+(const Pair<S, T>& p) const {
         Pair<S, T> ans(first + p.first, second + p.second);
         return ans;
-    }
+    };
+};
+
+struct PairHash {
+    template<typename S, typename T> size_t operator()(const Pair<S, T>& p) const {
+        return std::hash<S>()(p.first) ^ std::hash<T>()(p.second);
+    };
 };
 
 typedef Pair<int, int> Pairii;
 typedef Pair<float, int> Pairfi;
-typedef Pair<float, Matrix2x2f> Pairfm;
-typedef Pair<Node*, int> Pairni;
-typedef Pair<Edge*, int> Pairei;
-typedef Pair<float, Edge*> Pairfe;
-typedef Pair<Face*, Face*> Proximity;
+typedef Pair<float, Node*> PairfN;
+typedef Pair<float, Edge*> PairfE;
+typedef Pair<float, Face*> PairfF;
+typedef Pair<Node*, int> PairNi;
+typedef Pair<Edge*, int> PairEi;
+typedef Pair<Face*, int> PairFi;
+typedef Pair<Face*, Face*> PairFF;
 
 #endif
