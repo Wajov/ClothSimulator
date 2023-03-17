@@ -39,6 +39,9 @@ __global__ void initializeFaces(int nFaces, const int* xIndices, const int* uInd
 __global__ void initializeEdges(int nEdges, const Pairii* indices, const EdgeData* edgeData, const Node* const* nodes, Edge** edges);
 __global__ void setEdges(int nEdges, const Pairii* indices, const EdgeData* edgeData, Edge** edges);
 __global__ void setPreserve(int nEdges, const Edge* const* edges);
+__device__ bool containGpu(const Node* node, int nNodes, const Node* const* nodes);
+__device__ bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices);
+__device__ bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices);
 __global__ void setBackupFaces(int nFaces, const Face* const* faces, BackupFace* backupFaces);
 __global__ void initializeIndices(int n, int* indices);
 __global__ void updateNodeIndices(int nNodes, Node** nodes);

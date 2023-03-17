@@ -11,6 +11,7 @@
 #include "Pair.cuh"
 #include "Impact.cuh"
 #include "Intersection.cuh"
+#include "Proximity.cuh"
 
 #define CUDA_CHECK(val) cudaCheck((val), #val, __FILE__, __LINE__)
 #define CUDA_CHECK_LAST() cudaCheckLast(__FILE__, __LINE__)
@@ -25,6 +26,18 @@ struct IsNull {
     __device__ bool operator()(int index) const {
         return index < 0;
     };
+
+    __device__ bool operator()(const PairNi& p) const {
+        return p.first == nullptr;
+    };
+
+    __device__ bool operator()(const PairEi& p) const {
+        return p.first == nullptr;
+    };
+
+    __device__ bool operator()(const PairFi& p) const {
+        return p.first == nullptr;
+    };
     
     __device__ bool operator()(const Impact& impact) const {
         return impact.t < 0.0f;
@@ -34,8 +47,8 @@ struct IsNull {
         return intersection.face0 == nullptr && intersection.face1 == nullptr;
     };
 
-    __device__ bool operator()(const PairEi& p) const {
-        return p.first == nullptr && p.second < 0;
+    __device__ bool operator()(const Proximity& proximity) const {
+        return proximity.stiffness < 0.0f;
     };
 };
 

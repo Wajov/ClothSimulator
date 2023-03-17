@@ -71,8 +71,9 @@ private:
     thrust::device_vector<PairFF> traverse(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, float thickness) const;
     void checkVertexFaceProximity(const Vertex* vertex, const Face* face, std::unordered_map<PairNi, PairfF, PairHash>& nodeProximities, std::unordered_map<PairFi, PairfN, PairHash>& faceProximities) const;
     void checkEdgeEdgeProximity(const Edge* edge0, const Edge* edge1, std::unordered_map<PairEi, PairfE, PairHash>& edgeProximities) const;
-    void checkProximities(const Face* face0, const Face* face1, float thickness, std::unordered_map<PairNi, PairfF, PairHash>& nodeProximities, std::unordered_map<PairEi, PairfE, PairHash>& edgeProximities, std::unordered_map<PairFi, PairfN, PairHash>& faceProximities) const;
+    void checkProximities(const Face* face0, const Face* face1, std::unordered_map<PairNi, PairfF, PairHash>& nodeProximities, std::unordered_map<PairEi, PairfE, PairHash>& edgeProximities, std::unordered_map<PairFi, PairfN, PairHash>& faceProximities) const;
     std::vector<Proximity> findProximities(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;
+    thrust::device_vector<Proximity> findProximitiesGpu(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;
     void updateActive(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<Impact>& impacts) const;
     void checkImpacts(const Face* face0, const Face* face1, float thickness, std::vector<Impact>& impacts) const;
     thrust::device_vector<Impact> findImpacts(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const;

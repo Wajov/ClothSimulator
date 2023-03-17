@@ -60,22 +60,28 @@ Cloth::~Cloth() {
     }
 }
 
-void Cloth::addSubMatrix(const Matrix9x9f& B, const Vector3i& indices, Eigen::SparseMatrix<float>& A) const {
+void Cloth::addMatrixAndVector(const Matrix9x9f& B, const Vector9f& b, const Vector3i& indices, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& a) const {
     for (int i = 0; i < 3; i++) {
         int x = indices(i);
-        for (int j = 0; j < 3; j++) {
-            int y = indices(j);
-            for (int k = 0; k < 3; k++)
-                for (int h = 0; h < 3; h++)
-                    A.coeffRef(3 * x + k, 3 * y + h) += B(3 * i + k, 3 * j + h);
+        if (x > -1) {
+            for (int j = 0; j < 3; j++) {
+                int y = indices(j);
+                if (y > -1)
+                    for (int k = 0; k < 3; k++)
+                        for (int h = 0; h < 3; h++)
+                            A.coeffRef(3 * x + k, 3 * y + h) += B(3 * i + k, 3 * j + h);
+            }
+
+            for (int j = 0; j < 3; j++)
+                a(3 * x + j) += b(3 * i + j);
         }
     }
 }
 
-void Cloth::addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::SparseMatrix<float>& A) const {
+void Cloth::addMatrixAndVector(const Matrix12x12f& B, const Vector12f& b, const Vector4i& indices, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& a) const {
     for (int i = 0; i < 4; i++) {
         int x = indices(i);
-        if (x > -1)
+        if (x > -1) {
             for (int j = 0; j < 4; j++) {
                 int y = indices(j);
                 if (y > -1)
@@ -83,23 +89,10 @@ void Cloth::addSubMatrix(const Matrix12x12f& B, const Vector4i& indices, Eigen::
                         for (int h = 0; h < 3; h++)
                             A.coeffRef(3 * x + k, 3 * y + h) += B(3 * i + k, 3 * j + h);
             }
-    }
-}
 
-void Cloth::addSubVector(const Vector9f& b, const Vector3i& indices, Eigen::VectorXf& a) const {
-    for (int i = 0; i < 3; i++) {
-        int x = indices(i);
-        for (int j = 0; j < 3; j++)
-            a(3 * x + j) += b(3 * i + j);
-    }
-}
-
-void Cloth::addSubVector(const Vector12f& b, const Vector4i& indices, Eigen::VectorXf& a) const {
-    for (int i = 0; i < 4; i++) {
-        int x = indices(i);
-        if (x > -1)
             for (int j = 0; j < 3; j++)
                 a(3 * x + j) += b(3 * i + j);
+        }
     }
 }
 
@@ -157,14 +150,12 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::Ve
         Node* node1 = face->vertices[1]->node;
         Node* node2 = face->vertices[2]->node;
         Vector9f v(node0->v, node1->v, node2->v);
+        Vector3i indices(node0->index, node1->index, node2->index);
         
         Vector9f f;
         Matrix9x9f J;
         stretchingForce(face, material, f, J);
-
-        Vector3i indices(node0->index, node1->index, node2->index);
-        addSubMatrix(-dt * dt * J, indices, A);
-        addSubVector(dt * (f + dt * J * v), indices, b);
+        addMatrixAndVector(-dt * dt * J, dt * (f + dt * J * v), indices, A, b);
     }
 
     std::vector<Edge*>& edges = mesh->getEdges();
@@ -175,14 +166,12 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::Ve
             Node* node2 = edge->opposites[0]->node;
             Node* node3 = edge->opposites[1]->node;
             Vector12f v(node0->v, node1->v, node2->v, node3->v);
+            Vector4i indices(node0->index, node1->index, node2->index, node3->index);
 
             Vector12f f;
             Matrix12x12f J;
             bendingForce(edge, material, f, J);
-
-            Vector4i indices(node0->index, node1->index, node2->index, node3->index);
-            addSubMatrix(-dt * dt * J, indices, A);
-            addSubVector(dt * (f + dt * J * v), indices, b);
+            addMatrixAndVector(-dt * dt * J, dt * (f + dt * J * v), indices, A, b);
         }
 }
 
@@ -199,20 +188,26 @@ void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float
     }
 }
 
-void Cloth::addImpulseForces(float dt, const std::vector<Proximity>& proximities, float repulsionThickness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
+void Cloth::addProximityForces(float dt, const std::vector<Proximity>& proximities, float thickness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
     for (const Proximity& proximity : proximities) {
         Node* const* nodes = proximity.nodes;
         Vector12f v(nodes[0]->v, nodes[1]->v, nodes[2]->v, nodes[3]->v);
+        Vector4i indices;
+        for (int i = 0; i < 4; i++)
+            indices(i) = mesh->contain(nodes[i]) ? nodes[i]->index : -1;
+
+        float d = -thickness;
+        for (int i = 0; i < 4; i++)
+            d += proximity.w[i] * proximity.n.dot(nodes[i]->x);
+        d = max(-d, 0.0f);
 
         Vector12f f;
         Matrix12x12f J;
-        impulseForce(proximity, repulsionThickness, f, J);
+        impulseForce(proximity, d, thickness, f, J);
+        addMatrixAndVector(-dt * dt * J, dt * (f + dt * J * v), indices, A, b);
 
-        Vector4i indices(nodes[0]->index, nodes[1]->index, nodes[2]->index, nodes[3]->index);
-        for (int i = 0; i < 4; i++)
-            indices(i) = mesh->contain(nodes[i]) ? nodes[i]->index : -1;
-        addSubMatrix(-dt * dt * J, indices, A);
-        addSubVector(dt * (f + dt * J * v), indices, b);
+        frictionForce(proximity, d, thickness, dt, f, J);
+        addMatrixAndVector(-dt * J, dt * f, indices, A, b);
     }
 }
 
@@ -389,16 +384,14 @@ std::vector<Edge*> Cloth::findEdgesToSplit() const {
     std::unordered_set<Node*> nodes;
     std::vector<Edge*> ans;
     for (const PairfE& p : sorted) {
-        ans.push_back(p.second);
-        break;
-        // Edge* edge = p.second;
-        // Node* node0 = edge->nodes[0];
-        // Node* node1 = edge->nodes[1];
-        // if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
-        //     ans.push_back(edge);
-        //     nodes.insert(node0);
-        //     nodes.insert(node1);
-        // }
+        Edge* edge = p.second;
+        Node* node0 = edge->nodes[0];
+        Node* node1 = edge->nodes[1];
+        if (nodes.find(node0) == nodes.end() && nodes.find(node1) == nodes.end()) {
+            ans.push_back(edge);
+            nodes.insert(node0);
+            nodes.insert(node1);
+        }
     }
 
     return ans;
@@ -642,7 +635,7 @@ thrust::device_vector<PairEi> Cloth::findEdgesToCollapse(const thrust::device_ve
 
     edgesToCollapse.erase(thrust::remove_if(edgesToCollapse.begin(), edgesToCollapse.end(), IsNull()), edgesToCollapse.end());
     int nEdgesToCollapse = edgesToCollapse.size();
-    thrust::device_vector<PairEi> ans(nEdgesToCollapse, PairEi(nullptr, -1));
+    thrust::device_vector<PairEi> ans(nEdgesToCollapse, PairEi(nullptr, 0));
     PairEi* ansPointer = pointer(ans);
     initializeCollapseNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgesToCollapse, edgesToCollapsePointer, edgeBeginPointer, edgeEndPointer, adjacentEdgesPointer);
     CUDA_CHECK_LAST();
@@ -717,7 +710,7 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
     addExternalForces(dt, gravity, wind, A, b);
     addInternalForces(dt, A, b);
     addHandleForces(dt, handleStiffness, A, b);
-    addImpulseForces(dt, proximities, repulsionThickness, A, b);
+    addProximityForces(dt, proximities, repulsionThickness, A, b);
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky;
     cholesky.compute(A);
@@ -728,7 +721,7 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
         nodes[i]->v += Vector3f(dv(3 * i), dv(3 * i + 1), dv(3 * i + 2));
 }
 
-void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness) {
+void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness, const thrust::device_vector<Proximity>& proximities, float repulsionThickness) {
     thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
     thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
     thrust::device_vector<Face*>& faces = mesh->getFacesGpu();
@@ -740,9 +733,10 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
     int nFaces = faces.size();
     Face** facesPointer = pointer(faces);
     int nHandles = handlesGpu.size();
+    int nProximities = proximities.size();
 
-    int aSize = 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles;
-    int bSize = 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles;
+    int aSize = 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles + 288 * nProximities;
+    int bSize = 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles + 24 * nProximities;
 
     thrust::device_vector<Pairii> aIndices(aSize);
     thrust::device_vector<int> bIndices(bSize);
@@ -764,6 +758,9 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
     CUDA_CHECK_LAST();
 
     addHandleForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), dt, handleStiffness, pointer(aIndices, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(aValues, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(bIndices, 3 * nNodes + 12 * nEdges + 18 * nFaces), pointer(bValues, 3 * nNodes + 12 * nEdges + 18 * nFaces));
+    CUDA_CHECK_LAST();
+
+    addProximityForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nProximities, pointer(proximities), dt, repulsionThickness, nNodes, nodesPointer, pointer(aIndices, 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles), pointer(aValues, 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles), pointer(bIndices, 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles), pointer(bValues, 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles));
     CUDA_CHECK_LAST();
 
     int n = 3 * nNodes;

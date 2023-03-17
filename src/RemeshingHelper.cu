@@ -776,12 +776,3 @@ __global__ void collapseGpu(int nEdges, const PairEi* edges, const Material* mat
         }
     }
 }
-
-__global__ void printPlanes(int nPlanes, const Plane* planes) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nPlanes; i += nThreads) {
-        const Plane& plane = planes[i];
-        printf("%f %f %f %f %f %f\n", plane.p(0), plane.p(1), plane.p(2), plane.n(0),  plane.n(1), plane.n(2));
-    }
-}

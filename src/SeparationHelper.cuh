@@ -5,6 +5,7 @@
 #include <device_launch_parameters.h>
 
 #include "MathHelper.cuh"
+#include "MeshHelper.cuh"
 #include "Pair.cuh"
 #include "Node.cuh"
 #include "Face.cuh"
@@ -18,8 +19,6 @@ __host__ __device__ bool facePlaneIntersection(const Face* face, const Face* pla
 __host__ __device__ bool checkIntersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b0, Vector3f& b1);
 __global__ void checkIntersectionsGpu(int nPairs, const PairFF* pairs, Intersection* intersections);
 __global__ void initializeOldPosition(int nIntersections, const Intersection* intersections, Vector3f* x);
-__device__ bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices);
-__device__ bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices);
 __global__ void collectContainedFaces(int nIntersections, const Intersection* intersections, int nVertices, const Vertex* const* vertices, int* indices, Vector2f* u);
 __device__ void oldPositionGpu(const Vector2f& u, const BackupFace& face, Vector3f& x);
 __global__ void computeOldPosition(int nIndices, const int* indices, const Vector2f* u, int nFaces, const BackupFace* faces, Vector3f* x);

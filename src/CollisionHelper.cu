@@ -142,22 +142,22 @@ __global__ void checkImpactsGpu(int nPairs, const PairFF* pairs, float thickness
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nPairs; i += nThreads) {
         const PairFF& pair = pairs[i];
-        const Face* face0 = pair.first;
-        const Face* face1 = pair.second;
-        int n = 15 * i;
+        Face* face0 = pair.first;
+        Face* face1 = pair.second;
+        int index = 15 * i;
         for (int j = 0; j < 3; j++) {
-            Impact& impact = impacts[n++];
+            Impact& impact = impacts[index++];
             if (!checkVertexFaceImpact(face0->vertices[j], face1, thickness, impact))
                 impact.t = -1.0f;
         }
         for (int j = 0; j < 3; j++) {
-            Impact& impact = impacts[n++];
+            Impact& impact = impacts[index++];
             if (!checkVertexFaceImpact(face1->vertices[j], face0, thickness, impact))
                 impact.t = -1.0f;
         }
         for (int j = 0; j < 3; j++)
             for (int k = 0; k < 3; k++) {
-                Impact& impact = impacts[n++];
+                Impact& impact = impacts[index++];
                 if (!checkEdgeEdgeImpact(face0->edges[j], face1->edges[k], thickness, impact))
                     impact.t = -1.0f;
             }

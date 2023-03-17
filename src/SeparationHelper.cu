@@ -95,14 +95,6 @@ __global__ void initializeOldPosition(int nIntersections, const Intersection* in
     }
 }
 
-__device__ bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices) {
-    return vertex->index < nVertices && vertex == vertices[vertex->index];
-}
-
-__device__ bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices) {
-    return containGpu(face->vertices[0], nVertices, vertices) && containGpu(face->vertices[1], nVertices, vertices) && containGpu(face->vertices[2], nVertices, vertices);
-}
-
 __global__ void collectContainedFaces(int nIntersections, const Intersection* intersections, int nVertices, const Vertex* const* vertices, int* indices, Vector2f* u) {
     int nThreads = gridDim.x * blockDim.x;
 

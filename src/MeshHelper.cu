@@ -95,6 +95,18 @@ __global__ void setPreserve(int nEdges, const Edge* const* edges) {
     }
 }
 
+__device__ bool containGpu(const Node* node, int nNodes, const Node* const* nodes) {
+    return node->index < nNodes && node == nodes[node->index];
+}
+
+__device__ bool containGpu(const Vertex* vertex, int nVertices, const Vertex* const* vertices) {
+    return vertex->index < nVertices && vertex == vertices[vertex->index];
+}
+
+__device__ bool containGpu(const Face* face, int nVertices, const Vertex* const* vertices) {
+    return containGpu(face->vertices[0], nVertices, vertices) && containGpu(face->vertices[1], nVertices, vertices) && containGpu(face->vertices[2], nVertices, vertices);
+}
+
 __global__ void setBackupFaces(int nFaces, const Face* const* faces, BackupFace* backupFaces) {
     int nThreads = gridDim.x * blockDim.x;
 

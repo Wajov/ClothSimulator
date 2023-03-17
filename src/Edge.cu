@@ -82,7 +82,7 @@ Bounds Edge::bounds(bool ccd) const {
     return ans;
 }
 
-__host__ __device__ float Edge::area() const {
+float Edge::area() const {
     float ans = 0.0f;
     for (int i = 0; i < 2; i++)
         if (adjacents[i] != nullptr)

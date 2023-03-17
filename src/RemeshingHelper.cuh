@@ -53,6 +53,5 @@ __global__ void resetCollapseNodes(int nEdges, const PairEi* edges, const int* e
 __global__ void computeCollapseMinIndices(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges);
 __global__ void checkIndependentEdgesToCollapse(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, PairEi* edgesToCollapse);
 __global__ void collapseGpu(int nEdges, const PairEi* edges, const Material* material, const int* edgeBegin, const int* edgeEnd, Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces, Node** removedNodes, Vertex** removedVertices, Edge** removedEdges, Face** removedFaces);
-__global__ void printPlanes(int nPlanes, const Plane* planes);
 
 #endif

@@ -14,9 +14,6 @@ include_directories(src)
 file(GLOB_RECURSE SOURCE "src/*.cu" "src/*.cuh")
 add_executable(ClothSimulator ${SOURCE})
 
-add_subdirectory(test)
-add_subdirectory(CudaTest)
-
 # OpenGL
 find_package(OpenGL REQUIRED)
 

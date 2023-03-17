@@ -190,7 +190,7 @@ void Simulator::checkEdgeEdgeProximity(const Edge* edge0, const Edge* edge1, std
     }
 }
 
-void Simulator::checkProximities(const Face* face0, const Face* face1, float thickness, std::unordered_map<PairNi, PairfF, PairHash>& nodeProximities, std::unordered_map<PairEi, PairfE, PairHash>& edgeProximities, std::unordered_map<PairFi, PairfN, PairHash>& faceProximities) const {
+void Simulator::checkProximities(const Face* face0, const Face* face1, std::unordered_map<PairNi, PairfF, PairHash>& nodeProximities, std::unordered_map<PairEi, PairfE, PairHash>& edgeProximities, std::unordered_map<PairFi, PairfN, PairHash>& faceProximities) const {
     for (int i = 0; i < 3; i++)
         checkVertexFaceProximity(face0->vertices[i], face1, nodeProximities, faceProximities);
     for (int i = 0; i < 3; i++)
@@ -205,7 +205,7 @@ std::vector<Proximity> Simulator::findProximities(const std::vector<BVH*>& cloth
     std::unordered_map<PairEi, PairfE, PairHash> edgeProximities;
     std::unordered_map<PairFi, PairfN, PairHash> faceProximities;
     traverse(clothBvhs, obstacleBvhs, 2.0f * magic->repulsionThickness, [&](const Face* face0, const Face* face1, float thickness) {
-        checkProximities(face0, face1, thickness, nodeProximities, edgeProximities, faceProximities);
+        checkProximities(face0, face1, nodeProximities, edgeProximities, faceProximities);
     });
 
     std::vector<Proximity> ans;
@@ -219,6 +219,57 @@ std::vector<Proximity> Simulator::findProximities(const std::vector<BVH*>& cloth
         if (pair.second.first < 2.0f * magic->repulsionThickness)
             ans.emplace_back(pair.second.second, pair.first.first, magic->collisionStiffness, clothFriction, obstacleFriction);
     
+    return ans;
+}
+
+thrust::device_vector<Proximity> Simulator::findProximitiesGpu(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs) const {
+    thrust::device_vector<PairFF> pairs = std::move(traverse(clothBvhs, obstacleBvhs, 2.0f * magic->repulsionThickness));
+    int nPairs = pairs.size();
+    thrust::device_vector<PairNi> nodes(6 * nPairs);
+    thrust::device_vector<PairfF> nodeProximities(6 * nPairs);
+    thrust::device_vector<PairEi> edges(18 * nPairs);
+    thrust::device_vector<PairfE> edgeProximities(18 * nPairs);
+    thrust::device_vector<PairFi> faces(6 * nPairs);
+    thrust::device_vector<PairfN> faceProximities(6 * nPairs);
+    checkProximitiesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nPairs, pointer(pairs), pointer(nodes), pointer(nodeProximities), pointer(edges), pointer(edgeProximities), pointer(faces), pointer(faceProximities));
+    CUDA_CHECK_LAST();
+
+    nodeProximities.erase(thrust::remove_if(nodeProximities.begin(), nodeProximities.end(), nodes.begin(), IsNull()), nodeProximities.end());
+    nodes.erase(thrust::remove_if(nodes.begin(), nodes.end(), IsNull()), nodes.end());
+    thrust::sort_by_key(nodes.begin(), nodes.end(), nodeProximities.begin());
+    thrust::device_vector<PairNi> outputNodes(nodes.size());
+    thrust::device_vector<PairfF> outputNodeProximities(nodeProximities.size());
+    auto nodeIter = thrust::reduce_by_key(nodes.begin(), nodes.end(), nodeProximities.begin(), outputNodes.begin(), outputNodeProximities.begin(), thrust::equal_to<PairNi>(), thrust::minimum<PairfF>());
+
+    edgeProximities.erase(thrust::remove_if(edgeProximities.begin(), edgeProximities.end(), edges.begin(), IsNull()), edgeProximities.end());
+    edges.erase(thrust::remove_if(edges.begin(), edges.end(), IsNull()), edges.end());
+    thrust::sort_by_key(edges.begin(), edges.end(), edgeProximities.begin());
+    thrust::device_vector<PairEi> outputEdges(edges.size());
+    thrust::device_vector<PairfE> outputEdgeProximities(edgeProximities.size());
+    auto edgeIter = thrust::reduce_by_key(edges.begin(), edges.end(), edgeProximities.begin(), outputEdges.begin(), outputEdgeProximities.begin(), thrust::equal_to<PairEi>(), thrust::minimum<PairfE>());
+
+    faceProximities.erase(thrust::remove_if(faceProximities.begin(), faceProximities.end(), faces.begin(), IsNull()), faceProximities.end());
+    faces.erase(thrust::remove_if(faces.begin(), faces.end(), IsNull()), faces.end());
+    thrust::sort_by_key(faces.begin(), faces.end(), faceProximities.begin());
+    thrust::device_vector<PairFi> outputFaces(faces.size());
+    thrust::device_vector<PairfN> outputFaceProximities(faceProximities.size());
+    auto faceIter = thrust::reduce_by_key(faces.begin(), faces.end(), faceProximities.begin(), outputFaces.begin(), outputFaceProximities.begin(), thrust::equal_to<PairFi>(), thrust::minimum<PairfN>());
+
+    int nNodeProximities = nodeIter.first - outputNodes.begin();
+    int nEdgeProximities = edgeIter.first - outputEdges.begin();
+    int nFaceProximities = faceIter.first - outputFaces.begin();
+    thrust::device_vector<Proximity> ans(nNodeProximities + nEdgeProximities + nFaceProximities);
+
+    setNodeProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nNodeProximities, pointer(outputNodes), pointer(outputNodeProximities), magic->repulsionThickness, magic->collisionStiffness, clothFriction, obstacleFriction, pointer(ans));
+    CUDA_CHECK_LAST();
+
+    setEdgeProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nEdgeProximities, pointer(outputEdges), pointer(outputEdgeProximities), magic->repulsionThickness, magic->collisionStiffness, clothFriction, obstacleFriction, pointer(ans, nNodeProximities));
+    CUDA_CHECK_LAST();
+
+    setFaceProximities<<<GRID_SIZE, BLOCK_SIZE>>>(nFaceProximities, pointer(outputFaces), pointer(outputFaceProximities), magic->repulsionThickness, magic->collisionStiffness, clothFriction, obstacleFriction, pointer(ans, nNodeProximities + nEdgeProximities));
+    CUDA_CHECK_LAST();
+
+    ans.erase(thrust::remove_if(ans.begin(), ans.end(), IsNull()), ans.end());
     return ans;
 }
 
@@ -437,8 +488,9 @@ void Simulator::physicsStep() {
         for (Cloth* cloth : cloths)
             cloth->physicsStep(dt, gravity, wind, magic->handleStiffness, proximities, magic->repulsionThickness);
     } else {
+        thrust::device_vector<Proximity> proximities = std::move(findProximitiesGpu(clothBvhs, obstacleBvhs));
         for (Cloth* cloth : cloths)
-            cloth->physicsStep(dt, gravity, wind, magic->handleStiffness);
+            cloth->physicsStep(dt, gravity, wind, magic->handleStiffness, proximities, magic->repulsionThickness);
     }
 
     destroyBvhs(clothBvhs);
@@ -786,6 +838,7 @@ bool Simulator::load() {
         std::string path = directory + "/frame" + std::to_string(nFrames) + "_cloth" + std::to_string(i) + ".obj";
         cloths[i]->load(path);
     }
+    return true;
 }
 
 void Simulator::save() {
@@ -873,8 +926,7 @@ void Simulator::simulateOffline() {
 }
 
 void Simulator::resume() {
-    // nFrames = lastFrame();
-    nFrames = 57;
+    nFrames = lastFrame();
     nSteps = nFrames * frameSteps;
     for (Obstacle* obstacle : obstacles)
         obstacle->transform(nSteps * dt);

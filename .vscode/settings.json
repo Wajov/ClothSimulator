@@ -4,12 +4,12 @@
         "cwd": "${workspaceFolder}",
         "args": [
             // "replay",
-            // "simulate",
+            "simulate",
             // "simulate_offline",
-            "resume",
+            // "resume",
             // "resume_offline",
-            // "conf/sphere.json",
-            "output",
+            "conf/sphere.json",
+            // "sphere",
             // "--gpu"
         ]
     },
