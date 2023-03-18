@@ -1,9 +1,10 @@
 #include "Wind.cuh"
 
-Wind::Wind() : 
-    density(1.0f),
-    drag(0.0f),
-    velocity(0.0f, 0.0f, 0.0f) {}
+Wind::Wind(const Json::Value& json) {
+    density = parseFloat(json["density"], 1.0f);
+    drag = parseFloat(json["drag"]);
+    velocity = parseVector3f(json["velocity"]);
+}
 
 Wind::~Wind() {}
 

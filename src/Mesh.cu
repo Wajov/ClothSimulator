@@ -447,17 +447,19 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
     }
 
     std::string line;
-    std::vector<Vector3f> x, v;
+    std::vector<Vector3f> raw, x, v;
     std::vector<Vector2f> u;
     std::vector<int> xIndices, uIndices;
     while (getline(fin, line)) {
         std::vector<std::string> s = std::move(split(line, ' '));
-        if (s[0] == "v")
-            x.push_back(transformation.applyToPoint(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
-        else if (s[0] == "nv")
+        if (s[0] == "v") {
+            Vector3f position(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]));
+            raw.push_back(position);
+            x.push_back(transformation.applyToPoint(position));
+        } else if (s[0] == "nv")
             v.push_back(transformation.applyToVector(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
         else if (s[0] == "vt")
-            u.emplace_back(std::stof(s[1]), std::stof(s[2]));
+            u.push_back(transformation.applyToUV(Vector2f(std::stof(s[1]), std::stof(s[2]))));
         else if (s[0] == "f") {
             std::vector<int> xPolygon, uPolygon;
             for (int i = 1; i < s.size(); i++)
@@ -466,8 +468,9 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
                     xPolygon.push_back(std::stoi(t[0]) - 1);
                     uPolygon.push_back(std::stoi(t[1]) - 1);
                 } else {
-                    u.emplace_back(0.0f, 0.0f);
-                    xPolygon.push_back(std::stoi(s[i]) - 1);
+                    int xIndex = std::stoi(s[i]) - 1;
+                    u.push_back(transformation.applyToUV(Vector2f(raw[xIndex](0), raw[xIndex](1))));
+                    xPolygon.push_back(xIndex);
                     uPolygon.push_back(u.size() - 1);
                 }
 

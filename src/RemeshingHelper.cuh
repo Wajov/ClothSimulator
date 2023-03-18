@@ -34,8 +34,8 @@ __global__ void computeSizingGpu(int nFaces, const Face* const* faces, const Pla
 __global__ void finalizeSizing(int nVertices, Vertex** vertices);
 __host__ __device__ bool shouldFlip(const Edge* edge, const Remeshing* remeshing);
 __global__ void checkEdgesToFlip(int nEdges, const Edge* const* edges, const Remeshing* remeshing, Edge** edgesToFlip);
-__global__ void initializeEdgeNodes(int nEdges, const Edge* const* edges);
-__global__ void resetEdgeNodes(int nEdges, const Edge* const* edges);
+__global__ void initializeEdgeFaces(int nEdges, const Edge* const* edges);
+__global__ void resetEdgeFaces(int nEdges, const Edge* const* edges);
 __global__ void computeEdgeMinIndices(int nEdges, const Edge* const* edges);
 __global__ void checkIndependentEdges(int nEdges, const Edge* const* edges, Edge** independentEdges);
 __global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* material, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces);
@@ -48,10 +48,10 @@ __global__ void collectAdjacentFaces(int nFaces, const Face* const* faces, int* 
 __global__ void setRange(int n, const int* indices, int* l, int* r);
 __device__ bool shouldCollapseGpu(const Edge* edge, int side, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing);
 __global__ void checkEdgesToCollapse(int nEdges, const Edge* const* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, const Face* const* adjacentFaces, const Remeshing* remeshing, PairEi* edgesToCollapse);
-__global__ void initializeCollapseNodes(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges);
-__global__ void resetCollapseNodes(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges);
-__global__ void computeCollapseMinIndices(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges);
-__global__ void checkIndependentEdgesToCollapse(int nEdges, const PairEi* edges, const int* edgeBegin, const int* edgeEnd, const Edge* const* adjacentEdges, PairEi* edgesToCollapse);
+__global__ void initializeCollapseFaces(int nEdges, const PairEi* edges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces);
+__global__ void resetCollapseFaces(int nEdges, const PairEi* edges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces);
+__global__ void computeCollapseMinIndices(int nEdges, const PairEi* edges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces);
+__global__ void checkIndependentEdgesToCollapse(int nEdges, const PairEi* edges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces, PairEi* independentEdges);
 __global__ void collapseGpu(int nEdges, const PairEi* edges, const Material* material, const int* edgeBegin, const int* edgeEnd, Edge* const* adjacentEdges, const int* faceBegin, const int* faceEnd, Face* const* adjacentFaces, Node** removedNodes, Vertex** removedVertices, Edge** removedEdges, Face** removedFaces);
 
 #endif

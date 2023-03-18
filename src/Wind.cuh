@@ -1,8 +1,10 @@
 #ifndef WIND_CUH
 #define WIND_CUH
 
+#include <json/json.h>
 #include <cuda_runtime.h>
 
+#include "JsonHelper.cuh"
 #include "Vector.cuh"
 
 class Wind {
@@ -11,7 +13,7 @@ private:
     Vector3f velocity;
 
 public:
-    __host__ __device__ Wind();
+    __host__ __device__ Wind(const Json::Value& json);
     __host__ __device__ ~Wind();
     __host__ __device__ float getDensity() const;
     __host__ __device__ float getDrag() const;

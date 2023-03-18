@@ -82,9 +82,9 @@ Edge* Face::findEdge(const Vertex* vertex0, const Vertex* vertex1) const {
     return nullptr;
 }
 
-Edge* Face::findOpposite(const Vertex* vertex) const {
+Edge* Face::findOpposite(const Node* node) const {
     for (int i = 0; i < 3; i++)
-        if (vertices[i] == vertex)
+        if (vertices[i]->node == node)
             return edges[(i + 1) % 3];
     return nullptr;
 }
