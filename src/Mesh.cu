@@ -39,6 +39,41 @@ std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     return ans;
 }
 
+float Mesh::angle(const Vector3f& x0, const Vector3f& x1, const Vector3f& x2) const {
+    Vector3f e1 = (x1 - x0).normalized();
+    Vector3f e2 = (x2 - x0).normalized();
+    return acos(clamp(e1.dot(e2), -1.0f, 1.0f));
+}
+
+void Mesh::triangulate(const std::vector<Vector3f>& x, const std::vector<int>& xPolygon, const std::vector<int>& uPolygon, std::vector<int>& xTriangles, std::vector<int>& uTriangles) const {
+    int n = xPolygon.size();
+    float bestMinAngle = 0.0f;
+    int index;
+    for (int i = 0; i < n; i++) {
+        float minAngle = INFINITY;
+        Vector3f x0 = x[xPolygon[i]];
+        for (int j = 2; j < n; j++) {
+            Vector3f x1 = x[xPolygon[(i + j - 1) % n]];
+            Vector3f x2 = x[xPolygon[(i + j) % n]];
+            minAngle = min(minAngle, angle(x0, x1, x2), angle(x1, x2, x0), angle(x2, x0, x1));
+        }
+
+        if (minAngle > bestMinAngle) {
+            bestMinAngle = minAngle;
+            index = i;
+        }
+    }
+
+    for (int i = 2; i < n; i++) {
+        xTriangles.push_back(xPolygon[index]);
+        xTriangles.push_back(xPolygon[(index + i - 1) % n]);
+        xTriangles.push_back(xPolygon[(index + i) % n]);
+        uTriangles.push_back(uPolygon[index]);
+        uTriangles.push_back(uPolygon[(index + i - 1) % n]);
+        uTriangles.push_back(uPolygon[(index + i) % n]);
+    }
+}
+
 Edge* Mesh::findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap) {
     if (index0 > index1)
         mySwap(index0, index1);
@@ -423,17 +458,24 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
             v.push_back(transformation.applyToVector(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
         else if (s[0] == "vt")
             u.emplace_back(std::stof(s[1]), std::stof(s[2]));
-        else if (s[0] == "f")
-            for (int i = 1; i < 4; i++)
+        else if (s[0] == "f") {
+            std::vector<int> xPolygon, uPolygon;
+            for (int i = 1; i < s.size(); i++)
                 if (line.find('/') != std::string::npos) {
                     std::vector<std::string> t = std::move(split(s[i], '/'));
-                    xIndices.push_back(std::stoi(t[0]) - 1);
-                    uIndices.push_back(std::stoi(t[1]) - 1);
+                    xPolygon.push_back(std::stoi(t[0]) - 1);
+                    uPolygon.push_back(std::stoi(t[1]) - 1);
                 } else {
                     u.emplace_back(0.0f, 0.0f);
-                    xIndices.push_back(std::stoi(s[i]) - 1);
-                    uIndices.push_back(u.size() - 1);
+                    xPolygon.push_back(std::stoi(s[i]) - 1);
+                    uPolygon.push_back(u.size() - 1);
                 }
+
+            std::vector<int> xTriangles, uTriangles;
+            triangulate(x, xPolygon, uPolygon, xTriangles, uTriangles);
+            xIndices.insert(xIndices.end(), xTriangles.begin(), xTriangles.end());
+            uIndices.insert(uIndices.end(), uTriangles.begin(), uTriangles.end());
+        }
     }
     fin.close();
 
@@ -442,6 +484,7 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
 
 void Mesh::save(const std::string& path) {
     std::ofstream fout(path);
+    fout.precision(20);
     if (!gpu) {
         for (const Node* node : nodes) {
             fout << "v " << node->x(0) << " " << node->x(1) << " " << node->x(2) << std::endl;
@@ -492,9 +535,8 @@ void Mesh::save(const std::string& path) {
             }
             fout << std::endl;
         }
-
-        fout.close();
     }
+    fout.close();
 }
 
 void Mesh::check() const {

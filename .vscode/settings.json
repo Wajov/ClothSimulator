@@ -8,9 +8,9 @@
             // "simulate_offline",
             // "resume",
             // "resume_offline",
-            "conf/sphere.json",
-            // "sphere",
-            // "--gpu"
+            "conf/sleeve.json",
+            // "sleeve",
+            "--gpu"
         ]
     },
     "files.associations": {

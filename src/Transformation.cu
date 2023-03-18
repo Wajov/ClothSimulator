@@ -3,13 +3,13 @@
 Transformation::Transformation() :
     scaling(1.0f),
     translation(),
-    rotation(Vector3f(1.0f, 1.0f, 1.0f), 0.0f) {}
+    rotation(Vector3f(), 0.0f) {}
 
 Transformation::Transformation(const Json::Value& json) {
     scaling = parseFloat(json["scale"], 1.0f);
     translation = parseVector3f(json["translate"]);
     Vector4f r = parseVector4f(json["rotate"]);
-    rotation = Quaternion(Vector3f(r(0), r(1), r(2)), r(3));
+    rotation = Quaternion(Vector3f(r(1), r(2), r(3)), r(0) * M_PI / 180.0f);
 }
 
 Transformation::~Transformation() {}

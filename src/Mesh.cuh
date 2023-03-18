@@ -45,6 +45,8 @@ private:
     thrust::device_vector<Face*> facesGpu;
     cudaGraphicsResource* vboCuda;
     std::vector<std::string> split(const std::string& s, char c) const;
+    float angle(const Vector3f& x0, const Vector3f& x1, const Vector3f& x2) const;
+    void triangulate(const std::vector<Vector3f>& x, const std::vector<int>& xPolygon, const std::vector<int>& uPolygon, std::vector<int>& xTriangles, std::vector<int>& uTriangles) const;
     Edge* findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap);
     void initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
 

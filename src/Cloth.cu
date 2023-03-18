@@ -694,8 +694,7 @@ bool Cloth::collapseSomeEdges() {
 }
 
 void Cloth::collapseEdges() {
-    while (collapseSomeEdges())
-        mesh->check();
+    while (collapseSomeEdges());
 }
 
 Mesh* Cloth::getMesh() const {

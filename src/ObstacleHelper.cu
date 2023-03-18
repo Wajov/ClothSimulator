@@ -22,6 +22,6 @@ __global__ void stepGpu(int nNodes, float invDt, const Vector3f* base, const Tra
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
         Node* node = nodes[i];
         Vector3f x = transformation.applyToPoint(base[i]);
-        node->v = (x - node->x0) * invDt;
+        node->v = (x - node->x) * invDt;
     }
 }

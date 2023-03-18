@@ -513,11 +513,12 @@ void Simulator::collisionStep() {
     int deform;
     float obstacleMass = 1e3f;
 
+    bool success;
     if (!gpu) {
         std::vector<Impact> impacts;
         for (deform = 0; deform < 2; deform++) {
             impacts.clear();
-            bool success = false;
+            success = false;
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
                 if (!impacts.empty())
                     updateActive(clothBvhs, obstacleBvhs, impacts);
@@ -550,7 +551,7 @@ void Simulator::collisionStep() {
         thrust::device_vector<Impact> impacts;
         for (deform = 0; deform < 2; deform++) {
             impacts.clear();
-            bool success = false;
+            success = false;
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
                 thrust::device_vector<Impact> newImpacts = std::move(findImpacts(clothBvhs, obstacleBvhs));
                 if (newImpacts.empty()) {
@@ -574,6 +575,8 @@ void Simulator::collisionStep() {
                 break;
         }
     }
+    if (!success)
+        std::cerr << "Collision step failed!" << std::endl;
 
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
@@ -605,10 +608,11 @@ void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces
     int deform;
     float obstacleArea = 1e3f;
 
+    bool success;
     std::vector<Intersection> intersections;
     for (deform = 0; deform < 2; deform++) {
         intersections.clear();
-        bool success = false;
+        success = false;
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
             if (!intersections.empty())
                 updateActive(clothBvhs, obstacleBvhs, intersections);
@@ -638,6 +642,8 @@ void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces
         if (success)
             break;
     }
+    if (!success)
+        std::cerr << "Separation step failed!" << std::endl;
 
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
@@ -656,10 +662,11 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
     int deform;
     float obstacleArea = 1e3f;
 
+    bool success;
     thrust::device_vector<Intersection> intersections;
     for (deform = 0; deform < 2; deform++) {
         intersections.clear();
-        bool success = false;
+        success = false;
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
             thrust::device_vector<Intersection> newIntersections = std::move(findIntersections(clothBvhs, obstacleBvhs, faces));
             if (newIntersections.empty()) {
@@ -683,6 +690,8 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
         if (success)
             break;
     }
+    if (!success)
+        std::cerr << "Separation step failed!" << std::endl;
 
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
@@ -847,6 +856,7 @@ void Simulator::save() {
 
     std::ofstream fout(directory + "/config.json");
     fout << json;
+    fout.close();
 }
 
 int Simulator::lastFrame() const {

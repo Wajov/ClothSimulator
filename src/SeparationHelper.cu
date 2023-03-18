@@ -38,7 +38,7 @@ bool checkIntersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b
         return false;
     
     Vector3f c = face0->n.cross(face1->n);
-    if (c.norm2() < 1e-10f)
+    if (c.norm2() < 1e-12f)
         return false;
     
     Vector3f b00, b01, b10, b11;

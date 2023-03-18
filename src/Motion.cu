@@ -10,6 +10,13 @@ Motion::Motion(const Json::Value& json) :
         t[i] = parseFloat(json[i]["time"]);
         x[i] = Transformation(json[i]["transform"]);
     }
+
+    if (t[0] > 0) {
+        n++;
+        t.insert(t.begin(), 0.0f);
+        x.insert(x.begin(), Transformation());
+        v.resize(n);
+    }
     
     v[0] = v[n - 1] = 0.0f * Transformation();
     for (int i = 1; i < n - 1; i++)

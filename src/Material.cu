@@ -1,7 +1,10 @@
 #include "Material.cuh"
 
 Material::Material(const Json::Value& json) {
-    thicken = parseFloat(json["thicken"]);
+    float thicken = parseFloat(json["thicken"], 1.0f);
+    float densityMultiplier = parseFloat(json["density_mult"], 1.0f) * thicken;
+    float stretchingMultiplier = parseFloat(json["stretching_mult"], 1.0f) * thicken;
+    float bendingMultiplier = parseFloat(json["bending_mult"], 1.0f) * thicken;
     std::string path = parseString(json["data"]);
     std::ifstream fin(path);
     if (!fin.is_open()) {
@@ -11,8 +14,9 @@ Material::Material(const Json::Value& json) {
 
     Json::Value data;
     fin >> data;
+    fin.close();
 
-    density = parseFloat(data["density"]);
+    density = parseFloat(data["density"]) * densityMultiplier;
     Vector4f stretchingData[2][5];
     for (int i = 0; i < 4; i++)
         stretchingData[0][0](i) = parseFloat(data["stretching"][0][i]);
@@ -28,14 +32,12 @@ Material::Material(const Json::Value& json) {
                 G(0, 0) = static_cast<float>(i) / N - 0.25f;
                 G(1, 1) = static_cast<float>(j) / N - 0.25f;
                 G(0, 1) = G(1, 0) = static_cast<float>(k) / N;
-                stretchingSamples[i][j][k] = calculateStretchingSample(G, stretchingData) * thicken;
+                stretchingSamples[i][j][k] = calculateStretchingSample(G, stretchingData) * stretchingMultiplier;
             }
 
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 5; j++)
-            bendingSamples[i][j] = parseFloat(data["bending"][i][j]) * thicken;
-
-    fin.close();
+            bendingSamples[i][j] = parseFloat(data["bending"][i][j]) * bendingMultiplier;
 }
 
 Material::~Material() {}
@@ -84,10 +86,6 @@ Vector4f Material::calculateStretchingSample(const Matrix2x2f& G, const Vector4f
 
 float Material::getDensity() const {
     return density;
-}
-
-float Material::getThicken() const {
-    return thicken;
 }
 
 Vector4f Material::stretchingStiffness(const Matrix2x2f& G) const {

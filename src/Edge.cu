@@ -39,8 +39,10 @@ void Edge::replaceNode(const Node* n, const Node* node) {
 void Edge::replaceVertex(const Vertex* v, const Vertex* vertex) {
     for (int i = 0; i < 2; i++)
         for (int j = 0; j < 2; j++)
-            if (vertices[i][j] == v)
+            if (vertices[i][j] == v) {
                 vertices[i][j] = const_cast<Vertex*>(vertex);
+                break;
+            }
 }
 
 void Edge::replaceOpposite(const Vertex* v, const Vertex* vertex) {

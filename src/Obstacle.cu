@@ -63,7 +63,7 @@ void Obstacle::step(float time, float dt) {
             for (int i = 0; i < nodes.size(); i++) {
                 Node* node = nodes[i];
                 Vector3f x = transformation.applyToPoint(base[i]);
-                node->v = (x - node->x0) * invDt;
+                node->v = (x - node->x) * invDt;
             }
         } else {
             thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
