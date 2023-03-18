@@ -47,10 +47,10 @@ void Obstacle::transform(float time) {
             transformGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodes.size(), pointer(baseGpu), transformation, pointer(nodes));
             CUDA_CHECK_LAST();
         }
-    }
 
-    mesh->updateFaceGeometries();
-    mesh->updateNodeGeometries();
+        mesh->updateFaceGeometries();
+        mesh->updateNodeGeometries();
+    }
 }
 
 void Obstacle::step(float time, float dt) {

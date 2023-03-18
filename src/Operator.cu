@@ -132,12 +132,22 @@ void Operator::split(const thrust::device_vector<Edge*>& edges, const Material* 
     removedFacesGpu.erase(thrust::remove(removedFacesGpu.begin(), removedFacesGpu.end(), nullptr), removedFacesGpu.end());
 }
 
-void Operator::collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Vertex*, std::vector<Face*>>& adjacentFaces) {
+void Operator::collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Node*, std::vector<Face*>>& adjacentFaces) {
     Node* node0 = edge->nodes[side];
     Node* node1 = edge->nodes[1 - side];
 
+    Vertex* vertex00 = edge->vertices[0][side];
+    Vertex* vertex01 = edge->vertices[0][1 - side];
+    Vertex* vertex10 = edge->vertices[1][side];
+    Vertex* vertex11 = edge->vertices[1][1 - side];
+
     removedNodes.push_back(node0);
     removedEdges.push_back(const_cast<Edge*>(edge));
+    if (edge->isSeam()) {
+        removedVertices.push_back(vertex00);
+        removedVertices.push_back(vertex10);
+    } else
+        removedVertices.push_back(vertex00 != nullptr ? vertex00 : vertex10);
 
     for (int i = 0; i < 2; i++)
         if (edge->opposites[i] != nullptr) {
@@ -176,38 +186,20 @@ void Operator::collapse(const Edge* edge, int side, const Material* material, co
     for (Edge* adjacentEdge : edges)
         if (adjacentEdge != edge) {
             adjacentEdge->replaceNode(node0, node1);
-            adjacentEdge->replaceVertex(edge->vertices[0][side], edge->vertices[0][1 - side]);
-            adjacentEdge->replaceVertex(edge->vertices[1][side], edge->vertices[1][1 - side]);
+            adjacentEdge->replaceVertex(vertex00, vertex01);
+            adjacentEdge->replaceVertex(vertex10, vertex11);
         }
 
-    if (edge->isSeam())
-        for (int i = 0; i < 2; i++) {
-            Vertex* vertex0 = edge->vertices[i][side];
-            Vertex* vertex1 = edge->vertices[i][1 - side];
-            removedVertices.push_back(vertex0);
-
-            const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
-            for (Face* adjacentFace : faces)
-                if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
-                    adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
-                    adjacentFace->replaceVertex(vertex0, vertex1);
-                    adjacentFace->initialize(material);
-                }
+    const std::vector<Face*>& faces = adjacentFaces.at(node0);
+    for (Face* adjacentFace : faces)
+        if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
+            Edge* opposite = adjacentFace->findOpposite(node0);
+            opposite->replaceOpposite(vertex00, vertex01);
+            opposite->replaceOpposite(vertex10, vertex11);
+            adjacentFace->replaceVertex(vertex00, vertex01);
+            adjacentFace->replaceVertex(vertex10, vertex11);
+            adjacentFace->initialize(material);
         }
-    else {
-        int index = edge->opposites[0] != nullptr ? 0 : 1;
-        Vertex* vertex0 = edge->vertices[index][side];
-        Vertex* vertex1 = edge->vertices[index][1 - side];
-        removedVertices.push_back(vertex0);
-        
-        const std::vector<Face*>& faces = adjacentFaces.at(vertex0);
-        for (Face* adjacentFace : faces)
-            if (adjacentFace != edge->adjacents[0] && adjacentFace != edge->adjacents[1]) {
-                adjacentFace->findOpposite(vertex0)->replaceOpposite(vertex0, vertex1);
-                adjacentFace->replaceVertex(vertex0, vertex1);
-                adjacentFace->initialize(material);
-            }
-    }
 }
 
 void Operator::collapse(const thrust::device_vector<PairEi>& edges, const Material* material, const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces) {

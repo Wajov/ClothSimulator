@@ -26,7 +26,7 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
     clothFriction = parseFloat(json["friction"], 0.6f);
     obstacleFriction = parseFloat(json["obs_friction"], 0.3f);
     gravity = parseVector3f(json["gravity"]);
-    Wind* windTemp = new Wind();
+    Wind* windTemp = new Wind(json["wind"]);
     if (!gpu)
         wind = windTemp;
     else {

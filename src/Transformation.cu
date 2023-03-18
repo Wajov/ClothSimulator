@@ -54,6 +54,10 @@ Transformation Transformation::operator/(float s) const {
     return ans;
 }
 
+Vector2f Transformation::applyToUV(const Vector2f& u) const {
+    return scaling * u;
+}
+
 Vector3f Transformation::applyToPoint(const Vector3f& p) const {
     return scaling * rotation.rotate(p) + translation;
 }
