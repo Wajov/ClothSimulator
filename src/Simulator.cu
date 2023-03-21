@@ -37,17 +37,65 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
     
     magic = new Magic(json["magic"]);
 
-    motions.resize(json["motions"].size());
-    for (int i = 0; i < json["motions"].size(); i++)
-        motions[i] = new Motion(json["motions"][i]);
+    if (json["motions"].isArray()) {
+        motions.resize(json["motions"].size());
+        for (int i = 0; i < json["motions"].size(); i++)
+            motions[i] = new Motion(json["motions"][i]);
+    } else if (json["motions"].isObject()) {
+        float fps = parseFloat(json["motions"]["fps"], 30.0f);
+        Transformation transformation(json["motions"]["transform"]);
+
+        std::string motionPath = parseString(json["motions"]["motfile"]);
+        fin.open(motionPath);
+        if (!fin.is_open()) {
+            std::cerr << "Failed to open motion file: " << motionPath << std::endl;
+            exit(1);
+        }
+        std::string s, t;
+        int frames;
+        fin >> s >> frames;
+        
+        std::vector<std::vector<Vector3f>> translations;
+        std::vector<std::vector<Quaternion>> rotations;
+        while (fin >> s >> t) {
+            float w, x, y, z;
+            
+            translations.push_back(std::vector<Vector3f>());
+            for (int i = 0; i < frames; i++) {
+                fin >> x >> y >> z;
+                translations.back().emplace_back(x, y, z);
+            }
+
+            fin >> s >> t;
+            rotations.push_back(std::vector<Quaternion>());
+            for (int i = 0; i < frames; i++) {
+                fin >> w >> x >> y >> z;
+                rotations.back().emplace_back(w, x, y, z);
+            }
+        }
+        fin.close();
+
+        motions.resize(translations.size());
+        for (int i = 0; i < motions.size(); i++)
+            motions[i] = new Motion(translations[i], rotations[i], transformation, fps);
+    }
     
     cloths.resize(json["cloths"].size());
     for (int i = 0; i < json["cloths"].size(); i++)
         cloths[i] = new Cloth(json["cloths"][i]);
 
-    obstacles.resize(json["obstacles"].size());
-    for (int i = 0; i < json["obstacles"].size(); i++)
-        obstacles[i] = new Obstacle(json["obstacles"][i], motions);
+    if (json["obstacles"].isArray()) {
+        obstacles.resize(json["obstacles"].size());
+        for (int i = 0; i < json["obstacles"].size(); i++)
+            obstacles[i] = new Obstacle(json["obstacles"][i], motions);
+    } else if (json["obstacles"].isString())
+        for (int i = 0; ; i++) {
+            std::string obstaclePath = stringFormat(parseString(json["obstacles"]), i);
+            if (!std::filesystem::exists(obstaclePath))
+                break;
+            
+            obstacles.push_back(new Obstacle(obstaclePath, motions[i]));
+        }
 }
 
 Simulator::~Simulator() {
@@ -64,6 +112,15 @@ Simulator::~Simulator() {
         delete wind;
     else
         CUDA_CHECK(cudaFree(wind));
+}
+
+std::string Simulator::stringFormat(const std::string format, ...) const {
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, 256, format.c_str(), args);
+    va_end(args);
+    return std::string(buffer);
 }
 
 std::vector<BVH*> Simulator::buildClothBvhs(bool ccd) const {
@@ -334,41 +391,46 @@ std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& imp
 
         if (flag) {
             ans.push_back(impact);
-            for (int i = 0; i < 4; i++)
-                nodes.insert(impact.nodes[i]);
+            for (int i = 0; i < 4; i++) {
+                Node* node = impact.nodes[i];
+                if (deform == 1 || node->isFree)
+                    nodes.insert(node);
+            }
         }
     }
     return ans;
 }
 
 thrust::device_vector<Impact> Simulator::independentImpacts(const thrust::device_vector<Impact>& impacts, int deform) const {
-    int nImpacts = impacts.size();
-    const Impact* impactsPointer = pointer(impacts);
+    thrust::device_vector<Impact> sorted = impacts;
+    thrust::sort(sorted.begin(), sorted.end());
+    
+    int nImpacts = sorted.size();
+    const Impact* sortedPointer = pointer(sorted);
     int nNodes = 4 * nImpacts;
-    thrust::device_vector<Node*> nodes(nNodes), outputNodes(nNodes);
-    Node** nodesPointer = pointer(nodes);
-    Node** outputNodesPointer = pointer(outputNodes);
-    thrust::device_vector<Pairfi> relativeImpacts(nNodes), outputRelativeImpacts(nNodes);
-    Pairfi* relativeImpactsPointer = pointer(relativeImpacts);
-    Pairfi* outputRelativeImpactsPointer = pointer(outputRelativeImpacts);
     thrust::device_vector<Impact> ans(nImpacts);
     Impact* ansPointer = pointer(ans);
-    initializeImpactNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, impactsPointer, deform);
+    initializeImpactNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, sortedPointer, deform);
     CUDA_CHECK_LAST();
 
     int num, newNum = nImpacts;
     do {
         num = newNum;
-        collectRelativeImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, impactsPointer, deform, nodesPointer, relativeImpactsPointer);
+        thrust::device_vector<Node*> nodes(nNodes);
+        thrust::device_vector<int> relativeImpacts(nNodes);
+        collectRelativeImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, sortedPointer, deform, pointer(nodes), pointer(relativeImpacts));
         CUDA_CHECK_LAST();
 
+        nodes.erase(thrust::remove(nodes.begin(), nodes.end(), nullptr), nodes.end());
+        relativeImpacts.erase(thrust::remove(relativeImpacts.begin(), relativeImpacts.end(), -1), relativeImpacts.end());
         thrust::sort_by_key(nodes.begin(), nodes.end(), relativeImpacts.begin());
-        auto iter = thrust::reduce_by_key(nodes.begin(), nodes.end(), relativeImpacts.begin(), outputNodes.begin(), outputRelativeImpacts.begin(), thrust::equal_to<Node*>(), thrust::minimum<Pairfi>());
-
-        setImpactMinIndices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputNodes.begin(), outputRelativeImpactsPointer, outputNodesPointer);
+        thrust::device_vector<Node*> outputNodes(nNodes);
+        thrust::device_vector<int> outputRelativeImpacts(nNodes);
+        auto iter = thrust::reduce_by_key(nodes.begin(), nodes.end(), relativeImpacts.begin(), outputNodes.begin(), outputRelativeImpacts.begin(), thrust::equal_to<Node*>(), thrust::minimum<int>());
+        setImpactMinIndices<<<GRID_SIZE, BLOCK_SIZE>>>(iter.first - outputNodes.begin(), pointer(outputRelativeImpacts), pointer(outputNodes));
         CUDA_CHECK_LAST();
 
-        checkIndependentImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, impactsPointer, deform, ansPointer);
+        checkIndependentImpacts<<<GRID_SIZE, BLOCK_SIZE>>>(nImpacts, sortedPointer, deform, ansPointer);
         CUDA_CHECK_LAST();
 
         newNum = thrust::count_if(ans.begin(), ans.end(), IsNull());
@@ -456,6 +518,7 @@ thrust::device_vector<Intersection> Simulator::findIntersections(const std::vect
     CUDA_CHECK_LAST();
 
     for (int i = 0; i < cloths.size(); i++) {
+        const BackupFace* facesPointer = pointer(faces[i]);
         thrust::device_vector<Vertex*>& vertices = cloths[i]->getMesh()->getVerticesGpu();
         thrust::device_vector<int> indices(2 * nAns);
         int* indicesPointer = pointer(indices);
@@ -466,7 +529,12 @@ thrust::device_vector<Intersection> Simulator::findIntersections(const std::vect
 
         u.erase(thrust::remove_if(u.begin(), u.end(), indices.begin(), IsNull()), u.end());
         indices.erase(thrust::remove(indices.begin(), indices.end(), -1), indices.end());
-        computeOldPosition<<<GRID_SIZE, BLOCK_SIZE>>>(indices.size(), indicesPointer, uPointer, faces[i].size(), pointer(faces[i]), xPointer);
+        thrust::device_vector<int> faceIndices(indices.size());
+        int* faceIndicesPointer = pointer(faceIndices);
+        computeEnclosingFaces<<<GRID_SIZE, BLOCK_SIZE>>>(indices.size(), uPointer, faces[i].size(), facesPointer, faceIndicesPointer);
+        CUDA_CHECK_LAST();
+
+        computeOldPositions<<<GRID_SIZE, BLOCK_SIZE>>>(indices.size(), indicesPointer, faceIndicesPointer, uPointer, facesPointer, xPointer);
         CUDA_CHECK_LAST();
     }
 
@@ -513,12 +581,11 @@ void Simulator::collisionStep() {
     int deform;
     float obstacleMass = 1e3f;
 
-    bool success;
+    bool success = false;
     if (!gpu) {
         std::vector<Impact> impacts;
         for (deform = 0; deform < 2; deform++) {
             impacts.clear();
-            success = false;
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
                 if (!impacts.empty())
                     updateActive(clothBvhs, obstacleBvhs, impacts);
@@ -551,7 +618,6 @@ void Simulator::collisionStep() {
         thrust::device_vector<Impact> impacts;
         for (deform = 0; deform < 2; deform++) {
             impacts.clear();
-            success = false;
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
                 thrust::device_vector<Impact> newImpacts = std::move(findImpacts(clothBvhs, obstacleBvhs));
                 if (newImpacts.empty()) {
@@ -575,8 +641,10 @@ void Simulator::collisionStep() {
                 break;
         }
     }
-    if (!success)
-        std::cerr << "Collision step failed!" << std::endl;
+    if (!success) {
+        std::cerr << std::endl << "Collision step failed!" << std::endl;
+        exit(1);
+    }
 
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
@@ -608,11 +676,10 @@ void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces
     int deform;
     float obstacleArea = 1e3f;
 
-    bool success;
+    bool success = false;
     std::vector<Intersection> intersections;
     for (deform = 0; deform < 2; deform++) {
         intersections.clear();
-        success = false;
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
             if (!intersections.empty())
                 updateActive(clothBvhs, obstacleBvhs, intersections);
@@ -642,8 +709,10 @@ void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces
         if (success)
             break;
     }
-    if (!success)
-        std::cerr << "Separation step failed!" << std::endl;
+    if (!success) {
+        std::cerr << std::endl << "Separation step failed!" << std::endl;
+        exit(1);
+    }
 
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
@@ -662,11 +731,10 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
     int deform;
     float obstacleArea = 1e3f;
 
-    bool success;
+    bool success = false;
     thrust::device_vector<Intersection> intersections;
     for (deform = 0; deform < 2; deform++) {
         intersections.clear();
-        success = false;
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
             thrust::device_vector<Intersection> newIntersections = std::move(findIntersections(clothBvhs, obstacleBvhs, faces));
             if (newIntersections.empty()) {
@@ -690,8 +758,10 @@ void Simulator::separationStep(const std::vector<thrust::device_vector<BackupFac
         if (success)
             break;
     }
-    if (!success)
-        std::cerr << "Separation step failed!" << std::endl;
+    if (!success) {
+        std::cerr << std::endl << "Separation step failed!" << std::endl;
+        exit(1);
+    }
 
     destroyBvhs(clothBvhs);
     destroyBvhs(obstacleBvhs);
@@ -748,13 +818,15 @@ void Simulator::simulateStep(bool offline) {
 
     std::chrono::duration<float> d;
     auto t0 = std::chrono::high_resolution_clock::now();
-    
+
     physicsStep();
+    cudaDeviceSynchronize();
     auto t1 = std::chrono::high_resolution_clock::now();
     d = t1 - t0;
     std::cout << "Physics Step: " << d.count() << "s";
-    
+
     collisionStep();
+    cudaDeviceSynchronize();
     auto t2 = std::chrono::high_resolution_clock::now();
     d = t2 - t1;
     std::cout << ", Collision Step: " << d.count() << "s";
@@ -766,11 +838,13 @@ void Simulator::simulateStep(bool offline) {
                 faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
 
             remeshingStep();
+            cudaDeviceSynchronize();
             auto t3 = std::chrono::high_resolution_clock::now();
             d = t3 - t2;
             std::cout << ", Remeshing Step: " << d.count() << "s";
 
             separationStep(faces);
+            cudaDeviceSynchronize();
             auto t4 = std::chrono::high_resolution_clock::now();
             d = t4 - t3;
             std::cout << ", Separation Step: " << d.count() << "s";
@@ -780,11 +854,13 @@ void Simulator::simulateStep(bool offline) {
                 faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
 
             remeshingStep();
+            cudaDeviceSynchronize();
             auto t3 = std::chrono::high_resolution_clock::now();
             d = t3 - t2;
             std::cout << ", Remeshing Step: " << d.count() << "s";
 
             separationStep(faces);
+            cudaDeviceSynchronize();
             auto t4 = std::chrono::high_resolution_clock::now();
             d = t4 - t3;
             std::cout << ", Separation Step: " << d.count() << "s";

@@ -96,36 +96,43 @@ void Optimization::updateMultiplier(const thrust::device_vector<Vector3f>& x) {
 }
 
 void Optimization::solve() {
-    float s = 1e-3f, omega = 1.0f, f;
+    float f, ft, s, omega = 1.0f;
     mu = 1e3f;
     if (!gpu) {
         std::vector<Vector3f> x(nNodes), gradient(nNodes), xt(nNodes);
         lambda.assign(nConstraints, 0.0f);
         initialize(x);
 
-        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
-            valueAndGradient(x, f, gradient);
-        
-            float norm2 = 0.0f;
-            for (int i = 0; i < nNodes; i++)
-                norm2 += gradient[i].norm2();
-            s /= 0.7f;
-            do {
-                s *= 0.7f;
+        for (int iter = 0; iter < MAX_ITERATIONS; ) {
+            s = 1e-3 * nNodes;
+            int subIter;
+            for (subIter = 0; subIter < MAX_SUB_ITERATIONS && iter < MAX_ITERATIONS; subIter++, iter++) {
+                valueAndGradient(x, f, gradient);
+
+                float norm2 = 0.0f;
                 for (int i = 0; i < nNodes; i++)
-                    xt[i] = x[i] - s * gradient[i];
-            } while (value(xt) >= f - 0.5f * s * norm2 && s >= EPSILON);
-            if (s < EPSILON)
+                    norm2 += gradient[i].norm2();
+
+                do {
+                    s *= 0.7f;
+                    for (int i = 0; i < nNodes; i++)
+                        xt[i] = x[i] - s * gradient[i];
+                    ft = value(xt);
+                } while (ft >= f - 0.5f * s * norm2 && s >= EPSILON_S && abs(f - ft) >= EPSILON_F);
+                if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
+                    break;
+
+                if (iter == 10)
+                    omega = 2.0f / (2.0f - RHO2);
+                else if (iter > 10)
+                    omega = 4.0f / (4.0f - RHO2 * omega);
+                float coeffient = (1 + omega) * s;
+                for (int i = 0; i < nNodes; i++)
+                    x[i] -= coeffient * gradient[i];
+            }
+            if (subIter == 0)
                 break;
 
-            if (iter == 10)
-                omega = 2.0f / (2.0f - RHO2);
-            else if (iter > 10)
-                omega = 4.0f / (4.0f - RHO2 * omega);
-            float coeffient = (1 + omega) * s;
-            for (int i = 0; i < nNodes; i++)
-                x[i] -= coeffient * gradient[i];
-            
             updateMultiplier(x);
         }
         finalize(x);
@@ -139,25 +146,32 @@ void Optimization::solve() {
         lambdaGpu.assign(nConstraints, 0.0f);
         initialize(x);
 
-        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
-            valueAndGradient(x, f, gradient);
+        for (int iter = 0; iter < MAX_ITERATIONS; ) {
+            s = 1e-3 * nNodes;
+            int subIter;
+            for (subIter = 0; subIter < MAX_SUB_ITERATIONS && iter < MAX_ITERATIONS; subIter++, iter++) {
+                valueAndGradient(x, f, gradient);
 
-            computeNorm2<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, gradient2Pointer);
-            float norm2 = thrust::reduce(gradient2.begin(), gradient2.end());
-            s /= 0.7f;
-            do {
-                s *= 0.7f;
-                computeXt<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xPointer, gradientPointer, s, xtPointer);
-            } while (value(xt) >= f - 0.5f * s * norm2 && s >= EPSILON);
-            if (s < EPSILON)
+                computeNorm2<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, gradient2Pointer);
+                float norm2 = thrust::reduce(gradient2.begin(), gradient2.end());
+
+                do {
+                    s *= 0.7f;
+                    computeXt<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xPointer, gradientPointer, s, xtPointer);
+                    ft = value(xt);
+                } while (ft >= f - 0.5f * s * norm2 && s >= EPSILON_S && abs(f - ft) >= EPSILON_F);
+                if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
+                    break;
+                
+                if (iter == 10)
+                    omega = 2.0f / (2.0f - RHO2);
+                else if (iter > 10)
+                    omega = 4.0f / (4.0f - RHO2 * omega);
+                float coeffient = (1 + omega) * s;
+                updateX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, coeffient, xPointer);
+            }
+            if (subIter == 0)
                 break;
-            
-            if (iter == 10)
-                omega = 2.0f / (2.0f - RHO2);
-            else if (iter > 10)
-                omega = 4.0f / (4.0f - RHO2 * omega);
-            float coeffient = (1 + omega) * s;
-            updateX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, coeffient, xPointer);
 
             updateMultiplier(x);
         }

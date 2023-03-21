@@ -249,16 +249,6 @@ thrust::device_vector<BackupFace> Mesh::backupFacesGpu() const {
     setBackupFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(ans));
     CUDA_CHECK_LAST();
 
-    // thrust::host_vector<BackupFace> faces = ans;
-    // std::ofstream fout("faces.txt");
-    // fout.precision(20);
-    // for (int i = 0; i < faces.size(); i++) {
-    //     const BackupFace& face = faces[i];
-    //     for (int j = 0; j < 3; j++)
-    //         fout << face.x[j](0) << ' ' << face.x[j](1) << ' ' << face.x[j](2) << ' ' << face.u[j](0) << ' ' << face.u[j](1) << std::endl;
-    // }
-    // fout.close();
-
     return ans;
 }
 

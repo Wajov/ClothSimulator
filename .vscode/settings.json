@@ -5,11 +5,11 @@
         "args": [
             // "replay",
             // "simulate",
-            "simulate_offline",
+            // "simulate_offline",
             // "resume",
-            // "resume_offline",
-            "conf/sleeve.json",
-            "sleeve",
+            "resume_offline",
+            // "conf/crush.json",
+            "output/dress-blue",
             "--gpu"
         ]
     },
