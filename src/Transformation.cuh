@@ -18,11 +18,13 @@ private:
 public:
     __host__ __device__ Transformation();
     __host__ __device__ Transformation(const Json::Value& json);
+    __host__ __device__ Transformation(const Vector3f& translation, const Quaternion& rotation);
     __host__ __device__ ~Transformation();
     __host__ __device__ Transformation operator+(const Transformation& t) const;
     __host__ __device__ Transformation operator-(const Transformation& t) const;
     __host__ __device__ friend Transformation operator*(float s, const Transformation& t);
     __host__ __device__ Transformation operator*(float s) const;
+    __host__ __device__ Transformation operator*(const Transformation& t) const;
     __host__ __device__ Transformation operator/(float s) const;
     __host__ __device__ Vector2f applyToUV(const Vector2f& u) const;
     __host__ __device__ Vector3f applyToPoint(const Vector3f& p) const;

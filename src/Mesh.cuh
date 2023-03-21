@@ -51,7 +51,7 @@ private:
     void initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
 
 public:
-    Mesh(const Json::Value& json, const Transformation& transformation, const Material* material);
+    Mesh(const std::string& path, const Transformation& transformation, const Material* material);
     ~Mesh();
     std::vector<Node*>& getNodes();
     thrust::device_vector<Node*>& getNodesGpu();

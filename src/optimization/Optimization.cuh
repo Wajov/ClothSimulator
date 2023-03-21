@@ -13,9 +13,10 @@
 #include "Node.cuh"
 
 const int MAX_ITERATIONS = 100;
-const float EPSILON = 1e-12f;
-const float RHO = 0.9992f;
-const float RHO2 = RHO * RHO;
+const int MAX_SUB_ITERATIONS = 10;
+const float EPSILON_S = 1e-12f;
+const float EPSILON_F = 1e-10f;
+const float RHO2 = sqr(0.9992f);
 
 extern bool gpu;
 

@@ -56,7 +56,7 @@ bool checkIntersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b
     float aMax = min(max(a00, a01), max(a10, a11));
     if (aMin > aMax)
         return false;
-    
+
     float aMid = 0.5f * (aMin + aMax);
     b0 = (a00 == a01) ? b00 : b00 + (aMid - a00) / (a01 - a00) * (b01 - b00);
     b1 = (a10 == a11) ? b10 : b10 + (aMid - a10) / (a11 - a10) * (b11 - b10);
@@ -121,19 +121,25 @@ __global__ void collectContainedFaces(int nIntersections, const Intersection* in
     }
 }
 
-__device__ void oldPositionGpu(const Vector2f& u, const BackupFace& face, Vector3f& x) {
-    Vector3f b = face.barycentricCoordinates(u);
-    if (b(0) >= -1e-6f && b(1) >= -1e-6f && b(2) >= -1e-5f)
-        x = face.position(b);
-}
-
-__global__ void computeOldPosition(int nIndices, const int* indices, const Vector2f* u, int nFaces, const BackupFace* faces, Vector3f* x) {
+__global__ void computeEnclosingFaces(int nIndices, const Vector2f* u, int nFaces, const BackupFace* faces, int* faceIndices) {
     int nThreads = gridDim.x * blockDim.x;
     int nm = nIndices * nFaces;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nm; i += nThreads) {
         int n = i / nFaces;
-        oldPositionGpu(u[n], faces[i % nFaces], x[indices[n]]);
+        int m = i % nFaces;
+        Vector3f b = faces[m].barycentricCoordinates(u[n]);
+        if (b(0) >= -1e-6f && b(1) >= -1e-6f && b(2) >= -1e-5f)
+            faceIndices[n] = m;
+    }
+}
+
+__global__ void computeOldPositions(int nIndices, const int* indices, const int* faceIndices, const Vector2f* u, const BackupFace* faces, Vector3f* x) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads) {
+        const BackupFace& face = faces[faceIndices[i]];
+        x[indices[i]] = face.position(face.barycentricCoordinates(u[i]));
     }
 }
 
@@ -175,7 +181,7 @@ void clearEdgeEdgeDistance(const Face* face0, const Face* face1, const Vector3f&
             Vector3f x01 = face0->vertices[(i + 1) % 3]->node->x;
             Vector3f x10 = face1->vertices[j]->node->x;
             Vector3f x11 = face1->vertices[(j + 1) % 3]->node->x;
-            Vector3f n = (x01 - x00).cross(x11 - x10).normalized();
+            Vector3f n = (x01 - x00).normalized().cross((x11 - x10).normalized());
             
             float h = (x00 - x10).dot(n);
             float dh = d.dot(n);

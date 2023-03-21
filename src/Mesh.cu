@@ -1,7 +1,6 @@
 #include "Mesh.cuh"
 
-Mesh::Mesh(const Json::Value &json, const Transformation& transformation, const Material* material) {
-    std::string path = parseString(json);
+Mesh::Mesh(const std::string& path, const Transformation& transformation, const Material* material) {
     load(path, transformation, material);
 }
 
@@ -249,6 +248,16 @@ thrust::device_vector<BackupFace> Mesh::backupFacesGpu() const {
     thrust::device_vector<BackupFace> ans(facesGpu.size());
     setBackupFaces<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), pointer(ans));
     CUDA_CHECK_LAST();
+
+    // thrust::host_vector<BackupFace> faces = ans;
+    // std::ofstream fout("faces.txt");
+    // fout.precision(20);
+    // for (int i = 0; i < faces.size(); i++) {
+    //     const BackupFace& face = faces[i];
+    //     for (int j = 0; j < 3; j++)
+    //         fout << face.x[j](0) << ' ' << face.x[j](1) << ' ' << face.x[j](2) << ' ' << face.u[j](0) << ' ' << face.u[j](1) << std::endl;
+    // }
+    // fout.close();
 
     return ans;
 }
@@ -507,28 +516,26 @@ void Mesh::save(const std::string& path) {
         }
     } else {
         int nNodes = nodesGpu.size();
-        thrust::device_vector<Vector3f> x(nNodes);
-        copyX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), pointer(x));
+        thrust::device_vector<Vector3f> x(nNodes), v(nNodes);
+        copyNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), pointer(x), pointer(v));
         CUDA_CHECK_LAST();
-        for (const Vector3f& xt : x)
+        for (int i = 0; i < nNodes; i++) {
+            Vector3f xt = x[i];
+            Vector3f vt = v[i];
             fout << "v " << xt(0) << " " << xt(1) << " " << xt(2) << std::endl;
-
-        thrust::device_vector<Vector3f> v(nNodes);
-        copyV<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), pointer(v));
-        CUDA_CHECK_LAST();
-        for (const Vector3f& vt : v)
             fout << "nv " << vt(0) << " " << vt(1) << " " << vt(2) << std::endl;
+        }
 
         int nVertices = verticesGpu.size();
         thrust::device_vector<Vector2f> u(nVertices);
-        copyU<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(verticesGpu), pointer(u));
+        copyVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(verticesGpu), pointer(u));
         CUDA_CHECK_LAST();
         for (const Vector2f& ut : u)
             fout << "vt " << ut(0) << " " << ut(1) << std::endl;
         
         int nFaces = facesGpu.size();
         thrust::device_vector<Pairii> indices(3 * nFaces);
-        copyFaceIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(facesGpu), pointer(indices));
+        copyFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(facesGpu), pointer(indices));
         CUDA_CHECK_LAST();
         for (int i = 0; i < nFaces; i++) {
             fout << "f";

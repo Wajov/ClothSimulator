@@ -12,6 +12,11 @@ Transformation::Transformation(const Json::Value& json) {
     rotation = Quaternion(Vector3f(r(1), r(2), r(3)), r(0) * M_PI / 180.0f);
 }
 
+Transformation::Transformation(const Vector3f& translation, const Quaternion& rotation) :
+    scaling(1.0f),
+    translation(translation),
+    rotation(rotation) {}
+
 Transformation::~Transformation() {}
 
 Transformation Transformation::operator+(const Transformation& t) const {
@@ -43,6 +48,14 @@ Transformation Transformation::operator*(float s) const {
     ans.scaling = scaling * s;
     ans.translation = translation * s;
     ans.rotation = rotation * s;
+    return ans;
+}
+
+Transformation Transformation::operator*(const Transformation& t) const {
+    Transformation ans;
+    ans.scaling = scaling * t.scaling;
+    ans.translation = translation + rotation.rotate(t.scaling * t.translation);
+    ans.rotation = rotation * t.rotation;
     return ans;
 }
 

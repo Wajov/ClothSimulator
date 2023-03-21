@@ -1,11 +1,12 @@
 #include "Motion.cuh"
 
 Motion::Motion(const Json::Value& json) :
-    index(0) {
-    n = json.size();
+    index(0),
+    n(json.size()) {
     t.resize(n);
     x.resize(n);
     v.resize(n);
+
     for (int i = 0; i < n; i++) {
         t[i] = parseFloat(json[i]["time"]);
         x[i] = Transformation(json[i]["transform"]);
@@ -17,14 +18,32 @@ Motion::Motion(const Json::Value& json) :
         x.insert(x.begin(), Transformation());
         v.resize(n);
     }
-    
+    initialize();
+}
+
+Motion::Motion(const std::vector<Vector3f>& translations, const std::vector<Quaternion>& rotations, const Transformation& transformation, float fps) :
+    index(0),
+    n(translations.size()) {
+    t.resize(n);
+    x.resize(n);
+    v.resize(n);
+
+    float dt = 1.0f / fps;
+    for (int i = 0; i < n; i++) {
+        t[i] = i * dt;
+        x[i] = transformation * Transformation(translations[i], rotations[i]);
+    }
+    initialize();
+}
+
+Motion::~Motion() {}
+
+void Motion::initialize() {
     v[0] = v[n - 1] = 0.0f * Transformation();
     for (int i = 1; i < n - 1; i++)
         v[i] = (x[i + 1] - x[i - 1]) / (t[i + 1] - t[i - 1]);
     updateCoefficients();
 }
-
-Motion::~Motion() {}
 
 void Motion::updateCoefficients() {
     float dt = t[index + 1] - t[index];

@@ -53,25 +53,9 @@ float signedVertexFaceDistance(const Vector3f& x, const Vector3f& y0, const Vect
 
 float signedEdgeEdgeDistance(const Vector3f& x0, const Vector3f& x1, const Vector3f& y0, const Vector3f& y1, Vector3f& n, float* w) {
     n = (x1 - x0).normalized().cross((y1 - y0).normalized());
-    if (n.norm2() < 1e-8f) {
-        Vector3f e0 = (x1 - x0).normalized(), e1 = (y1 - y0).normalized();
-        float p0min = x0.dot(e0), p0max = x1.dot(e0), p1min = y0.dot(e0), p1max = y1.dot(e0);
-        if (p1max < p1min)
-            mySwap(p1max, p1min);
-        
-        float a = max(p0min, p1min), b = min(p0max, p1max), c = 0.5f * (a + b);
-        if (a > b)
-            return INFINITY;
-        
-        Vector3f d = y0 - x0 - (y0-x0).dot(e0) * e0;
-        n = (-d).normalized();
-        w[1] = (c - x0.dot(e0)) / (x1 - x0).norm();
-        w[0] = 1.0f - w[1];
-        w[3] = -(e0.dot(e1) * c - y0.dot(e1)) / (y1-y0).norm();
-        w[2] = -1.0f - w[3];
-        return d.norm();
-    }
-    n = n.normalized();
+    if (n.norm2() < 1e-6f)
+        return INFINITY;
+    n.normalize();
     float h = (x0 - y0).dot(n);
     float a0 = mixed(y1 - x1, y0 - x1, n);
     float a1 = mixed(y0 - x0, y1 - x0, n);

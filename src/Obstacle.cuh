@@ -22,9 +22,11 @@ private:
     Shader* shader;
     std::vector<Vector3f> base;
     thrust::device_vector<Vector3f> baseGpu;
+    void initialize();
 
 public:
     Obstacle(const Json::Value& json, const std::vector<Motion*>& motions);
+    Obstacle(const std::string& path, const Motion* motion);
     ~Obstacle();
     Mesh* getMesh() const;
     void transform(float time);

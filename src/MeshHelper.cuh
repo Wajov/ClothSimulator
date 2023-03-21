@@ -53,10 +53,9 @@ __global__ void updateFaceGeometriesGpu(int nFaces, Face** faces);
 __global__ void updatePositionsGpu(int nNodes, float dt, Node** nodes);
 __global__ void updateVelocitiesGpu(int nNodes, float invDt, Node** nodes);
 __global__ void updateRenderingDataGpu(int nFaces, const Face* const* faces, Renderable* renderables);
-__global__ void copyX(int nNodes, const Node* const* nodes, Vector3f* x);
-__global__ void copyV(int nNodes, const Node* const* nodes, Vector3f* v);
-__global__ void copyU(int nVertices, const Vertex* const* vertices, Vector2f* u);
-__global__ void copyFaceIndices(int nFaces, const Face* const* faces, Pairii* indices);
+__global__ void copyNodes(int nNodes, const Node* const* nodes, Vector3f* x, Vector3f* v);
+__global__ void copyVertices(int nVertices, const Vertex* const* vertices, Vector2f* u);
+__global__ void copyFaces(int nFaces, const Face* const* faces, Pairii* indices);
 __global__ void checkEdges(int nEdges, const Edge* const* edges);
 __global__ void checkFaces(int nFaces, const Face* const* faces);
 

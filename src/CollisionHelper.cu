@@ -8,7 +8,7 @@ float newtonsMethod(float a, float b, float c, float d, float x0, int dir) {
     }
     for (int iter = 0; iter < 100; iter++) {
         float y = d + x0 * (c + x0 * (b + x0 * a));
-        float dy = c + x0 * (2*b + 3.0f * x0 * a);
+        float dy = c + x0 * (2.0f * b + 3.0f * x0 * a);
         if (dy == 0)
             return x0;
         float x1 = x0 - y / dy;
@@ -27,9 +27,9 @@ int solveQuadratic(float a, float b, float c, float x[2]) {
     }
     float q = -(b + sign(b) * sqrt(d)) * 0.5f;
     int i = 0;
-    if (abs(a) > 1e-12 * abs(q))
+    if (abs(a) > 1e-12f * abs(q))
         x[i++] = q / a;
-    if (abs(q) > 1e-12 * abs(c))
+    if (abs(q) > 1e-12f * abs(c))
         x[i++] = c / q;
     if (i == 2 && x[0] > x[1])
         mySwap(x[0], x[1]);
@@ -77,9 +77,6 @@ bool checkImpact(ImpactType type, const Node* node0, const Node* node1, const No
     float a1 = mixed(v1, x2, x3) + mixed(x1, v2, x3) + mixed(x1, x2, v3);
     float a2 = mixed(x1, v2, v3) + mixed(v1, x2, v3) + mixed(v1, v2, x3);
     float a3 = mixed(v1, v2, v3);
-
-    if (abs(a0) < 1e-6f * x1.norm() * x2.norm() * x3.norm())
-        return false;
 
     float t[3];
     int nSolution = solveCubic(a3, a2, a1, a0, t);
@@ -171,13 +168,15 @@ __global__ void initializeImpactNodes(int nImpacts, const Impact* impacts, int d
         const Impact& impact = impacts[i];
         for (int j = 0; j < 4; j++) {
             Node* node = impact.nodes[j];
-            if (deform == 1 || node->isFree)
+            if (deform == 1 || node->isFree) {
                 node->removed = false;
+                node->minIndex = nImpacts;
+            }
         }
     }
 }
 
-__global__ void collectRelativeImpacts(int nImpacts, const Impact* impacts, int deform, Node** nodes, Pairfi* relativeImpacts) {
+__global__ void collectRelativeImpacts(int nImpacts, const Impact* impacts, int deform, Node** nodes, int* relativeImpacts) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nImpacts; i += nThreads) {
@@ -196,21 +195,20 @@ __global__ void collectRelativeImpacts(int nImpacts, const Impact* impacts, int 
             int index = 4 * i + j;
             if (flag && (deform == 1 || node->isFree)) {
                 nodes[index] = node;
-                relativeImpacts[index] = Pairfi(impact.t, i);
-            }  else
-                nodes[4 * i + j] = nullptr;
+                relativeImpacts[index] = i;
+            }  else {
+                nodes[index] = nullptr;
+                relativeImpacts[index] = -1;
+            }
         }
     }
 }
 
-__global__ void setImpactMinIndices(int nNodes, const Pairfi* relativeImpacts, Node** nodes) {
+__global__ void setImpactMinIndices(int nNodes, const int* relativeImpacts, Node** nodes) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        Node* node = nodes[i];
-        if (node != nullptr)
-            nodes[i]->minIndex = relativeImpacts[i].second;
-    }
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
+        nodes[i]->minIndex = relativeImpacts[i];
 }
 
 __global__ void checkIndependentImpacts(int nImpacts, const Impact* impacts, int deform, Impact* independentImpacts) {
@@ -229,8 +227,11 @@ __global__ void checkIndependentImpacts(int nImpacts, const Impact* impacts, int
 
         if (flag) {
             independentImpacts[i] = impact;
-            for (int j = 0; j < 4; j++)
-                impact.nodes[j]->removed = true;
+            for (int j = 0; j < 4; j++) {
+                Node* node = impact.nodes[j];
+                if (deform == 1 || node->isFree)
+                    node->removed = true;
+            }
         }
     }
 }

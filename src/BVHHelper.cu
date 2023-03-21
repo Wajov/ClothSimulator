@@ -88,7 +88,7 @@ __device__ int findSplit(const unsigned long long* mortonCodes, int left, int ri
     return l;
 }
 
-__global__ void initializeInternalNodes(int nNodes, const unsigned long long* mortonCodes, const BVHNode* leaves, BVHNode* internals) {
+__global__ void initializeInternalNodes(int nNodes, const unsigned long long* mortonCodes, BVHNode* leaves, BVHNode* internals) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
@@ -96,10 +96,30 @@ __global__ void initializeInternalNodes(int nNodes, const unsigned long long* mo
         int left, right;
         findRange(nNodes, mortonCodes, i, left, right);
         int middle = findSplit(mortonCodes, left, right);
-        node.left = middle == left ? const_cast<BVHNode*>(&leaves[middle]) : &internals[middle];
-        node.right = middle + 1 == right ? const_cast<BVHNode*>(&leaves[middle + 1]) : &internals[middle + 1];
+        node.left = middle == left ? &leaves[middle] : &internals[middle];
+        node.right = middle + 1 == right ? &leaves[middle + 1] : &internals[middle + 1];
         node.left->parent = node.right->parent = &node;
     }
+}
+
+__device__ float atomicMin(float* address, float val) {
+    int* address_as_i = (int*) address;
+    int old = *address_as_i, assumed;
+    do {
+        assumed = old;
+        old = ::atomicCAS(address_as_i, assumed, __float_as_int(::fminf(val, __int_as_float(assumed))));
+    } while (assumed != old);
+    return __int_as_float(old);
+}
+
+__device__ float atomicMax(float* address, float val) {
+    int* address_as_i = (int*) address;
+    int old = *address_as_i, assumed;
+    do {
+        assumed = old;
+        old = ::atomicCAS(address_as_i, assumed, __float_as_int(::fmaxf(val, __int_as_float(assumed))));
+    } while (assumed != old);
+    return __int_as_float(old);
 }
 
 __global__ void computeInternalBounds(int nNodes, BVHNode* nodes) {
@@ -107,15 +127,24 @@ __global__ void computeInternalBounds(int nNodes, BVHNode* nodes) {
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
         nodes[i].maxIndex = i;
+        const Bounds& bounds = nodes[i].bounds;
         BVHNode* node = nodes[i].parent;
+
         while (node != nullptr) {
-            if (atomicAdd(&node->count, 1) == 1) {
-                node->bounds = node->left->bounds + node->right->bounds;
-                node->maxIndex = max(node->left->maxIndex, node->right->maxIndex);
-                node = node->parent;
-            } else
-                break;
+            atomicMax(&node->maxIndex, i);
+            for (int j = 0; j < 3; j++) {
+                atomicMin(&node->bounds.pMin(j), bounds.pMin(j));
+                atomicMax(&node->bounds.pMax(j), bounds.pMax(j));
+            }
+            node = node->parent;
         }
+        // while (node != nullptr)
+        //     if (atomicCAS(&node->count, 0, 1) == 1) {
+        //         node->bounds = node->left->bounds + node->right->bounds;
+        //         node->maxIndex = max(node->left->maxIndex, node->right->maxIndex);
+        //         node = node->parent;
+        //     } else
+        //         node = nullptr;
     }
 }
 
@@ -250,7 +279,7 @@ __global__ void findPairs(int nLeaves, const BVHNode* leaves, const BVHNode* roo
         do {
             const BVHNode* left = node->left;
             const BVHNode* right = node->right;
-            
+
             bool overlapLeft = bounds.overlap(left->bounds, thickness);
             bool overlapRight = bounds.overlap(right->bounds, thickness);
             if (overlapLeft && left->isLeaf()) {
@@ -323,15 +352,22 @@ __global__ void updateGpu(int nNodes, BVHNode* nodes, bool ccd) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        BVHNode* node = &nodes[i];
-        node->bounds = node->face->bounds(ccd);
-        node = node->parent;
+        nodes[i].bounds = nodes[i].face->bounds(ccd);
+        const Bounds& bounds = nodes[i].bounds;
+        BVHNode* node = nodes[i].parent;
+
         while (node != nullptr) {
-            if (atomicAdd(&node->count, 1) == 1) {
-                node->bounds = node->left->bounds + node->right->bounds;
-                node = node->parent;
-            } else
-                break;
+            for (int j = 0; j < 3; j++) {
+                atomicMin(&node->bounds.pMin(j), bounds.pMin(j));
+                atomicMax(&node->bounds.pMax(j), bounds.pMax(j));
+            }
+            node = node->parent;
         }
+        // while (node != nullptr)
+        //     if (atomicCAS(&node->count, 0, 1) == 1) {
+        //         node->bounds = node->left->bounds + node->right->bounds;
+        //         node = node->parent;
+        //     } else
+        //         break;
     }
 }

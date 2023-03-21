@@ -450,7 +450,6 @@ __global__ void addProximityForcesGpu(int nProximities, const Proximity* proximi
             d += proximity.w[j] * proximity.n.dot(n[j]->x);
         d = max(-d, 0.0f);
 
-
         Vector12f f;
         Matrix12x12f J;
         int aIndex, bIndex;

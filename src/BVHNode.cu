@@ -6,7 +6,6 @@ BVHNode::BVHNode() :
     parent(nullptr),
     left(nullptr),
     right(nullptr),
-    count(0),
     active(true) {}
 
 BVHNode::~BVHNode() {}

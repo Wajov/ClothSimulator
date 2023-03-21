@@ -223,28 +223,24 @@ __global__ void updateRenderingDataGpu(int nFaces, const Face* const* faces, Ren
     }
 }
 
-__global__ void copyX(int nNodes, const Node* const* nodes, Vector3f* x) {
+__global__ void copyNodes(int nNodes, const Node* const* nodes, Vector3f* x, Vector3f* v) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
-        x[i] = nodes[i]->x;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        const Node* node = nodes[i];
+        x[i] = node->x;
+        v[i] = node->v;
+    }
 }
 
-__global__ void copyV(int nNodes, const Node* const* nodes, Vector3f* v) {
-    int nThreads = gridDim.x * blockDim.x;
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
-        v[i] = nodes[i]->v;
-}
-
-__global__ void copyU(int nVertices, const Vertex* const* vertices, Vector2f* u) {
+__global__ void copyVertices(int nVertices, const Vertex* const* vertices, Vector2f* u) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads)
         u[i] = vertices[i]->u;
 }
 
-__global__ void copyFaceIndices(int nFaces, const Face* const* faces, Pairii* indices) {
+__global__ void copyFaces(int nFaces, const Face* const* faces, Pairii* indices) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {

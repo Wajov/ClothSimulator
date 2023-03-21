@@ -2,8 +2,24 @@
 
 Obstacle::Obstacle(const Json::Value& json, const std::vector<Motion*>& motions) {
     Transformation transformation(json["transform"]);
-    mesh = new Mesh(json["mesh"], transformation, nullptr);
+    mesh = new Mesh(parseString(json["mesh"]), transformation, nullptr);
+    motion = json["motion"].isNull() ? nullptr : motions[parseInt(json["motion"])];
 
+    initialize();
+}
+
+Obstacle::Obstacle(const std::string& path, const Motion* motion) :
+    mesh(new Mesh(path, Transformation(), nullptr)),
+    motion(const_cast<Motion*>(motion)) {
+    initialize();
+}
+
+Obstacle::~Obstacle() {
+    delete mesh;
+    delete shader;
+}
+
+void Obstacle::initialize() {
     if (!gpu) {
         std::vector<Node*>& nodes = mesh->getNodes();
         int nNodes = nodes.size();
@@ -17,14 +33,7 @@ Obstacle::Obstacle(const Json::Value& json, const std::vector<Motion*>& motions)
         setBase<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodes), pointer(baseGpu));
         CUDA_CHECK_LAST();
     }
-
-    motion = json["motion"].isNull() ? nullptr : motions[parseInt(json["motion"])];
     transform(0.0f);
-}
-
-Obstacle::~Obstacle() {
-    delete mesh;
-    delete shader;
 }
 
 Mesh* Obstacle::getMesh() const {

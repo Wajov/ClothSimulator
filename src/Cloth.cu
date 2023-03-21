@@ -16,7 +16,7 @@ Cloth::Cloth(const Json::Value& json) {
         CUDA_CHECK(cudaMemcpy(remeshing, remeshingTemp, sizeof(Remeshing), cudaMemcpyHostToDevice));
         delete remeshingTemp;
     }
-    mesh = new Mesh(json["mesh"], transformation, material);
+    mesh = new Mesh(parseString(json["mesh"]), transformation, material);
 
     std::vector<int> handleIndices;
     for (const Json::Value& handleJson : json["handles"])

@@ -20,8 +20,8 @@ __host__ __device__ bool checkIntersectionMidpoint(const Face* face0, const Face
 __global__ void checkIntersectionsGpu(int nPairs, const PairFF* pairs, Intersection* intersections);
 __global__ void initializeOldPosition(int nIntersections, const Intersection* intersections, Vector3f* x);
 __global__ void collectContainedFaces(int nIntersections, const Intersection* intersections, int nVertices, const Vertex* const* vertices, int* indices, Vector2f* u);
-__device__ void oldPositionGpu(const Vector2f& u, const BackupFace& face, Vector3f& x);
-__global__ void computeOldPosition(int nIndices, const int* indices, const Vector2f* u, int nFaces, const BackupFace* faces, Vector3f* x);
+__global__ void computeEnclosingFaces(int nIndices, const Vector2f* u, int nFaces, const BackupFace* faces, int* faceIndices);
+__global__ void computeOldPositions(int nIndices, const int* indices, const int* faceIndices, const Vector2f* u, const BackupFace* faces, Vector3f* x);
 __host__ __device__ void clearVertexFaceDistance(const Face* face0, const Face* face1, const Vector3f& d, float& maxDist, Vector3f& b0, Vector3f& b1);
 __host__ __device__ void clearEdgeEdgeDistance(const Face* face0, const Face* face1, const Vector3f& d, float& maxDist, Vector3f& b0, Vector3f& b1);
 __host__ __device__ void farthestPoint(const Face* face0, const Face* face1, const Vector3f& d, Vector3f& b0, Vector3f& b1);

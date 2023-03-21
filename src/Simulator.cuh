@@ -1,6 +1,7 @@
 #ifndef SIMULATOR_CUH
 #define SIMULATOR_CUH
 
+#include <cstdarg>
 #include <string>
 #include <vector>
 #include <functional>
@@ -28,6 +29,7 @@
 #include "Matrix.cuh"
 #include "Magic.cuh"
 #include "Wind.cuh"
+#include "Transformation.cuh"
 #include "Motion.cuh"
 #include "Cloth.cuh"
 #include "Obstacle.cuh"
@@ -63,6 +65,7 @@ private:
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
     Renderer* renderer;
+    std::string stringFormat(const std::string format, ...) const;
     std::vector<BVH*> buildClothBvhs(bool ccd) const;
     std::vector<BVH*> buildObstacleBvhs(bool ccd) const;
     void updateBvhs(std::vector<BVH*>& bvhs) const;

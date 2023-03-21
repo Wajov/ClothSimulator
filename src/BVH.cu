@@ -40,6 +40,9 @@ BVH::BVH(const Mesh* mesh, bool ccd) :
         initializeInternalNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces - 1, mortonCodesPointer, leavesPointer, internalsPointer);
         CUDA_CHECK_LAST();
 
+        resetCount<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces - 1, internalsPointer);
+        CUDA_CHECK_LAST();
+
         computeInternalBounds<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, leavesPointer);
         CUDA_CHECK_LAST();
 
@@ -137,26 +140,16 @@ void BVH::traverse(const BVH* bvh, float thickness, std::function<void(const Fac
 }
 
 thrust::device_vector<PairFF> BVH::traverse(const BVH* bvh, float thickness) const {
-    int nLeaves;
-    const BVHNode* leavesPointer, * startRoot;
-    if (leaves.size() > bvh->leaves.size()) {
-        nLeaves = leaves.size();
-        leavesPointer = pointer(leaves);
-        startRoot = bvh->root;
-    } else {
-        nLeaves = bvh->leaves.size();
-        leavesPointer = pointer(bvh->leaves);
-        startRoot = root;
-    }
-
+    int nLeaves = leaves.size();
+    const BVHNode* leavesPointer = pointer(leaves);
     thrust::device_vector<int> num(nLeaves);
     int* numPointer = pointer(num);
-    countPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer);
+    countPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, bvh->root, thickness, numPointer);
     CUDA_CHECK_LAST();
     
     thrust::inclusive_scan(num.begin(), num.end(), num.begin());
     thrust::device_vector<PairFF> ans(num.back());
-    findPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, startRoot, thickness, numPointer, pointer(ans));
+    findPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, bvh->root, thickness, numPointer, pointer(ans));
     CUDA_CHECK_LAST();
 
     return ans;

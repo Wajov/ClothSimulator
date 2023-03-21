@@ -14,6 +14,10 @@ Quaternion::Quaternion(const Vector3f& axis, float angle) {
     }
 }
 
+Quaternion::Quaternion(float s, float x, float y, float z) :
+    s(s),
+    v(x, y, z) {}
+
 Quaternion::~Quaternion() {}
 
 Vector3f Quaternion::rotate(const Vector3f& x) const {
@@ -45,6 +49,14 @@ Quaternion Quaternion::operator*(float s) const {
     Quaternion ans;
     ans.s = this->s * s;
     ans.v = v * s;
+    return ans;
+}
+
+
+Quaternion Quaternion::operator*(const Quaternion& q) const {
+    Quaternion ans;
+    ans.s = s * q.s - v.dot(q.v);
+    ans.v = s * q.v + q.s * v + v.cross(q.v);
     return ans;
 }
 

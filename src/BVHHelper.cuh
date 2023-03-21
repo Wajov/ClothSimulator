@@ -16,7 +16,9 @@ __global__ void initializeLeafNodes(int nNodes, const Face* const* faces, const 
 __device__ int commonUpperBits(unsigned long long a, unsigned long long b);
 __device__ void findRange(int nNodes, const unsigned long long* mortonCodes, int i, int& left, int& right);
 __device__ int findSplit(const unsigned long long* mortonCodes, int left, int right);
-__global__ void initializeInternalNodes(int nNodes, const unsigned long long* mortonCodes, const BVHNode* leaves, BVHNode* internals);
+__global__ void initializeInternalNodes(int nNodes, const unsigned long long* mortonCodes, BVHNode* leaves, BVHNode* internals);
+__device__ float atomicMin(float* address, float val);
+__device__ float atomicMax(float* address, float val);
 __global__ void computeInternalBounds(int nNodes, BVHNode* nodes);
 __global__ void countPairsSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, int* num);
 __global__ void findPairsSelf(int nLeaves, const BVHNode* leaves, const BVHNode* root, float thickness, const int* num, PairFF* pairs);
