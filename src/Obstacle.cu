@@ -1,15 +1,15 @@
 #include "Obstacle.cuh"
 
-Obstacle::Obstacle(const Json::Value& json, const std::vector<Motion*>& motions) {
+Obstacle::Obstacle(const Json::Value& json, const std::vector<Motion*>& motions, MemoryPool* pool) {
     Transformation transformation(json["transform"]);
-    mesh = new Mesh(parseString(json["mesh"]), transformation, nullptr);
+    mesh = new Mesh(parseString(json["mesh"]), transformation, nullptr, pool);
     motion = json["motion"].isNull() ? nullptr : motions[parseInt(json["motion"])];
 
     initialize();
 }
 
-Obstacle::Obstacle(const std::string& path, const Motion* motion) :
-    mesh(new Mesh(path, Transformation(), nullptr)),
+Obstacle::Obstacle(const std::string& path, const Motion* motion, MemoryPool* pool) :
+    mesh(new Mesh(path, Transformation(), nullptr, pool)),
     motion(const_cast<Motion*>(motion)) {
     initialize();
 }

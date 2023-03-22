@@ -3,14 +3,14 @@
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}",
         "args": [
-            // "replay",
+            "replay",
             // "simulate",
             // "simulate_offline",
             // "resume",
-            "resume_offline",
-            // "conf/crush.json",
+            // "resume_offline",
+            // "conf/sphere.json",
             "output/dress-blue",
-            "--gpu"
+            // "--gpu"
         ]
     },
     "files.associations": {

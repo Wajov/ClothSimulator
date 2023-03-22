@@ -18,6 +18,7 @@
 #include "Edge.cuh"
 #include "Face.cuh"
 #include "Material.cuh"
+#include "MemoryPool.cuh"
 
 class Operator {
 public:
@@ -31,12 +32,12 @@ public:
     thrust::device_vector<Face*> addedFacesGpu, removedFacesGpu;
     Operator();
     ~Operator();
-    void flip(const Edge* edge, const Material* material);
-    void flip(const thrust::device_vector<Edge*>& edges, const Material* material);
-    void split(const Edge* edge, const Material* material);
-    void split(const thrust::device_vector<Edge*>& edges, const Material* material);
-    void collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Node*, std::vector<Face*>>& adjacentFaces);
-    void collapse(const thrust::device_vector<PairEi>& edges, const Material* material, const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces);
+    void flip(const Edge* edge, const Material* material, MemoryPool* pool);
+    void flip(const thrust::device_vector<Edge*>& edges, const Material* material, MemoryPool* pool);
+    void split(const Edge* edge, const Material* material, MemoryPool* pool);
+    void split(const thrust::device_vector<Edge*>& edges, const Material* material, MemoryPool* pool);
+    void collapse(const Edge* edge, int side, const Material* material, const std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, const std::unordered_map<Node*, std::vector<Face*>>& adjacentFaces, MemoryPool* pool);
+    void collapse(const thrust::device_vector<PairEi>& edges, const Material* material, const thrust::device_vector<int>& edgeBegin, const thrust::device_vector<int>& edgeEnd, const thrust::device_vector<Edge*>& adjacentEdges, const thrust::device_vector<int>& faceBegin, const thrust::device_vector<int>& faceEnd, const thrust::device_vector<Face*>& adjacentFaces, MemoryPool* pool);
 };
 
 #endif

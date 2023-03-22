@@ -12,9 +12,9 @@
         },
         "materials": {"data": "materials/gray-interlock.json"},
         "remeshing": {
-            "refine_angle": 0.3,
-            "refine_compression": 0.01,
-            "refine_velocity": 0.5,
+            "refine_angle": 1.0,
+            "refine_compression": 0.05,
+            "refine_velocity": 1.0,
             "size": [10e-3, 200e-3],
             "aspect_min": 0.2
         }

@@ -333,7 +333,7 @@ __global__ void checkIndependentEdges(int nEdges, const Edge* const* edges, Edge
     }
 }
 
-__global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* material, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces) {
+__global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* material, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces, Edge* edgePool, Face* facePool) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -351,9 +351,12 @@ __global__ void flipGpu(int nEdges, const Edge* const* edges, const Material* ma
         Edge* edge2 = face1->findEdge(vertex0, vertex3);
         Edge* edge3 = face1->findEdge(vertex3, vertex1);
 
-        Edge* newEdge = new Edge(vertex2->node, vertex3->node);
-        Face* newFace0 = new Face(vertex0, vertex3, vertex2, material);
-        Face* newFace1 = new Face(vertex1, vertex2, vertex3, material);
+        Edge* newEdge = &edgePool[i];
+        *newEdge = Edge(vertex2->node, vertex3->node);
+        Face* newFace0 = &facePool[2 * i];
+        *newFace0 = Face(vertex0, vertex3, vertex2, material);
+        Face* newFace1 = &facePool[2 * i + 1];
+        *newFace1 = Face(vertex1, vertex2, vertex3, material);
         newEdge->initialize(vertex0, newFace0);
         newEdge->initialize(vertex1, newFace1);
         newFace0->setEdges(edge2, newEdge, edge1);
@@ -398,7 +401,7 @@ __global__ void checkEdgesToSplit(int nEdges, const Edge* const* edges, Edge** e
     }
 }
 
-__global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* material, Node** addedNodes, Vertex** addedVertices, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces) {
+__global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* material, Node** addedNodes, Vertex** addedVertices, Edge** addedEdges, Edge** removedEdges, Face** addedFaces, Face** removedFaces, Node* nodePool, Vertex* vertexPool, Edge* edgePool, Face* facePool) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
@@ -406,12 +409,15 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
         Node* node0 = edge->nodes[0];
         Node* node1 = edge->nodes[1];
 
-        Node* newNode = new Node(0.5f * (node0->x + node1->x), node0->isFree && node1->isFree);
+        Node* newNode = &nodePool[i];
+        *newNode = Node(0.5f * (node0->x + node1->x), node0->isFree && node1->isFree);
         newNode->x0 = 0.5f * (node0->x0 + node1->x0);
         newNode->v = 0.5f * (node0->v + node1->v);
         Edge* newEdges[2];
-        newEdges[0] = new Edge(newNode, node0);
-        newEdges[1] = new Edge(newNode, node1);
+        newEdges[0] = &edgePool[4 * i];
+        *newEdges[0] = Edge(newNode, node0);
+        newEdges[1] = &edgePool[4 * i + 1];
+        *newEdges[1] = Edge(newNode, node1);
         
         addedNodes[i] = newNode;
         addedEdges[4 * i] = newEdges[0];
@@ -420,16 +426,19 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
 
         Vertex* newVertices[2];
         if (edge->isSeam()) {
-            newVertices[0] = new Vertex(0.5f * (edge->vertices[0][0]->u + edge->vertices[0][1]->u));
+            newVertices[0] = &vertexPool[2 * i];
+            *newVertices[0] = Vertex(0.5f * (edge->vertices[0][0]->u + edge->vertices[0][1]->u));
             newVertices[0]->sizing = 0.5f * (edge->vertices[0][0]->sizing + edge->vertices[0][1]->sizing);
-            newVertices[1] = new Vertex(0.5f * (edge->vertices[1][0]->u + edge->vertices[1][1]->u));
+            newVertices[1] = &vertexPool[2 * i + 1];
+            *newVertices[1] = Vertex(0.5f * (edge->vertices[1][0]->u + edge->vertices[1][1]->u));
             newVertices[1]->sizing = 0.5f * (edge->vertices[1][0]->sizing + edge->vertices[1][1]->sizing);
             newVertices[0]->node = newVertices[1]->node = newNode;
             addedVertices[2 * i] = newVertices[0];
             addedVertices[2 * i + 1] = newVertices[1];
         } else {
             int j = edge->opposites[0] != nullptr ? 0 : 1;
-            newVertices[0] = newVertices[1] = new Vertex(0.5f * (edge->vertices[j][0]->u + edge->vertices[j][1]->u));
+            newVertices[0] = newVertices[1] = &vertexPool[2 * i];
+            *newVertices[0] = Vertex(0.5f * (edge->vertices[j][0]->u + edge->vertices[j][1]->u));
             newVertices[0]->sizing = 0.5f * (edge->vertices[j][0]->sizing + edge->vertices[j][1]->sizing);
             newVertices[0]->node = newNode;
             addedVertices[2 * i] = newVertices[0];
@@ -449,9 +458,12 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
                 Vertex* newVertex = newVertices[j];
                 Edge* newEdge0 = newEdges[j];
                 Edge* newEdge1 = newEdges[1 - j];
-                Edge* newEdge2 = new Edge(newNode, vertex2->node);
-                Face* newFace0 = new Face(vertex0, newVertex, vertex2, material);
-                Face* newFace1 = new Face(vertex2, newVertex, vertex1, material);
+                Edge* newEdge2 = &edgePool[4 * i + j + 2];
+                *newEdge2 = Edge(newNode, vertex2->node);
+                Face* newFace0 = &facePool[4 * i + 2 * j];
+                *newFace0 = Face(vertex0, newVertex, vertex2, material);
+                Face* newFace1 = &facePool[4 * i + 2 * j + 1];
+                *newFace1 = Face(vertex2, newVertex, vertex1, material);
                 
                 newEdge0->initialize(vertex2, newFace0);
                 newEdge1->initialize(vertex2, newFace1);

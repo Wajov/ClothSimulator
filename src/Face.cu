@@ -1,5 +1,7 @@
 #include "Face.cuh"
 
+Face::Face() {}
+
 Face::Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Material* material) :
     vertices{const_cast<Vertex*>(vertex0), const_cast<Vertex*>(vertex1), const_cast<Vertex*>(vertex2)} {
     initialize(material);

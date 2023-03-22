@@ -1,5 +1,7 @@
 #include "Edge.cuh"
 
+Edge::Edge() {}
+
 Edge::Edge(const Node* node0, const Node* node1) :
     nodes{const_cast<Node*>(node0), const_cast<Node*>(node1)},
     vertices{nullptr, nullptr, nullptr, nullptr},

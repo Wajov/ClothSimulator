@@ -25,10 +25,11 @@
 #include "Vertex.cuh"
 #include "Edge.cuh"
 #include "Face.cuh"
-#include "Renderable.cuh"
+#include "RenderableVertex.cuh"
 #include "Transformation.cuh"
 #include "BackupFace.cuh"
 #include "Operator.cuh"
+#include "MemoryPool.cuh"
 
 extern bool gpu;
 
@@ -47,11 +48,10 @@ private:
     std::vector<std::string> split(const std::string& s, char c) const;
     float angle(const Vector3f& x0, const Vector3f& x1, const Vector3f& x2) const;
     void triangulate(const std::vector<Vector3f>& x, const std::vector<int>& xPolygon, const std::vector<int>& uPolygon, std::vector<int>& xTriangles, std::vector<int>& uTriangles) const;
-    Edge* findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap);
-    void initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material);
+    Edge* findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap, MemoryPool* pool);
 
 public:
-    Mesh(const std::string& path, const Transformation& transformation, const Material* material);
+    Mesh(const std::string& path, const Transformation& transformation, const Material* material, MemoryPool* pool);
     ~Mesh();
     std::vector<Node*>& getNodes();
     thrust::device_vector<Node*>& getNodesGpu();
@@ -75,7 +75,7 @@ public:
     void updateRenderingData(bool rebind);
     void bind();
     void render() const;
-    void load(const std::string& path, const Transformation& transformation, const Material* material);
+    void load(const std::string& path, const Transformation& transformation, const Material* material, MemoryPool* pool);
     void save(const std::string& path);
     void check() const;
 };

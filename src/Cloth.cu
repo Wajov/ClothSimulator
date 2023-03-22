@@ -1,6 +1,6 @@
 #include "Cloth.cuh"
 
-Cloth::Cloth(const Json::Value& json) {
+Cloth::Cloth(const Json::Value& json, MemoryPool* pool) {
     Transformation transformation(json["transform"]);
     Material* materialTemp = new Material(json["materials"]);
     Remeshing* remeshingTemp = new Remeshing(json["remeshing"]);
@@ -16,7 +16,7 @@ Cloth::Cloth(const Json::Value& json) {
         CUDA_CHECK(cudaMemcpy(remeshing, remeshingTemp, sizeof(Remeshing), cudaMemcpyHostToDevice));
         delete remeshingTemp;
     }
-    mesh = new Mesh(parseString(json["mesh"]), transformation, material);
+    mesh = new Mesh(parseString(json["mesh"]), transformation, material, pool);
 
     std::vector<int> handleIndices;
     for (const Json::Value& handleJson : json["handles"])
@@ -337,7 +337,7 @@ thrust::device_vector<Edge*> Cloth::findEdgesToFlipGpu() const {
     return ans;
 }
 
-bool Cloth::flipSomeEdges() {
+bool Cloth::flipSomeEdges(MemoryPool* pool) {
     static int nEdges = 0;
     Operator op;
     
@@ -348,24 +348,24 @@ bool Cloth::flipSomeEdges() {
         
         nEdges = edgesToFlip.size();
         for (const Edge* edge : edgesToFlip)
-            op.flip(edge, material);
+            op.flip(edge, material, pool);
     } else {
         thrust::device_vector<Edge*> edgesToFlip = std::move(findEdgesToFlipGpu());
         if (edgesToFlip.empty() || edgesToFlip.size() == nEdges)
             return false;
         
         nEdges = edgesToFlip.size();
-        op.flip(edgesToFlip, material);
+        op.flip(edgesToFlip, material, pool);
     }
 
     mesh->apply(op);
     return true;
 }
 
-void Cloth::flipEdges() {
+void Cloth::flipEdges(MemoryPool* pool) {
     int nEdges = !gpu ? mesh->getEdges().size() : mesh->getEdgesGpu().size();
     for (int i = 0; i < 2 * nEdges; i++)
-        if (!flipSomeEdges())
+        if (!flipSomeEdges(pool))
             return;
 }
 
@@ -436,7 +436,7 @@ thrust::device_vector<Edge*> Cloth::findEdgesToSplitGpu() const {
     return ans;
 }
 
-bool Cloth::splitSomeEdges() {
+bool Cloth::splitSomeEdges(MemoryPool* pool) {
     Operator op;
 
     if (!gpu) {
@@ -445,22 +445,22 @@ bool Cloth::splitSomeEdges() {
             return false;
         
         for (const Edge* edge : edgesToSplit)
-            op.split(edge, material);
+            op.split(edge, material, pool);
     } else {
         thrust::device_vector<Edge*> edgesToSplit = std::move(findEdgesToSplitGpu());
         if (edgesToSplit.empty())
             return false;
 
-        op.split(edgesToSplit, material);
+        op.split(edgesToSplit, material, pool);
     }
 
     mesh->apply(op);
-    flipEdges();
+    flipEdges(pool);
     return true;
 }
 
-void Cloth::splitEdges() {
-    while (splitSomeEdges());
+void Cloth::splitEdges(MemoryPool* pool) {
+    while (splitSomeEdges(pool));
 }
 
 void Cloth::buildAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjacentEdges, std::unordered_map<Node*, std::vector<Face*>>& adjacentFaces) const {
@@ -628,7 +628,7 @@ thrust::device_vector<PairEi> Cloth::findEdgesToCollapse(const thrust::device_ve
     return ans;
 }
 
-bool Cloth::collapseSomeEdges() {
+bool Cloth::collapseSomeEdges(MemoryPool* pool) {
     Operator op;
 
     if (!gpu) {
@@ -641,7 +641,7 @@ bool Cloth::collapseSomeEdges() {
             return false;
 
         for (const PairEi& edge : edgesToCollapse)
-            op.collapse(edge.first, edge.second, material, adjacentEdges, adjacentFaces);
+            op.collapse(edge.first, edge.second, material, adjacentEdges, adjacentFaces, pool);
     } else {
         mesh->updateIndices();
 
@@ -654,16 +654,16 @@ bool Cloth::collapseSomeEdges() {
         if (edgesToCollapse.empty())
             return false;
 
-        op.collapse(edgesToCollapse, material, edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces);
+        op.collapse(edgesToCollapse, material, edgeBegin, edgeEnd, adjacentEdges, faceBegin, faceEnd, adjacentFaces, pool);
     }
 
     mesh->apply(op);
-    flipEdges();
+    flipEdges(pool);
     return true;
 }
 
-void Cloth::collapseEdges() {
-    while (collapseSomeEdges());
+void Cloth::collapseEdges(MemoryPool* pool) {
+    while (collapseSomeEdges(pool));
 }
 
 Mesh* Cloth::getMesh() const {
@@ -766,23 +766,23 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
     CUDA_CHECK_LAST();
 }
 
-void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness) {
+void Cloth::remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness, MemoryPool* pool) {
     if (!gpu) {
         std::vector<Plane> planes = std::move(findNearestPlane(obstacleBvhs, thickness));
         computeSizing(planes);
 
-        flipEdges();
-        splitEdges();
-        collapseEdges();
+        flipEdges(pool);
+        splitEdges(pool);
+        collapseEdges(pool);
 
         mesh->updateIndices();
     } else {
         thrust::device_vector<Plane> planes = std::move(findNearestPlaneGpu(obstacleBvhs, thickness));
         computeSizing(planes);
 
-        flipEdges();
-        splitEdges();
-        collapseEdges();
+        flipEdges(pool);
+        splitEdges(pool);
+        collapseEdges(pool);
     }
 }
 
@@ -813,7 +813,7 @@ void Cloth::render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix
 
 void Cloth::load(const std::string& path) {
     Transformation transformation(Json::nullValue);
-    mesh->load(path, transformation, material);
+    mesh->load(path, transformation, material, nullptr);
 }
 
 void Cloth::save(const std::string& path, Json::Value& json) const {

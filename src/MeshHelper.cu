@@ -1,20 +1,24 @@
 #include "MeshHelper.cuh"
 
-__global__ void initializeNodes(int nNodes, const Vector3f* x, bool isFree, int nVelocities, const Vector3f* v, Node** nodes) {
+__global__ void initializeNodes(int nNodes, const Vector3f* x, bool isFree, int nVelocities, const Vector3f* v, Node** nodes, Node* pool) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
-        Node* node = new Node(x[i], isFree);
+        Node* node = &pool[i];
+        *node = Node(x[i], isFree);
         node->v = i < nVelocities ? v[i] : Vector3f(0.0f, 0.0f, 0.0f);
         nodes[i] = node;
     }
 }
 
-__global__ void initializeVertices(int nVertices, const Vector2f* u, Vertex** vertices) {
+__global__ void initializeVertices(int nVertices, const Vector2f* u, Vertex** vertices, Vertex* pool) {
     int nThreads = gridDim.x * blockDim.x;
 
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads)
-        vertices[i] = new Vertex(u[i]);
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nVertices; i += nThreads) {
+        Vertex* vertex = &pool[i];
+        *vertex = Vertex(u[i]);
+        vertices[i] = vertex;
+    }
 }
 
 __device__ void setEdgeData(int index0, int index1, const Vertex* vertex, const Face* face, Pairii& index, EdgeData& edgeData) {
@@ -27,7 +31,7 @@ __device__ void setEdgeData(int index0, int index1, const Vertex* vertex, const 
     edgeData.adjacent = const_cast<Face*>(face);
 }
 
-__global__ void initializeFaces(int nFaces, const int* xIndices, const int* uIndices, const Node* const* nodes, const Material* material, Vertex** vertices, Face** faces, Pairii* edgeIndices, EdgeData* edgeData) {
+__global__ void initializeFaces(int nFaces, const int* xIndices, const int* uIndices, const Node* const* nodes, const Material* material, Vertex** vertices, Face** faces, Pairii* edgeIndices, EdgeData* edgeData, Face* pool) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
@@ -49,7 +53,8 @@ __global__ void initializeFaces(int nFaces, const int* xIndices, const int* uInd
         vertex0->node = const_cast<Node*>(node0);
         vertex1->node = const_cast<Node*>(node1);
         vertex2->node = const_cast<Node*>(node2);
-        Face* face = new Face(vertex0, vertex1, vertex2, material);
+        Face* face = &pool[i];
+        *face = Face(vertex0, vertex1, vertex2, material);
         setEdgeData(xIndex0, xIndex1, vertex2, face, edgeIndices[index0], edgeData[index0]);
         setEdgeData(xIndex1, xIndex2, vertex0, face, edgeIndices[index1], edgeData[index1]);
         setEdgeData(xIndex2, xIndex0, vertex1, face, edgeIndices[index2], edgeData[index2]);
@@ -57,14 +62,15 @@ __global__ void initializeFaces(int nFaces, const int* xIndices, const int* uInd
     }
 }
 
-__global__ void initializeEdges(int nEdges, const Pairii* indices, const EdgeData* edgeData, const Node* const* nodes, Edge** edges) {
+__global__ void initializeEdges(int nEdges, const Pairii* indices, const EdgeData* edgeData, const Node* const* nodes, Edge** edges, Edge* pool) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads)
         if (i == 0 || indices[i] != indices[i - 1]) {
             const Pairii& index = indices[i];
             const EdgeData& e = edgeData[i];
-            Edge* edge = new Edge(nodes[index.first], nodes[index.second]);
+            Edge* edge = &pool[i];
+            *edge = Edge(nodes[index.first], nodes[index.second]);
             edge->initialize(e.opposite, e.adjacent);
             e.adjacent->setEdge(edge);
             edges[i] = edge;
@@ -207,7 +213,7 @@ __global__ void updateVelocitiesGpu(int nNodes, float invDt, Node** nodes) {
     }
 }
 
-__global__ void updateRenderingDataGpu(int nFaces, const Face* const* faces, Renderable* renderables) {
+__global__ void updateRenderingDataGpu(int nFaces, const Face* const* faces, RenderableVertex* vertices) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nFaces; i += nThreads) {
@@ -216,9 +222,9 @@ __global__ void updateRenderingDataGpu(int nFaces, const Face* const* faces, Ren
             Vertex* vertex = face->vertices[j];
             Node* node = vertex->node;
             int index = 3 * i + j;
-            renderables[index].x = node->x;
-            renderables[index].n = node->n;
-            renderables[index].u = vertex->u;
+            vertices[index].x = node->x;
+            vertices[index].n = node->n;
+            vertices[index].u = vertex->u;
         }
     }
 }

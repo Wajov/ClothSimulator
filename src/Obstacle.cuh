@@ -25,8 +25,8 @@ private:
     void initialize();
 
 public:
-    Obstacle(const Json::Value& json, const std::vector<Motion*>& motions);
-    Obstacle(const std::string& path, const Motion* motion);
+    Obstacle(const Json::Value& json, const std::vector<Motion*>& motions, MemoryPool* pool);
+    Obstacle(const std::string& path, const Motion* motion, MemoryPool* pool);
     ~Obstacle();
     Mesh* getMesh() const;
     void transform(float time);

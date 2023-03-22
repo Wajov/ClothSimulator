@@ -38,6 +38,7 @@
 #include "Impact.cuh"
 #include "BackupFace.cuh"
 #include "Intersection.cuh"
+#include "MemoryPool.cuh"
 #include "optimization/CollisionOptimization.cuh"
 #include "optimization/SeparationOptimization.cuh"
 
@@ -65,6 +66,7 @@ private:
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
     Renderer* renderer;
+    MemoryPool* pool;
     std::string stringFormat(const std::string format, ...) const;
     std::vector<BVH*> buildClothBvhs(bool ccd) const;
     std::vector<BVH*> buildObstacleBvhs(bool ccd) const;

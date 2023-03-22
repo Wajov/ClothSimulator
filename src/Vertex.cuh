@@ -14,6 +14,7 @@ public:
     float area;
     Node* node;
     Matrix2x2f sizing;
+    __host__ __device__ Vertex();
     __host__ __device__ Vertex(const Vector2f& u);
     __host__ __device__ ~Vertex();
 };

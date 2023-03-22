@@ -1,30 +1,10 @@
 #include "Mesh.cuh"
 
-Mesh::Mesh(const std::string& path, const Transformation& transformation, const Material* material) {
-    load(path, transformation, material);
+Mesh::Mesh(const std::string& path, const Transformation& transformation, const Material* material, MemoryPool* pool) {
+    load(path, transformation, material, pool);
 }
 
-Mesh::~Mesh() {
-    if (!gpu) {
-        for (const Node* node : nodes)
-            delete node;
-        for (const Vertex* vertex : vertices)
-            delete vertex;
-        for (const Edge* edge : edges)
-            delete edge;
-        for (const Face* face : faces)
-            delete face;
-    } else {
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodesGpu.size(), pointer(nodesGpu));
-        CUDA_CHECK_LAST();
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(verticesGpu.size(), pointer(verticesGpu));
-        CUDA_CHECK_LAST();
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(edgesGpu.size(), pointer(edgesGpu));
-        CUDA_CHECK_LAST();
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu));
-        CUDA_CHECK_LAST();
-    }
-}
+Mesh::~Mesh() {}
 
 std::vector<std::string> Mesh::split(const std::string& s, char c) const {
     std::string t = s;
@@ -73,7 +53,7 @@ void Mesh::triangulate(const std::vector<Vector3f>& x, const std::vector<int>& x
     }
 }
 
-Edge* Mesh::findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap) {
+Edge* Mesh::findEdge(int index0, int index1, std::unordered_map<Pairii, int, PairHash>& edgeMap, MemoryPool* pool) {
     if (index0 > index1)
         mySwap(index0, index1);
     Pairii index(index0, index1);
@@ -82,106 +62,9 @@ Edge* Mesh::findEdge(int index0, int index1, std::unordered_map<Pairii, int, Pai
         return edges[iter->second];
     else {
         edgeMap[index] = edges.size();
-        edges.push_back(new Edge(nodes[index0], nodes[index1]));
+        edges.push_back(pool != nullptr ? pool->createEdge(nodes[index0], nodes[index1]) : new Edge(nodes[index0], nodes[index1]));
         return edges.back();
     }
-}
-
-void Mesh::initialize(const std::vector<Vector3f>& x, const std::vector<Vector3f>& v, const std::vector<Vector2f>& u, const std::vector<int>& xIndices, const std::vector<int>& uIndices, const Material* material) {
-    bool isFree = (material != nullptr);
-    if (!gpu) {
-        nodes.resize(x.size());
-        vertices.resize(u.size());
-        edges.clear();
-        faces.resize(xIndices.size() / 3);
-        for (int i = 0; i < x.size(); i++) {
-            Node* node = new Node(x[i], isFree);
-            node->v = i < v.size() ? v[i] : Vector3f(0.0f, 0.0f, 0.0f);
-            nodes[i] = node;
-        }
-        for (int i = 0; i < u.size(); i++)
-            vertices[i] = new Vertex(u[i]);
-
-        std::unordered_map<Pairii, int, PairHash> edgeMap;
-        for (int i = 0; i < xIndices.size(); i += 3) {
-            int xIndex0 = xIndices[i];
-            int xIndex1 = xIndices[i + 1];
-            int xIndex2 = xIndices[i + 2];
-            int uIndex0 = uIndices[i];
-            int uIndex1 = uIndices[i + 1];
-            int uIndex2 = uIndices[i + 2];
-
-            Vertex* vertex0 = vertices[uIndex0];
-            Vertex* vertex1 = vertices[uIndex1];
-            Vertex* vertex2 = vertices[uIndex2];
-            
-            Edge* edge0 = findEdge(xIndex0, xIndex1, edgeMap);
-            Edge* edge1 = findEdge(xIndex1, xIndex2, edgeMap);
-            Edge* edge2 = findEdge(xIndex2, xIndex0, edgeMap);
-            vertex0->node = nodes[xIndex0];
-            vertex1->node = nodes[xIndex1];
-            vertex2->node = nodes[xIndex2];
-            Face* face = new Face(vertex0, vertex1, vertex2, material);
-
-            edge0->initialize(vertex2, face);
-            edge1->initialize(vertex0, face);
-            edge2->initialize(vertex1, face);
-            face->setEdges(edge0, edge1, edge2);
-
-            faces[i / 3] = face;
-        }
-
-        for (const Edge* edge : edges)
-            if (edge->isBoundary() || edge->isSeam())
-                for (int i = 0; i < 2; i++)
-                    edge->nodes[i]->preserve = true;
-    } else {
-        int nNodes = x.size();
-        int nVertices = u.size();
-        int nFaces = xIndices.size() / 3;
-        int nEdges = xIndices.size();
-        thrust::device_vector<Vector3f> xGpu = x;
-        thrust::device_vector<Vector3f> vGpu = v;
-        thrust::device_vector<Vector2f> uGpu = u;
-        thrust::device_vector<int> xIndicesGpu = xIndices;
-        thrust::device_vector<int> uIndicesGpu = uIndices;
-
-        nodesGpu.resize(nNodes);
-        Node** nodesPointer = pointer(nodesGpu);
-        initializeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(xGpu), isFree, v.size(), pointer(vGpu), nodesPointer);
-        CUDA_CHECK_LAST();
-
-        verticesGpu.resize(nVertices);
-        Vertex** verticesPointer = pointer(verticesGpu);
-        initializeVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(uGpu), verticesPointer);
-        CUDA_CHECK_LAST();
-
-        facesGpu.resize(nFaces);
-        Face** facesPointer = pointer(facesGpu);
-        thrust::device_vector<Pairii> edgeIndices(nEdges);
-        Pairii* edgeIndicesPointer = pointer(edgeIndices);
-        thrust::device_vector<EdgeData> edgeData(nEdges);
-        EdgeData* edgeDataPointer = pointer(edgeData);
-        initializeFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(xIndicesGpu), pointer(uIndicesGpu), nodesPointer, material, verticesPointer, facesPointer, edgeIndicesPointer, edgeDataPointer);
-        CUDA_CHECK_LAST();
-        thrust::sort_by_key(edgeIndices.begin(), edgeIndices.end(), edgeData.begin());
-
-        edgesGpu.resize(nEdges);
-        Edge** edgesPointer = pointer(edgesGpu);
-        initializeEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, nodesPointer, edgesPointer);
-        CUDA_CHECK_LAST();
-        setEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, edgesPointer);
-        CUDA_CHECK_LAST();
-        edgesGpu.erase(thrust::remove(edgesGpu.begin(), edgesGpu.end(), nullptr), edgesGpu.end());
-
-        nEdges = edgesGpu.size();
-        setPreserve<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer);
-        CUDA_CHECK_LAST();
-    }
-
-    updateIndices();
-    updateFaceGeometries();
-    updateNodeGeometries();
 }
 
 std::vector<Node*>& Mesh::getNodes() {
@@ -269,15 +152,6 @@ void Mesh::apply(const Operator& op) {
         for (const Face* face : op.removedFaces)
             faces.erase(std::remove(faces.begin(), faces.end(), face), faces.end());
         faces.insert(faces.end(), op.addedFaces.begin(), op.addedFaces.end());
-
-        for (const Node* node : op.removedNodes)
-            delete node;
-        for (const Vertex* vertex : op.removedVertices)
-            delete vertex;
-        for (const Edge* edge : op.removedEdges)
-            delete edge;
-        for (const Face* face : op.removedFaces)
-            delete face;
     } else {
         removeGpu(op.removedNodesGpu, nodesGpu);
         nodesGpu.insert(nodesGpu.end(), op.addedNodesGpu.begin(), op.addedNodesGpu.end());
@@ -287,15 +161,6 @@ void Mesh::apply(const Operator& op) {
         edgesGpu.insert(edgesGpu.end(), op.addedEdgesGpu.begin(), op.addedEdgesGpu.end());
         removeGpu(op.removedFacesGpu, facesGpu);
         facesGpu.insert(facesGpu.end(), op.addedFacesGpu.begin(), op.addedFacesGpu.end());
-
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedNodesGpu.size(), pointer(op.removedNodesGpu));
-        CUDA_CHECK_LAST();
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedVerticesGpu.size(), pointer(op.removedVerticesGpu));
-        CUDA_CHECK_LAST();
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedEdgesGpu.size(), pointer(op.removedEdgesGpu));
-        CUDA_CHECK_LAST();
-        deleteGpu<<<GRID_SIZE, BLOCK_SIZE>>>(op.removedFacesGpu.size(), pointer(op.removedFacesGpu));
-        CUDA_CHECK_LAST();
     }
 }
 
@@ -383,34 +248,34 @@ void Mesh::updateVelocities(float dt) {
 
 void Mesh::updateRenderingData(bool rebind) {
     if (!gpu) {
-        std::vector<Renderable> renderables(3 * faces.size());
+        std::vector<RenderableVertex> vertices(3 * faces.size());
         for (int i = 0; i < faces.size(); i++) {
             Face* face = faces[i];
             for (int j = 0; j < 3; j++) {
                 Vertex* vertex = face->vertices[j];
                 Node* node = vertex->node;
                 int index = 3 * i + j;
-                renderables[index].x = node->x;
-                renderables[index].n = node->n;
-                renderables[index].u = vertex->u;
+                vertices[index].x = node->x;
+                vertices[index].n = node->n;
+                vertices[index].u = vertex->u;
             }
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, renderables.size() * sizeof(Renderable), renderables.data(), GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(RenderableVertex), vertices.data(), GL_DYNAMIC_DRAW);
     } else {
         if (rebind) {
             glBindBuffer(GL_ARRAY_BUFFER, vbo);
-            glBufferData(GL_ARRAY_BUFFER, 3 * facesGpu.size() * sizeof(Renderable), nullptr, GL_DYNAMIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, 3 * facesGpu.size() * sizeof(RenderableVertex), nullptr, GL_DYNAMIC_DRAW);
 
             CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&vboCuda, vbo, cudaGraphicsRegisterFlagsWriteDiscard));
         }
 
         CUDA_CHECK(cudaGraphicsMapResources(1, &vboCuda));
-        Renderable* renderables;
+        RenderableVertex* vertices;
         size_t nRenderanles;
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&renderables), &nRenderanles, vboCuda));
-        updateRenderingDataGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), renderables);
+        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&vertices), &nRenderanles, vboCuda));
+        updateRenderingDataGpu<<<GRID_SIZE, BLOCK_SIZE>>>(facesGpu.size(), pointer(facesGpu), vertices);
         CUDA_CHECK_LAST();
 
         CUDA_CHECK(cudaGraphicsUnmapResources(1, &vboCuda));
@@ -423,11 +288,11 @@ void Mesh::bind() {
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Renderable), reinterpret_cast<void*>(offsetof(Renderable, x)));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(RenderableVertex), reinterpret_cast<void*>(offsetof(RenderableVertex, x)));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Renderable), reinterpret_cast<void*>(offsetof(Renderable, n)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(RenderableVertex), reinterpret_cast<void*>(offsetof(RenderableVertex, n)));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Renderable), reinterpret_cast<void*>(offsetof(Renderable, u)));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(RenderableVertex), reinterpret_cast<void*>(offsetof(RenderableVertex, u)));
 
     updateRenderingData(true);
 }
@@ -438,7 +303,7 @@ void Mesh::render() const {
     glBindVertexArray(0);
 }
 
-void Mesh::load(const std::string& path, const Transformation& transformation, const Material* material) {
+void Mesh::load(const std::string& path, const Transformation& transformation, const Material* material, MemoryPool* pool) {
     std::ifstream fin(path);
     if (!fin.is_open()) {
         std::cerr << "Failed to open mesh file: " << path << std::endl;
@@ -481,7 +346,109 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
     }
     fin.close();
 
-    initialize(x, v, u, xIndices, uIndices, material);
+    bool isFree = (material != nullptr);
+    if (!gpu) {
+        for (const Node* node : nodes)
+            delete node;
+        for (const Vertex* vertex : vertices)
+            delete vertex;
+        for (const Edge* edge : edges)
+            delete edge;
+        for (const Face* face : faces)
+            delete face;
+            
+        nodes.resize(x.size());
+        vertices.resize(u.size());
+        edges.clear();
+        faces.resize(xIndices.size() / 3);
+        for (int i = 0; i < x.size(); i++) {
+            Node* node = pool != nullptr ? pool->createNode(x[i], isFree) : new Node(x[i], isFree);
+            node->v = i < v.size() ? v[i] : Vector3f(0.0f, 0.0f, 0.0f);
+            nodes[i] = node;
+        }
+        for (int i = 0; i < u.size(); i++)
+            vertices[i] = pool != nullptr ? pool->createVertex(u[i]) : new Vertex(u[i]);
+
+        std::unordered_map<Pairii, int, PairHash> edgeMap;
+        for (int i = 0; i < xIndices.size(); i += 3) {
+            int xIndex0 = xIndices[i];
+            int xIndex1 = xIndices[i + 1];
+            int xIndex2 = xIndices[i + 2];
+            int uIndex0 = uIndices[i];
+            int uIndex1 = uIndices[i + 1];
+            int uIndex2 = uIndices[i + 2];
+
+            Vertex* vertex0 = vertices[uIndex0];
+            Vertex* vertex1 = vertices[uIndex1];
+            Vertex* vertex2 = vertices[uIndex2];
+            
+            Edge* edge0 = findEdge(xIndex0, xIndex1, edgeMap, pool);
+            Edge* edge1 = findEdge(xIndex1, xIndex2, edgeMap, pool);
+            Edge* edge2 = findEdge(xIndex2, xIndex0, edgeMap, pool);
+            vertex0->node = nodes[xIndex0];
+            vertex1->node = nodes[xIndex1];
+            vertex2->node = nodes[xIndex2];
+            Face* face = pool != nullptr ? pool->createFace(vertex0, vertex1, vertex2, material) : new Face(vertex0, vertex1, vertex2, material);
+
+            edge0->initialize(vertex2, face);
+            edge1->initialize(vertex0, face);
+            edge2->initialize(vertex1, face);
+            face->setEdges(edge0, edge1, edge2);
+
+            faces[i / 3] = face;
+        }
+
+        for (const Edge* edge : edges)
+            if (edge->isBoundary() || edge->isSeam())
+                for (int i = 0; i < 2; i++)
+                    edge->nodes[i]->preserve = true;
+    } else {
+        int nNodes = x.size();
+        int nVertices = u.size();
+        int nFaces = xIndices.size() / 3;
+        int nEdges = xIndices.size();
+        thrust::device_vector<Vector3f> xGpu = x;
+        thrust::device_vector<Vector3f> vGpu = v;
+        thrust::device_vector<Vector2f> uGpu = u;
+        thrust::device_vector<int> xIndicesGpu = xIndices;
+        thrust::device_vector<int> uIndicesGpu = uIndices;
+
+        nodesGpu.resize(nNodes);
+        Node** nodesPointer = pointer(nodesGpu);
+        initializeNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(xGpu), isFree, v.size(), pointer(vGpu), nodesPointer, pool->createNodes(nNodes));
+        CUDA_CHECK_LAST();
+
+        verticesGpu.resize(nVertices);
+        Vertex** verticesPointer = pointer(verticesGpu);
+        initializeVertices<<<GRID_SIZE, BLOCK_SIZE>>>(nVertices, pointer(uGpu), verticesPointer, pool->createVertices(nVertices));
+        CUDA_CHECK_LAST();
+
+        facesGpu.resize(nFaces);
+        Face** facesPointer = pointer(facesGpu);
+        thrust::device_vector<Pairii> edgeIndices(nEdges);
+        Pairii* edgeIndicesPointer = pointer(edgeIndices);
+        thrust::device_vector<EdgeData> edgeData(nEdges);
+        EdgeData* edgeDataPointer = pointer(edgeData);
+        initializeFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(xIndicesGpu), pointer(uIndicesGpu), nodesPointer, material, verticesPointer, facesPointer, edgeIndicesPointer, edgeDataPointer, pool->createFaces(nFaces));
+        CUDA_CHECK_LAST();
+        thrust::sort_by_key(edgeIndices.begin(), edgeIndices.end(), edgeData.begin());
+
+        edgesGpu.resize(nEdges);
+        Edge** edgesPointer = pointer(edgesGpu);
+        initializeEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, nodesPointer, edgesPointer, pool->createEdges(nEdges));
+        CUDA_CHECK_LAST();
+        setEdges<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgeIndicesPointer, edgeDataPointer, edgesPointer);
+        CUDA_CHECK_LAST();
+        edgesGpu.erase(thrust::remove(edgesGpu.begin(), edgesGpu.end(), nullptr), edgesGpu.end());
+
+        nEdges = edgesGpu.size();
+        setPreserve<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer);
+        CUDA_CHECK_LAST();
+    }
+
+    updateIndices();
+    updateFaceGeometries();
+    updateNodeGeometries();
 }
 
 void Mesh::save(const std::string& path) {

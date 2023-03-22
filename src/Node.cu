@@ -1,5 +1,7 @@
 #include "Node.cuh"
 
+Node::Node() {}
+
 Node::Node(const Vector3f& x, bool isFree) :
     index(0),
     x0(x),

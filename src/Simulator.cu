@@ -5,9 +5,8 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
     nSteps(0),
     nFrames(0),
     directory(directory) {
-    cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1 << 30);
-    if (mode == Simulate || mode == Resume || mode == Replay)
-        renderer = new Renderer(900, 900);
+    pool = mode != Replay ? new MemoryPool() : nullptr;
+    renderer = mode == Simulate || mode == Resume || mode == Replay ? new Renderer(900, 900) : nullptr;
 
     std::ifstream fin(mode == Simulate || mode == SimulateOffline ? path : directory + "/config.json");
     if (!fin.is_open()) {
@@ -82,19 +81,19 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
     
     cloths.resize(json["cloths"].size());
     for (int i = 0; i < json["cloths"].size(); i++)
-        cloths[i] = new Cloth(json["cloths"][i]);
+        cloths[i] = new Cloth(json["cloths"][i], pool);
 
     if (json["obstacles"].isArray()) {
         obstacles.resize(json["obstacles"].size());
         for (int i = 0; i < json["obstacles"].size(); i++)
-            obstacles[i] = new Obstacle(json["obstacles"][i], motions);
+            obstacles[i] = new Obstacle(json["obstacles"][i], motions, pool);
     } else if (json["obstacles"].isString())
         for (int i = 0; ; i++) {
             std::string obstaclePath = stringFormat(parseString(json["obstacles"]), i);
             if (!std::filesystem::exists(obstaclePath))
                 break;
             
-            obstacles.push_back(new Obstacle(obstaclePath, motions[i]));
+            obstacles.push_back(new Obstacle(obstaclePath, motions[i], pool));
         }
 }
 
@@ -107,6 +106,7 @@ Simulator::~Simulator() {
     for (const Obstacle* obstacle : obstacles)
         delete obstacle;
     delete renderer;
+    delete pool;
 
     if (!gpu)
         delete wind;
@@ -662,7 +662,7 @@ void Simulator::collisionStep() {
 void Simulator::remeshingStep() {
     std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
     for (Cloth* cloth : cloths)
-        cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness);
+        cloth->remeshingStep(obstacleBvhs, 10.0f * magic->repulsionThickness, pool);
 
     destroyBvhs(obstacleBvhs);
 

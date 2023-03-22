@@ -23,6 +23,7 @@ public:
     float area, mass;
     int minIndex;
     bool removed;
+    __host__ __device__ Face();
     __host__ __device__ Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, const Material* material);
     __host__ __device__ ~Face();
     __host__ __device__ void initialize(const Material* material);

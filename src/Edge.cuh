@@ -15,6 +15,7 @@ public:
     Node* nodes[2];
     Vertex* vertices[2][2], * opposites[2];
     Face* adjacents[2];
+    __host__ __device__ Edge();
     __host__ __device__ Edge(const Node* node0, const Node* node1);
     __host__ __device__ ~Edge();
     __host__ __device__ void initialize(const Vertex* vertex, const Face* face);
