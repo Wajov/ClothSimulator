@@ -10,7 +10,6 @@
         // "transform": {"translate": [0.5, 0, 0.5]},
         "materials": {"data": "materials/gray-interlock.json",
                        "thicken": 2},
-        "handles": [{"nodes": [2,3], "end_time": 7}],
         "remeshing": {
             "refine_angle": 0.3,
             "refine_compression": 0.005,
@@ -19,6 +18,7 @@
             "aspect_min": 0.2
         }
     }],
+    "handles": [{"nodes": [2,3], "end_time": 7}],
     "motions": [[
         {"time": 0, "transform": {"scale": 0.1, "translate": [0,0,0]}},
         {"time": 1, "transform": {"scale": 0.1, "translate": [0,0,0]}},

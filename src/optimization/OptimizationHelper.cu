@@ -242,11 +242,20 @@ __global__ void computeXt(int nNodes, const Vector3f* x, const Vector3f* gradien
         xt[i] = x[i] - s * gradient[i];
 }
 
-__global__ void updateX(int nNodes, const Vector3f* gradient, float s, Vector3f* x) {
+__global__ void updateX(int nNodes, const Vector3f* xt, Vector3f* x) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads)
-        x[i] -= s * gradient[i];
+        x[i] = xt[i];
+}
+
+__global__ void chebyshevAccelerate(int nNodes, float omega, const Node* const* nodes, Vector3f* x) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nNodes; i += nThreads) {
+        Vector3f x0 = nodes[i]->x0;
+        x[i] = omega * (x[i] - x0) + x0;
+    }
 }
 
 __global__ void updateMultiplierGpu(int nConstraints, const float* c, const int* signs, float mu, float* lambda) {

@@ -418,7 +418,7 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
         *newEdges[0] = Edge(newNode, node0);
         newEdges[1] = &edgePool[4 * i + 1];
         *newEdges[1] = Edge(newNode, node1);
-        
+
         addedNodes[i] = newNode;
         addedEdges[4 * i] = newEdges[0];
         addedEdges[4 * i + 1] = newEdges[1];
@@ -454,7 +454,7 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
                 Face* face = edge->adjacents[j];
                 Edge* edge0 = face->findEdge(vertex1, vertex2);
                 Edge* edge1 = face->findEdge(vertex2, vertex0);
-                
+
                 Vertex* newVertex = newVertices[j];
                 Edge* newEdge0 = newEdges[j];
                 Edge* newEdge1 = newEdges[1 - j];
@@ -464,7 +464,7 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
                 *newFace0 = Face(vertex0, newVertex, vertex2, material);
                 Face* newFace1 = &facePool[4 * i + 2 * j + 1];
                 *newFace1 = Face(vertex2, newVertex, vertex1, material);
-                
+
                 newEdge0->initialize(vertex2, newFace0);
                 newEdge1->initialize(vertex2, newFace1);
                 newEdge2->initialize(vertex0, newFace0);
@@ -473,7 +473,7 @@ __global__ void splitGpu(int nEdges, const Edge* const* edges, const Material* m
                 newFace1->setEdges(newEdge2, newEdge1, edge0);
                 edge0->initialize(newVertex, newFace1);
                 edge1->initialize(newVertex, newFace0);
-                
+
                 addedEdges[4 * i + j + 2] = newEdge2;
                 addedFaces[4 * i + 2 * j] = newFace0;
                 addedFaces[4 * i + 2 * j + 1] = newFace1;
@@ -529,7 +529,7 @@ __device__ bool shouldCollapseGpu(const Edge* edge, int side, const int* edgeBeg
     Node* node1 = edge->nodes[1 - side];
     if (node0->preserve)
         return false;
-    
+
     bool flag = false;
     int l = edgeBegin[node0->index], r = edgeEnd[node0->index];
     for (int i = l; i < r; i++) {
@@ -552,7 +552,7 @@ __device__ bool shouldCollapseGpu(const Edge* edge, int side, const int* edgeBeg
         Vertex* vertices[3] = {adjacentFace->vertices[0], adjacentFace->vertices[1], adjacentFace->vertices[2]};
         if (vertices[0]->node == node1 || vertices[1]->node == node1 || vertices[2]->node == node1)
             continue;
-        
+
         for (int j = 0; j < 3; j++)
             if (vertices[j] == vertex00)
                 vertices[j] = vertex01;
@@ -676,7 +676,7 @@ __global__ void collapseGpu(int nEdges, const PairEi* edges, const Material* mat
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nEdges; i += nThreads) {
         Edge* edge = edges[i].first;
         int side = edges[i].second;
-        
+
         Node* node0 = edge->nodes[side];
         Node* node1 = edge->nodes[1 - side];
 

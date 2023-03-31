@@ -1,17 +1,19 @@
 #include "Obstacle.cuh"
 
-Obstacle::Obstacle(const Json::Value& json, const std::vector<Motion*>& motions, MemoryPool* pool) {
+Obstacle::Obstacle(const Json::Value& json, const std::vector<Transformation>& transformations, MemoryPool* pool) {
     Transformation transformation(json["transform"]);
+    motionIndex = json["motion"].isNull() ? -1 : parseInt(json["motion"]);
     mesh = new Mesh(parseString(json["mesh"]), transformation, nullptr, pool);
-    motion = json["motion"].isNull() ? nullptr : motions[parseInt(json["motion"])];
 
     initialize();
+    transform(transformations);
 }
 
-Obstacle::Obstacle(const std::string& path, const Motion* motion, MemoryPool* pool) :
-    mesh(new Mesh(path, Transformation(), nullptr, pool)),
-    motion(const_cast<Motion*>(motion)) {
+Obstacle::Obstacle(const std::string& path, int motionIndex, const std::vector<Transformation>& transformations, MemoryPool* pool) :
+    motionIndex(motionIndex),
+    mesh(new Mesh(path, Transformation(), nullptr, pool)) {
     initialize();
+    transform(transformations);
 }
 
 Obstacle::~Obstacle() {
@@ -33,16 +35,15 @@ void Obstacle::initialize() {
         setBase<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodes), pointer(baseGpu));
         CUDA_CHECK_LAST();
     }
-    transform(0.0f);
 }
 
 Mesh* Obstacle::getMesh() const {
     return mesh;
 }
 
-void Obstacle::transform(float time) {
-    if (motion != nullptr) {
-        Transformation transformation = motion->computeTransformation(time);
+void Obstacle::transform(const std::vector<Transformation>& transformations) {
+    if (motionIndex > -1) {
+        Transformation transformation = transformations[motionIndex];
         if (!gpu) {
             std::vector<Node*>& nodes = mesh->getNodes();
 
@@ -52,7 +53,7 @@ void Obstacle::transform(float time) {
             }
         } else {
             thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
-            
+
             transformGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodes.size(), pointer(baseGpu), transformation, pointer(nodes));
             CUDA_CHECK_LAST();
         }
@@ -62,10 +63,10 @@ void Obstacle::transform(float time) {
     }
 }
 
-void Obstacle::step(float time, float dt) {
-    if (motion != nullptr) {
+void Obstacle::step(float dt, const std::vector<Transformation>& transformations) {
+    if (motionIndex > -1) {
         float invDt = 1.0f / dt;
-        Transformation transformation = motion->computeTransformation(time);
+        Transformation transformation = transformations[motionIndex];
         if (!gpu) {
             std::vector<Node*>& nodes = mesh->getNodes();
 
@@ -76,7 +77,7 @@ void Obstacle::step(float time, float dt) {
             }
         } else {
             thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
-            
+
             stepGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nodes.size(), invDt, pointer(baseGpu), transformation, pointer(nodes));
             CUDA_CHECK_LAST();
         }

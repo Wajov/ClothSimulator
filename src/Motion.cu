@@ -62,7 +62,7 @@ Transformation Motion::computeTransformation(float time) {
     }
     if (index == n - 1)
         return x[n - 1];
-    
+
     if (flag)
         updateCoefficients();
 

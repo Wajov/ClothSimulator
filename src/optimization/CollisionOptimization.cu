@@ -83,7 +83,7 @@ float CollisionOptimization::objective(const thrust::device_vector<Vector3f>& x)
     thrust::device_vector<float> objectives(nNodes);
     collisionObjective<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, pointer(nodesGpu), obstacleMass, pointer(x), pointer(objectives));
     CUDA_CHECK_LAST();
-    
+
     return 0.5f * invMass * thrust::reduce(objectives.begin(), objectives.end());
 }
 

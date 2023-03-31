@@ -63,8 +63,11 @@ private:
     Vector3f gravity;
     Wind* wind;
     std::vector<Motion*> motions;
+    std::vector<Transformation> transformations;
+    thrust::device_vector<Transformation> transformationsGpu;
     std::vector<Cloth*> cloths;
     std::vector<Obstacle*> obstacles;
+    std::unordered_set<std::string> disabled;
     Renderer* renderer;
     MemoryPool* pool;
     std::string stringFormat(const std::string format, ...) const;
@@ -89,6 +92,7 @@ private:
     Vector3f oldPosition(const Face* face, const Vector3f& b, const std::vector<std::vector<BackupFace>>& faces) const;
     void checkIntersection(const Face* face0, const Face* face1, std::vector<Intersection>& intersections, const std::vector<std::vector<BackupFace>>& faces) const;
     thrust::device_vector<Intersection> findIntersections(const std::vector<BVH*>& clothBvhs, const std::vector<BVH*>& obstacleBvhs, const std::vector<thrust::device_vector<BackupFace>>& faces) const;
+    void updateTransformations();
     void physicsStep();
     void collisionStep();
     void remeshingStep();

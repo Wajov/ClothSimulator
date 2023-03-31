@@ -3,13 +3,16 @@
 Renderer::Renderer(int width, int height) :
     width(width),
     height(height),
-    press(false),
+    leftPress(false),
+    rightPress(false),
     pause(true),
-    lastX(INFINITY),
-    lastY(INFINITY),
+    leftX(INFINITY),
+    leftY(INFINITY),
+    rightX(INFINITY),
+    rightY(INFINITY),
     scaling(1.0f),
     rotation(1.0f),
-    lightDirection(0.0f, 0.0f, 1.0f), 
+    lightDirection(0.0f, 0.0f, 1.0f),
     cameraPosition(0.0f, -0.25f, 2.0f) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -144,25 +147,32 @@ void Renderer::framebufferSizeCallback(int width, int height) {
 void Renderer::mouseButtonCallback(int button, int action, int mods) {
     double x, y;
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        press = true;
-        glfwGetCursorPos(window, &x, &y);
-        pressX = (int)x;
-        pressY = (int)y;
-    } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
-        press = false;
+        leftPress = true;
+        leftX = leftY = INFINITY;
+    } else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+        rightPress = true;
+        rightX = rightY = INFINITY;
+    } else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+        rightPress = false;
+    else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+        leftPress = false;
 }
 
 void Renderer::cursorPosCallback(double x, double y) {
-    if (press && lastX != INFINITY && lastY != INFINITY) {
-        Vector3f a = (Vector3f(static_cast<float>(lastX) / width - 0.5f, 0.5f - static_cast<float>(lastY) / height, 1.0f)).normalized();
+    if (leftPress && leftX != INFINITY && leftY != INFINITY) {
+        Vector3f a = (Vector3f(static_cast<float>(leftX) / width - 0.5f, 0.5f - static_cast<float>(leftY) / height, 1.0f)).normalized();
         Vector3f b = (Vector3f(static_cast<float>(x) / width - 0.5f, 0.5f - static_cast<float>(y) / height, 1.0f)).normalized();
         Vector3f axis = a.cross(b);
         float angle = a.dot(b);
         rotation = rotate(axis, 10.0f * acos(angle)) * rotation;
     }
+    if (rightPress && rightX != INFINITY && rightY != INFINITY) {
+        Vector3f v(static_cast<float>(x) - rightX, rightY - static_cast<float>(y), 0.0f);
+        translation += 0.005f * v;
+    }
 
-    lastX = x;
-    lastY = y;
+    leftX = rightX = x;
+    leftY = rightY = y;
 }
 
 void Renderer::scrollCallback(double x, double y) {
@@ -194,7 +204,7 @@ Vector3f Renderer::getCameraPosition() const {
 }
 
 Matrix4x4f Renderer::getModel() const {
-    return scale(static_cast<float>(scaling)) * rotation;
+    return translate(translation) * scale(static_cast<float>(scaling)) * rotation;
 }
 
 Matrix4x4f Renderer::getView() const {

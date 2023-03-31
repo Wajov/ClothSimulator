@@ -12,7 +12,7 @@ SeparationOptimization::SeparationOptimization(const std::vector<Intersection>& 
             Node* node0 = intersection.face0->vertices[j]->node;
             if (deform == 1 || node0->isFree)
                 intersectionNodes.emplace_back(node0, 6 * i + j);
-            
+
             Node* node1 = intersection.face1->vertices[j]->node;
             if (deform == 1 || node1->isFree)
                 intersectionNodes.emplace_back(node1, 6 * i + j + 3);
@@ -135,7 +135,7 @@ void SeparationOptimization::constraintGradient(const std::vector<Vector3f>& x, 
         int j0 = indices[6 * index + i];
         if (j0 > -1)
             gradient[j0] += factor * intersection.b0(i) * intersection.d;
-        
+
         int j1 = indices[6 * index + i + 3];
         if (j1 > -1)
             gradient[j1] -= factor * intersection.b1(i) * intersection.d;

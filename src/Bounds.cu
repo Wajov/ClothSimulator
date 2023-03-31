@@ -14,7 +14,7 @@ Vector3f Bounds::minVector(const Vector3f& a, const Vector3f& b) const {
     Vector3f ans;
     for (int i = 0; i < 3; i++)
         ans(i) = min(a(i), b(i));
-    
+
     return ans;
 }
 
@@ -22,7 +22,7 @@ Vector3f Bounds::maxVector(const Vector3f& a, const Vector3f& b) const {
     Vector3f ans;
     for (int i = 0; i < 3; i++)
         ans(i) = max(a(i), b(i));
-    
+
     return ans;
 }
 
@@ -78,7 +78,7 @@ bool Bounds::overlap(const Bounds& b) const {
         if (pMax(i) < b.pMin(i))
             return false;
     }
-    
+
     return true;
 }
 

@@ -15,14 +15,16 @@ void cudaCheckLast(const char* file, int line) {
     }
 }
 
+void cublasCheck(cublasStatus_t err, const char* func, const char* file, int line) {
+    if (err != CUBLAS_STATUS_SUCCESS) {
+        std::cerr << "CuSPARSE Runtime Error at: " << file << ":" << line << std::endl;
+        std::cerr << cublasGetStatusString(err) << " " << func << std::endl;
+    }
+}
+
 void cusparseCheck(cusparseStatus_t err, const char* func, const char* file, int line) {
     if (err != CUSPARSE_STATUS_SUCCESS) {
         std::cerr << "CuSPARSE Runtime Error at: " << file << ":" << line << std::endl;
         std::cerr << cusparseGetErrorString(err) << " " << func << std::endl;
     }
-}
-
-void cusolverCheck(cusolverStatus_t err, const char* func, const char* file, int line) {
-    if (err != CUSOLVER_STATUS_SUCCESS)
-        std::cerr << "CuSOLVER Runtime Error at: " << file << ":" << line << std::endl;
 }

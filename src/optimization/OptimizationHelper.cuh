@@ -32,7 +32,8 @@ __global__ void computeCoefficient(int nConstraints, const float* lambda, float 
 __global__ void computeSquare(int nConstraints, float* c);
 __global__ void computeNorm2(int nNodes, const Vector3f* x, float* x2);
 __global__ void computeXt(int nNodes, const Vector3f* x, const Vector3f* gradient, float s, Vector3f* xt);
-__global__ void updateX(int nNodes, const Vector3f* gradient, float s, Vector3f* x);
+__global__ void updateX(int nNodes, const Vector3f* xt, Vector3f* x);
+__global__ void chebyshevAccelerate(int nNodes, float omega, const Node* const* nodes, Vector3f* x);
 __global__ void updateMultiplierGpu(int nConstraints, const float* c, const int* signs, float mu, float* lambda);
 
 #endif

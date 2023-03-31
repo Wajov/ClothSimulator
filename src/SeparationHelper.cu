@@ -15,7 +15,7 @@ bool facePlaneIntersection(const Face* face, const Face* plane, Vector3f& b0, Ve
     }
     if (signSum == -3 || signSum == 3)
         return false;
-    
+
     int v0 = -1;
     for (int i = 0; i < 3; i++)
         if (sign(h[i]) == -signSum)
@@ -36,17 +36,17 @@ bool facePlaneIntersection(const Face* face, const Face* plane, Vector3f& b0, Ve
 bool checkIntersectionMidpoint(const Face* face0, const Face* face1, Vector3f& b0, Vector3f& b1) {
     if (face0->adjacent(face1))
         return false;
-    
+
     Vector3f c = face0->n.cross(face1->n);
     if (c.norm2() < 1e-12f)
         return false;
-    
+
     Vector3f b00, b01, b10, b11;
     bool flag0 = facePlaneIntersection(face0, face1, b00, b01);
     bool flag1 = facePlaneIntersection(face1, face0, b10, b11);
     if (!flag0 || !flag1)
         return false;
-    
+
     int axis = majorAxis(c);
     float a00 = face0->position(b00)(axis);
     float a01 = face0->position(b01)(axis);
@@ -84,7 +84,7 @@ __global__ void initializeOldPosition(int nIntersections, const Intersection* in
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIntersections; i += nThreads) {
         const Intersection& intersection = intersections[i];
-        
+
         Face* face0 = intersection.face0;
         if (!face0->isFree())
             x[2 * i] = face0->position(intersection.b0);
@@ -100,7 +100,7 @@ __global__ void collectContainedFaces(int nIntersections, const Intersection* in
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIntersections; i += nThreads) {
         const Intersection& intersection = intersections[i];
-        
+
         Face* face0 = intersection.face0;
         Vector3f b0 = intersection.b0;
         int index0 = 2 * i;
@@ -150,18 +150,18 @@ void clearVertexFaceDistance(const Face* face0, const Face* face1, const Vector3
     Vector3f n = face1->n;
     for (int i = 0; i < 3; i++) {
         Vector3f x = face0->vertices[i]->node->x;
-        
+
         float h = (x - x0).dot(n);
         float dh = d.dot(n);
         if (h * dh >= 0.0f)
             continue;
-        
+
         float a0 = mixed(x2 - x1, x - x1, d);
         float a1 = mixed(x0 - x2, x - x2, d);
         float a2 = mixed(x1 - x0, x - x0, d);
         if (a0 <= 0.0f || a1 <= 0.0f || a2 <= 0.0f)
             continue;
-        
+
         float dist = -h / dh;
         if (dist > maxDist) {
             maxDist = dist;
@@ -182,19 +182,19 @@ void clearEdgeEdgeDistance(const Face* face0, const Face* face1, const Vector3f&
             Vector3f x10 = face1->vertices[j]->node->x;
             Vector3f x11 = face1->vertices[(j + 1) % 3]->node->x;
             Vector3f n = (x01 - x00).normalized().cross((x11 - x10).normalized());
-            
+
             float h = (x00 - x10).dot(n);
             float dh = d.dot(n);
             if (h * dh >= 0.0f)
                 continue;
-            
+
             float a00 = mixed(x01 - x10, x11 - x10, d);
             float a01 = mixed(x11 - x10, x00 - x10, d);
             float a10 = mixed(x01 - x00, x11 - x00, d);
             float a11 = mixed(x10 - x00, x01 - x00, d);
             if (a00 * a01 <= 0.0f || a10 * a11 <= 0.0f)
                 continue;
-            
+
             float dist = -h / dh;
             if (dist > maxDist) {
                 maxDist = dist;

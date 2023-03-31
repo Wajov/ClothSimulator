@@ -27,7 +27,7 @@ __device__ void checkVertexFaceProximityGpu(const Vertex* vertex, const Face* fa
         key1.first = nullptr;
         return;
     }
-    
+
     Vector3f n;
     float w[4];
     float d = abs(signedVertexFaceDistance(node->x, node0->x, node1->x, node2->x, n, w));
@@ -61,7 +61,7 @@ __device__ void checkEdgeEdgeProximityGpu(const Edge* edge0, const Edge* edge1, 
         key0.first = key1.first = nullptr;
         return;
     }
-    
+
     Vector3f n;
     float w[4];
     float d = abs(signedEdgeEdgeDistance(node0->x, node1->x, node2->x, node3->x, n, w));
@@ -70,7 +70,7 @@ __device__ void checkEdgeEdgeProximityGpu(const Edge* edge0, const Edge* edge1, 
         key0.first = key1.first = nullptr;
         return;
     }
-    
+
     if (edge0->isFree()) {
         int side = n.dot(edge0->nodes[0]->n + edge0->nodes[1]->n) >= 0.0f ? 0 : 1;
         key0 = PairEi(const_cast<Edge*>(edge0), side);
@@ -304,7 +304,7 @@ __global__ void addStretchingForces(int nFaces, const Face* const* faces, float 
         Vector9f f;
         Matrix9x9f J;
         stretchingForce(face, material, f, J);
-        
+
         int aIndex = 81 * i;
         int bIndex = 9 * i;
         addMatrixAndVectorGpu(-dt * dt * J, dt * (f + dt * J * v), indices, aIndices + aIndex, aValues + aIndex, bIndices + bIndex, bValues + bIndex);
@@ -376,14 +376,15 @@ __global__ void addBendingForces(int nEdges, const Edge* const* edges, float dt,
     }
 }
 
-__global__ void addHandleForcesGpu(int nHandles, const Handle* handles, float dt, float stiffness, Pairii* aIndices, float* aValues, int* bIndices, float* bValues) {
+__global__ void addHandleForcesGpu(int nHandles, const Handle* handles, float dt, const Transformation* transformations, float stiffness, Pairii* aIndices, float* aValues, int* bIndices, float* bValues) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nHandles; i += nThreads) {
         const Handle& handle = handles[i];
         Node* node = handle.node;
         int nodeIndex = node->index;
-        Vector3f f = dt * ((handle.position - node->x) - dt * node->v) * stiffness;
+        Vector3f position = handle.motionIndex > -1 ? transformations[handle.motionIndex].applyToPoint(handle.position) : handle.position;
+        Vector3f f = dt * ((position - node->x) - dt * node->v) * stiffness;
         for (int j = 0; j < 3; j++) {
             int index = 3 * i + j;
             aIndices[index] = Pairii(3 * nodeIndex + j, 3 * nodeIndex + j);
@@ -398,7 +399,7 @@ void impulseForce(const Proximity& proximity, float d, float thickness, Vector12
     float const* w = proximity.w;
     Vector3f n = proximity.n;
     float stiffness = proximity.stiffness;
-    
+
     Vector12f N(w[0] * n, w[1] * n, w[2] * n, w[3] * n);
     f = 0.5f * stiffness / thickness * sqr(d) * N;
     J = -stiffness / thickness * d * N.outer(N);
@@ -410,7 +411,7 @@ void frictionForce(const Proximity& proximity, float d, float thickness, float d
     Vector3f n = proximity.n;
     float mu = proximity.mu;
     float stiffness = proximity.stiffness;
-    
+
     float F = 0.5f * stiffness / thickness * sqr(d);
     Vector3f v;
     float invMass = 0.0f;
@@ -475,11 +476,26 @@ __global__ void splitIndices(int nIndices, const Pairii* indices, int* rowIndice
     }
 }
 
+__global__ void setPreconditioner(int nIndices, const int* rowIndices, const int* colIndices, const float* values, float* m) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads)
+        if (rowIndices[i] == colIndices[i])
+            m[rowIndices[i]] = 1.0f / values[i];
+}
+
 __global__ void setVector(int nIndices, const int* indices, const float* values, float* v) {
     int nThreads = gridDim.x * blockDim.x;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nIndices; i += nThreads)
         v[indices[i]] = values[i];
+}
+
+__global__ void multiplyByElement(int n, const float* a, const float* b, float* c) {
+    int nThreads = gridDim.x * blockDim.x;
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += nThreads)
+        c[i] = a[i] * b[i];
 }
 
 __global__ void updateNodes(int nNodes, float dt, const float* dv, Node** nodes) {

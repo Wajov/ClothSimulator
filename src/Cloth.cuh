@@ -14,8 +14,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 #include <thrust/reduce.h>
+#include <cublas_v2.h>
 #include <cusparse.h>
-#include <cusolverSp.h>
 
 #include "MathHelper.cuh"
 #include "CudaHelper.cuh"
@@ -40,6 +40,9 @@
 #include "Shader.cuh"
 #include "MemoryPool.cuh"
 
+const int MAX_SOLVER_ITERATION = 400;
+const float EPSILON_R = 1e-6f;
+
 extern bool gpu;
 
 class Cloth {
@@ -50,14 +53,14 @@ private:
     thrust::device_vector<Handle> handlesGpu;
     Remeshing* remeshing;
     Shader* edgeShader, * faceShader;
+    cublasHandle_t cublasHandle;
     cusparseHandle_t cusparseHandle;
-    cusolverSpHandle_t cusolverHandle;
     void addMatrixAndVector(const Matrix9x9f& B, const Vector9f& b, const Vector3i& indices, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& a) const;
     void addMatrixAndVector(const Matrix12x12f& B, const Vector12f& b, const Vector4i& indices, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& a) const;
     void initializeForces(Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addExternalForces(float dt, const Vector3f& gravity, const Wind* wind, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
-    void addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
+    void addHandleForces(float dt, const std::vector<Transformation>& transformations, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     void addProximityForces(float dt, const std::vector<Proximity>& proximities, float thickness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const;
     std::vector<Plane> findNearestPlane(const std::vector<BVH*>& obstacleBvhs, float thickness) const;
     thrust::device_vector<Plane> findNearestPlaneGpu(const std::vector<BVH*>& obstacleBvhs, float thickness) const;
@@ -83,8 +86,10 @@ public:
     Cloth(const Json::Value& json, MemoryPool* pool);
     ~Cloth();
     Mesh* getMesh() const;
-    void physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness, const std::vector<Proximity>& proximities, float repulsionThickness);
-    void physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness, const thrust::device_vector<Proximity>& proximities, float repulsionThickness);
+    void addHandles(const std::vector<int>& nodeIndices, int motionIndex, const std::vector<Transformation>& transformations);
+    void addHandles(const std::vector<int>& nodeIndices, int motionIndex, const thrust::device_vector<Transformation>& transformations);
+    void physicsStep(float dt, const Vector3f& gravity, const Wind* wind, const std::vector<Transformation>& transformations, float handleStiffness, const std::vector<Proximity>& proximities, float repulsionThickness);
+    void physicsStep(float dt, const Vector3f& gravity, const Wind* wind, const thrust::device_vector<Transformation>& transformations, float handleStiffness, const thrust::device_vector<Proximity>& proximities, float repulsionThickness);
     void remeshingStep(const std::vector<BVH*>& obstacleBvhs, float thickness, MemoryPool* pool);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;

@@ -144,7 +144,7 @@ void Mesh::apply(const Operator& op) {
         for (const Vertex* vertex : op.removedVertices)
             vertices.erase(std::remove(vertices.begin(), vertices.end(), vertex), vertices.end());
         vertices.insert(vertices.end(), op.addedVertices.begin(), op.addedVertices.end());
-        
+
         for (const Edge* edge : op.removedEdges)
             edges.erase(std::remove(edges.begin(), edges.end(), edge), edges.end());
         edges.insert(edges.end(), op.addedEdges.begin(), op.addedEdges.end());
@@ -356,7 +356,7 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
             delete edge;
         for (const Face* face : faces)
             delete face;
-            
+
         nodes.resize(x.size());
         vertices.resize(u.size());
         edges.clear();
@@ -381,7 +381,7 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
             Vertex* vertex0 = vertices[uIndex0];
             Vertex* vertex1 = vertices[uIndex1];
             Vertex* vertex2 = vertices[uIndex2];
-            
+
             Edge* edge0 = findEdge(xIndex0, xIndex1, edgeMap, pool);
             Edge* edge1 = findEdge(xIndex1, xIndex2, edgeMap, pool);
             Edge* edge2 = findEdge(xIndex2, xIndex0, edgeMap, pool);
@@ -489,7 +489,7 @@ void Mesh::save(const std::string& path) {
         CUDA_CHECK_LAST();
         for (const Vector2f& ut : u)
             fout << "vt " << ut(0) << " " << ut(1) << std::endl;
-        
+
         int nFaces = facesGpu.size();
         thrust::device_vector<Pairii> indices(3 * nFaces);
         copyFaces<<<GRID_SIZE, BLOCK_SIZE>>>(nFaces, pointer(facesGpu), pointer(indices));
@@ -517,7 +517,7 @@ void Mesh::check() const {
                         std::cerr << "Edge adjacents check error!" << std::endl;
                 } else if (edge->adjacents[i] != nullptr)
                     std::cerr << "Edge opposites check error!" << std::endl;
-            
+
         for (const Face* face : faces)
             for (int i = 0; i < 3; i++) {
                 Edge* edge = face->edges[i];

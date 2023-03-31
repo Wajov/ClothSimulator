@@ -13,6 +13,7 @@
 #include "Vertex.cuh"
 #include "Edge.cuh"
 #include "Face.cuh"
+#include "Transformation.cuh"
 #include "Wind.cuh"
 #include "Handle.cuh"
 #include "Material.cuh"
@@ -36,12 +37,14 @@ __host__ __device__ float distance(const Vector3f& x, const Vector3f& a, const V
 __host__ __device__ Vector2f barycentricWeights(const Vector3f& x, const Vector3f& a, const Vector3f& b);
 __host__ __device__ void bendingForce(const Edge* edge, const Material* material, Vector12f& f, Matrix12x12f& J);
 __global__ void addBendingForces(int nEdges, const Edge* const* edges, float dt, const Material* material, Pairii* aIndices, float* aValues, int* bIndices, float* bValues);
-__global__ void addHandleForcesGpu(int nHandles, const Handle* handles, float dt, float stiffness, Pairii* aIndices, float* aValues, int* bIndices, float* bValues);
+__global__ void addHandleForcesGpu(int nHandles, const Handle* handles, float dt, const Transformation* transformations, float stiffness, Pairii* aIndices, float* aValues, int* bIndices, float* bValues);
 __host__ __device__ void impulseForce(const Proximity& proximity, float d, float thickness, Vector12f& f, Matrix12x12f& J);
 __host__ __device__ void frictionForce(const Proximity& proximity, float d, float thickness, float dt, Vector12f& f, Matrix12x12f& J);
 __global__ void addProximityForcesGpu(int nProximities, const Proximity* proximities, float dt, float thickness, int nNodes, const Node* const* nodes, Pairii* aIndices, float* aValues, int* bIndices, float* bValues);
 __global__ void splitIndices(int nIndices, const Pairii* indices, int* rowIndices, int* colIndices);
+__global__ void setPreconditioner(int nIndices, const int* rowIndices, const int* colIndices, const float* values, float* m);
 __global__ void setVector(int nIndices, const int* indices, const float* values, float* v);
+__global__ void multiplyByElement(int n, const float* a, const float* b, float* c);
 __global__ void updateNodes(int nNodes, float dt, const float* dv, Node** nodes);
 
 #endif

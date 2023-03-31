@@ -14,7 +14,7 @@ Remeshing::Remeshing(const Json::Value& json) {
         sizeMax = parseFloat(json["size"][1]);
     }
     aspectMin = parseFloat(json["aspect_min"], -INFINITY);
-    flipThreshold = parseFloat(json["flip_threshold"], 1e-2f); 
+    flipThreshold = parseFloat(json["flip_threshold"], 1e-2f);
 }
 
 Remeshing::~Remeshing() {}

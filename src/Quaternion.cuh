@@ -16,13 +16,14 @@ public:
     __host__ __device__ Quaternion(const Vector3f& axis, float angle);
     __host__ __device__ Quaternion(float s, float x, float y, float z);
     __host__ __device__ ~Quaternion();
-    __host__ __device__ Vector3f rotate(const Vector3f& x) const;
     __host__ __device__ Quaternion operator+(const Quaternion& q) const;
     __host__ __device__ Quaternion operator-(const Quaternion& q) const;
     __host__ __device__ friend Quaternion operator*(float s, const Quaternion& q);
     __host__ __device__ Quaternion operator*(float s) const;
     __host__ __device__ Quaternion operator*(const Quaternion& q) const;
     __host__ __device__ Quaternion operator/(float s) const;
+    __host__ __device__ Quaternion inverse() const;
+    __host__ __device__ Vector3f rotate(const Vector3f& x) const;
 };
 
 #endif

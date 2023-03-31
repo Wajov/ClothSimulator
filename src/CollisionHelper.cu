@@ -117,7 +117,7 @@ bool checkVertexFaceImpact(const Vertex* vertex, const Face* face, float thickne
         return false;
     if (!node->bounds(true).overlap(face->bounds(true), thickness))
         return false;
-    
+
     return checkImpact(VertexFace, node, node0, node1, node2, impact);
 }
 
@@ -130,7 +130,7 @@ bool checkEdgeEdgeImpact(const Edge* edge0, const Edge* edge1, float thickness, 
         return false;
     if (!edge0->bounds(true).overlap(edge1->bounds(true), thickness))
         return false;
-    
+
     return checkImpact(EdgeEdge, node0, node1, node2, node3, impact);
 }
 

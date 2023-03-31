@@ -15,48 +15,25 @@ Cloth::Cloth(const Json::Value& json, MemoryPool* pool) {
         CUDA_CHECK(cudaMalloc(&remeshing, sizeof(Remeshing)));
         CUDA_CHECK(cudaMemcpy(remeshing, remeshingTemp, sizeof(Remeshing), cudaMemcpyHostToDevice));
         delete remeshingTemp;
+
+        CUBLAS_CHECK(cublasCreate(&cublasHandle));
+        CUSPARSE_CHECK(cusparseCreate(&cusparseHandle));
     }
     mesh = new Mesh(parseString(json["mesh"]), transformation, material, pool);
-
-    std::vector<int> handleIndices;
-    for (const Json::Value& handleJson : json["handles"])
-        for (const Json::Value& nodeJson : handleJson["nodes"])
-            handleIndices.push_back(parseInt(nodeJson));
-    
-    if (!gpu) {
-        std::vector<Node*>& nodes = mesh->getNodes();
-        handles.resize(handleIndices.size());
-        for (int i = 0; i < handleIndices.size(); i++) {
-            Node* node = nodes[handleIndices[i]];
-            Handle& handle = handles[i];
-            node->preserve = true;
-            handle.node = node;
-            handle.position = node->x;
-        }
-    } else {
-        thrust::device_vector<int> handleIndicesGpu = handleIndices;
-        thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
-        handlesGpu.resize(handleIndicesGpu.size());
-        initializeHandles<<<GRID_SIZE, BLOCK_SIZE>>>(handleIndicesGpu.size(), pointer(handleIndicesGpu), pointer(nodes), pointer(handlesGpu));
-        CUDA_CHECK_LAST();
-
-        CUSPARSE_CHECK(cusparseCreate(&cusparseHandle));
-        CUSOLVER_CHECK(cusolverSpCreate(&cusolverHandle));
-    }
 }
 
 Cloth::~Cloth() {
     delete mesh;
     delete edgeShader;
     delete faceShader;
-    
+
     if (!gpu)
         delete material;
     else {
         CUDA_CHECK(cudaFree(material));
 
+        CUBLAS_CHECK(cublasDestroy(cublasHandle));
         CUSPARSE_CHECK(cusparseDestroy(cusparseHandle));
-        CUSOLVER_CHECK(cusolverSpDestroy(cusolverHandle));
     }
 }
 
@@ -151,7 +128,7 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::Ve
         Node* node2 = face->vertices[2]->node;
         Vector9f v(node0->v, node1->v, node2->v);
         Vector3i indices(node0->index, node1->index, node2->index);
-        
+
         Vector9f f;
         Matrix9x9f J;
         stretchingForce(face, material, f, J);
@@ -175,14 +152,15 @@ void Cloth::addInternalForces(float dt, Eigen::SparseMatrix<float>& A, Eigen::Ve
         }
 }
 
-void Cloth::addHandleForces(float dt, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
+void Cloth::addHandleForces(float dt, const std::vector<Transformation>& transformations, float stiffness, Eigen::SparseMatrix<float>& A, Eigen::VectorXf& b) const {
     for (const Handle& handle : handles) {
         Node* node = handle.node;
         int index = node->index;
         A.coeffRef(3 * index, 3 * index) += dt * dt * stiffness;
         A.coeffRef(3 * index + 1, 3 * index + 1) += dt * dt * stiffness;
         A.coeffRef(3 * index + 2, 3 * index + 2) += dt * dt * stiffness;
-        Vector3f f = dt * ((handle.position - node->x) - dt * node->v) * stiffness;
+        Vector3f position = handle.motionIndex > -1 ? transformations[handle.motionIndex].applyToPoint(handle.position) : handle.position;
+        Vector3f f = dt * ((position - node->x) - dt * node->v) * stiffness;
         for (int i = 0; i < 3; i++)
             b(3 * index + i, 0) += f(i);
     }
@@ -219,7 +197,7 @@ std::vector<Plane> Cloth::findNearestPlane(const std::vector<BVH*>& obstacleBvhs
         NearPoint point(thickness, node->x);
         for (const BVH* obstacleBvh : obstacleBvhs)
             obstacleBvh->findNearestPoint(node->x, point);
-    
+
         Vector3f n = node->x - point.x;
         if (n.norm2() > 1e-8f)
             ans[i] = Plane(point.x, n.normalized());
@@ -340,12 +318,12 @@ thrust::device_vector<Edge*> Cloth::findEdgesToFlipGpu() const {
 bool Cloth::flipSomeEdges(MemoryPool* pool) {
     static int nEdges = 0;
     Operator op;
-    
+
     if (!gpu) {
         std::vector<Edge*> edgesToFlip = std::move(findEdgesToFlip());
         if (edgesToFlip.empty() || edgesToFlip.size() == nEdges)
             return false;
-        
+
         nEdges = edgesToFlip.size();
         for (const Edge* edge : edgesToFlip)
             op.flip(edge, material, pool);
@@ -353,7 +331,7 @@ bool Cloth::flipSomeEdges(MemoryPool* pool) {
         thrust::device_vector<Edge*> edgesToFlip = std::move(findEdgesToFlipGpu());
         if (edgesToFlip.empty() || edgesToFlip.size() == nEdges)
             return false;
-        
+
         nEdges = edgesToFlip.size();
         op.flip(edgesToFlip, material, pool);
     }
@@ -443,7 +421,7 @@ bool Cloth::splitSomeEdges(MemoryPool* pool) {
         std::vector<Edge*> edgesToSplit = std::move(findEdgesToSplit());
         if (edgesToSplit.empty())
             return false;
-        
+
         for (const Edge* edge : edgesToSplit)
             op.split(edge, material, pool);
     } else {
@@ -468,7 +446,7 @@ void Cloth::buildAdjacents(std::unordered_map<Node*, std::vector<Edge*>>& adjace
     for (Edge* edge : edges)
         for (int i = 0; i < 2; i++)
             adjacentEdges[edge->nodes[i]].push_back(edge);
-            
+
     std::vector<Face*>& faces = mesh->getFaces();
     for (Face* face : faces)
         for (int i = 0; i < 3; i++)
@@ -511,7 +489,7 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
     Node* node1 = edge->nodes[1 - side];
     if (node0->preserve)
         return false;
-    
+
     bool flag = false;
     const std::vector<Edge*>& edges = adjacentEdges.at(node0);
     for (const Edge* adjacentEdge : edges)
@@ -521,7 +499,7 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
         }
     if (flag && (!edge->isBoundary() && !edge->isSeam()))
         return false;
-    
+
     Vertex* vertex00 = edge->vertices[0][side];
     Vertex* vertex01 = edge->vertices[0][1 - side];
     Vertex* vertex10 = edge->vertices[1][side];
@@ -531,7 +509,7 @@ bool Cloth::shouldCollapse(const Edge* edge, int side, const std::unordered_map<
         Vertex* vertices[3] = {adjacentFace->vertices[0], adjacentFace->vertices[1], adjacentFace->vertices[2]};
         if (vertices[0]->node == node1 || vertices[1]->node == node1 || vertices[2]->node == node1)
             continue;
-        
+
         for (int j = 0; j < 3; j++)
             if (vertices[j] == vertex00)
                 vertices[j] = vertex01;
@@ -563,18 +541,18 @@ std::vector<PairEi> Cloth::findEdgesToCollapse(const std::unordered_map<Node*, s
             side = 0;
         else if (shouldCollapse(edge, 1, adjacentEdges, adjacentFaces))
             side = 1;
-        
+
         if (side > -1) {
             Node* node = edge->nodes[side];
             const std::vector<Face*>& adjacents = adjacentFaces.at(node);
-            
+
             bool flag = true;
             for (Face* adjacentFace : adjacents)
                 if (faces.find(adjacentFace) != faces.end()) {
                     flag = false;
                     break;
                 }
-            
+
             if (flag) {
                 ans.emplace_back(edge, side);
                 for (Face* adjacentFace : adjacents)
@@ -670,14 +648,37 @@ Mesh* Cloth::getMesh() const {
     return mesh;
 }
 
-void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness, const std::vector<Proximity>& proximities, float repulsionThickness) {
+void Cloth::addHandles(const std::vector<int>& nodeIndices, int motionIndex, const std::vector<Transformation>& transformations) {
+    std::vector<Node*>& nodes = mesh->getNodes();
+    int size = handles.size();
+    handles.resize(size + nodeIndices.size());
+    for (int i = 0; i < nodeIndices.size(); i++) {
+        Node* node = nodes[nodeIndices[i]];
+        Handle& handle = handles[size + i];
+        node->preserve = true;
+        handle.motionIndex = motionIndex;
+        handle.node = node;
+        handle.position = motionIndex > -1 ? transformations[motionIndex].inverse().applyToPoint(node->x) : node->x;
+    }
+}
+
+void Cloth::addHandles(const std::vector<int>& nodeIndices, int motionIndex, const thrust::device_vector<Transformation>& transformations) {
+    thrust::device_vector<int> nodeIndicesGpu = nodeIndices;
+    thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
+    int size = handlesGpu.size();
+    handlesGpu.resize(size + nodeIndicesGpu.size());
+    initializeHandles<<<GRID_SIZE, BLOCK_SIZE>>>(nodeIndicesGpu.size(), pointer(nodeIndicesGpu), motionIndex, pointer(transformations), pointer(nodes), pointer(handlesGpu, size));
+    CUDA_CHECK_LAST();
+}
+
+void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, const std::vector<Transformation>& transformations, float handleStiffness, const std::vector<Proximity>& proximities, float repulsionThickness) {
     Eigen::SparseMatrix<float> A;
     Eigen::VectorXf b;
 
     initializeForces(A, b);
     addExternalForces(dt, gravity, wind, A, b);
     addInternalForces(dt, A, b);
-    addHandleForces(dt, handleStiffness, A, b);
+    addHandleForces(dt, transformations, handleStiffness, A, b);
     addProximityForces(dt, proximities, repulsionThickness, A, b);
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky;
@@ -689,7 +690,7 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
         nodes[i]->v += Vector3f(dv(3 * i), dv(3 * i + 1), dv(3 * i + 2));
 }
 
-void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, float handleStiffness, const thrust::device_vector<Proximity>& proximities, float repulsionThickness) {
+void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, const thrust::device_vector<Transformation>& transformations, float handleStiffness, const thrust::device_vector<Proximity>& proximities, float repulsionThickness) {
     thrust::device_vector<Node*>& nodes = mesh->getNodesGpu();
     thrust::device_vector<Edge*>& edges = mesh->getEdgesGpu();
     thrust::device_vector<Face*>& faces = mesh->getFacesGpu();
@@ -725,7 +726,7 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
     addBendingForces<<<GRID_SIZE, BLOCK_SIZE>>>(nEdges, edgesPointer, dt, material, pointer(aIndices, 3 * nNodes + 81 * nFaces), pointer(aValues, 3 * nNodes + 81 * nFaces), pointer(bIndices, 3 * nNodes + 18 * nFaces), pointer(bValues, 3 * nNodes + 18 * nFaces));
     CUDA_CHECK_LAST();
 
-    addHandleForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), dt, handleStiffness, pointer(aIndices, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(aValues, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(bIndices, 3 * nNodes + 12 * nEdges + 18 * nFaces), pointer(bValues, 3 * nNodes + 12 * nEdges + 18 * nFaces));
+    addHandleForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nHandles, pointer(handlesGpu), dt, pointer(transformations), handleStiffness, pointer(aIndices, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(aValues, 3 * nNodes + 144 * nEdges + 81 * nFaces), pointer(bIndices, 3 * nNodes + 12 * nEdges + 18 * nFaces), pointer(bValues, 3 * nNodes + 12 * nEdges + 18 * nFaces));
     CUDA_CHECK_LAST();
 
     addProximityForcesGpu<<<GRID_SIZE, BLOCK_SIZE>>>(nProximities, pointer(proximities), dt, repulsionThickness, nNodes, nodesPointer, pointer(aIndices, 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles), pointer(aValues, 3 * nNodes + 144 * nEdges + 81 * nFaces + 3 * nHandles), pointer(bIndices, 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles), pointer(bValues, 3 * nNodes + 12 * nEdges + 18 * nFaces + 3 * nHandles));
@@ -736,10 +737,18 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
     thrust::sort_by_key(aIndices.begin(), aIndices.end(), aValues.begin());
     thrust::device_vector<Pairii> outputAIndices(aSize);
     thrust::device_vector<float> values(aSize);
+    float* valuesPointer = pointer(values);
     auto iter = thrust::reduce_by_key(aIndices.begin(), aIndices.end(), aValues.begin(), outputAIndices.begin(), values.begin());
     int nNonZero = iter.first - outputAIndices.begin();
-    thrust::device_vector<int> rowIndices(nNonZero), colIndies(nNonZero);
-    splitIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nNonZero, pointer(outputAIndices), pointer(rowIndices), pointer(colIndies));
+    thrust::device_vector<float> m(n);
+    float* mPointer = pointer(m);
+    thrust::device_vector<int> rowIndices(nNonZero), colIndices(nNonZero);
+    int* rowIndicesPointer = pointer(rowIndices);
+    int* colIndicesPointer = pointer(colIndices);
+    splitIndices<<<GRID_SIZE, BLOCK_SIZE>>>(nNonZero, pointer(outputAIndices), rowIndicesPointer, colIndicesPointer);
+    CUDA_CHECK_LAST();
+
+    setPreconditioner<<<GRID_SIZE, BLOCK_SIZE>>>(nNonZero, rowIndicesPointer, colIndicesPointer, valuesPointer, mPointer);
     CUDA_CHECK_LAST();
 
     thrust::sort_by_key(bIndices.begin(), bIndices.end(), bValues.begin());
@@ -747,22 +756,57 @@ void Cloth::physicsStep(float dt, const Vector3f& gravity, const Wind* wind, flo
     thrust::device_vector<float> outputBValues(bSize);
     auto jter = thrust::reduce_by_key(bIndices.begin(), bIndices.end(), bValues.begin(), outputBIndices.begin(), outputBValues.begin());
     int outputBSize = jter.first - outputBIndices.begin();
-    thrust::device_vector<float> b(n);
-    setVector<<<GRID_SIZE, BLOCK_SIZE>>>(outputBSize, pointer(outputBIndices), pointer(outputBValues), pointer(b));
+    thrust::device_vector<float> r(n);
+    float* rPointer = pointer(r);
+    setVector<<<GRID_SIZE, BLOCK_SIZE>>>(outputBSize, pointer(outputBIndices), pointer(outputBValues), rPointer);
     CUDA_CHECK_LAST();
 
-    thrust::device_vector<int> rowPointer(n + 1);
-    CUSPARSE_CHECK(cusparseXcoo2csr(cusparseHandle, pointer(rowIndices), nNonZero, n, pointer(rowPointer), CUSPARSE_INDEX_BASE_ZERO));
+    float zero = 0.0f, one = 1.0f;
+    cusparseSpMatDescr_t aDescr;
+    CUSPARSE_CHECK(cusparseCreateCoo(&aDescr, n, n, nNonZero, rowIndicesPointer, colIndicesPointer, valuesPointer, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
+    thrust::device_vector<float> x(n, 0.0f), d(n), z(n), ad(n), t(n);
+    float* xPointer = pointer(x);
+    float* dPointer = pointer(d);
+    float* zPointer = pointer(z);
+    float* adPointer = pointer(ad);
+    float* tPointer = pointer(t);
+    cusparseDnVecDescr_t dDescr;
+    CUSPARSE_CHECK(cusparseCreateDnVec(&dDescr, n, dPointer, CUDA_R_32F));
+    cusparseDnVecDescr_t adDescr;
+    CUSPARSE_CHECK(cusparseCreateDnVec(&adDescr, n, adPointer, CUDA_R_32F));
 
-    cusparseMatDescr_t descr;
-    CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
-    thrust::device_vector<float> dv(n);
-    int singularity;
-    CUSOLVER_CHECK(cusolverSpScsrlsvchol(cusolverHandle, n, nNonZero, descr, pointer(values), pointer(rowPointer), pointer(colIndies), pointer(b), 1e-10f, 0, pointer(dv), &singularity));
-    if (singularity != -1)
-        std::cerr << "Not SPD! " << std::endl;
+    multiplyByElement<<<GRID_SIZE, BLOCK_SIZE>>>(n, mPointer, rPointer, dPointer);
+    CUDA_CHECK_LAST();
 
-    updateNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, dt, pointer(dv), nodesPointer);
+    CUBLAS_CHECK(cublasScopy(cublasHandle, n, dPointer, 1, zPointer, 1));
+    for (int i = 0; i < MAX_SOLVER_ITERATION; i++) {
+        float norm2;
+        CUBLAS_CHECK(cublasSnrm2(cublasHandle, n, rPointer, 1, &norm2));
+        if (norm2 < EPSILON_R)
+            break;
+
+        CUSPARSE_CHECK(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, &one, aDescr, dDescr, &zero, adDescr, CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, nullptr));
+        float rz, dad;
+        CUBLAS_CHECK(cublasSdot(cublasHandle, n, rPointer, 1, zPointer, 1, &rz));
+        CUBLAS_CHECK(cublasSdot(cublasHandle, n, dPointer, 1, adPointer, 1, &dad));
+        float alpha = rz / dad;
+        float minusAlpha = -alpha;
+
+        CUBLAS_CHECK(cublasSaxpy(cublasHandle, n, &alpha, dPointer, 1, xPointer, 1));
+        CUBLAS_CHECK(cublasSaxpy(cublasHandle, n, &minusAlpha, adPointer, 1, rPointer, 1));
+        multiplyByElement<<<GRID_SIZE, BLOCK_SIZE>>>(n, mPointer, rPointer, zPointer);
+        CUDA_CHECK_LAST();
+
+        float rzt;
+        CUBLAS_CHECK(cublasSdot(cublasHandle, n, rPointer, 1, zPointer, 1, &rzt));
+        float beta = rzt / rz;
+
+        CUBLAS_CHECK(cublasScopy(cublasHandle, n, zPointer, 1, tPointer, 1));
+        CUBLAS_CHECK(cublasSaxpy(cublasHandle, n, &beta, dPointer, 1, tPointer, 1));
+        CUBLAS_CHECK(cublasScopy(cublasHandle, n, tPointer, 1, dPointer, 1));
+    }
+
+    updateNodes<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, dt, pointer(x), nodesPointer);
     CUDA_CHECK_LAST();
 }
 

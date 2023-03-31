@@ -13,10 +13,10 @@
 
 class Renderer {
 private:
-    bool press, pause;
-    int width, height, pressX, pressY;
-    double lastX, lastY, scaling;
-    Vector3f lightDirection, cameraPosition;
+    bool pause, leftPress, rightPress;
+    int width, height;
+    double leftX, leftY, rightX, rightY, scaling;
+    Vector3f translation, lightDirection, cameraPosition;
     Matrix4x4f rotation;
     GLFWwindow* window;
     Matrix4x4f scale(float scaling) const;

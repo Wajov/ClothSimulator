@@ -8,6 +8,7 @@
 
 class Handle {
 public:
+    int motionIndex;
     Node* node;
     Vector3f position;
     __host__ __device__ Handle();

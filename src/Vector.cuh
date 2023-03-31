@@ -12,7 +12,7 @@ template<typename T, int n, int p> class Matrix;
 template<typename T, int n> class Vector {
 public:
     T data[n];
-    
+
     __host__ __device__ Vector() {
         for (int i = 0; i < n; i++)
             data[i] = static_cast<T>(0);
@@ -72,7 +72,7 @@ public:
     __host__ __device__ T& operator()(int i) {
         return data[i];
     };
-    
+
     __host__ __device__ Vector<T, n> operator+(const Vector<T, n>& v) const {
         Vector<T, n> ans;
         for (int i = 0; i < n; i++)

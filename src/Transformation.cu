@@ -67,6 +67,14 @@ Transformation Transformation::operator/(float s) const {
     return ans;
 }
 
+__host__ __device__ Transformation Transformation::inverse() const {
+    Transformation ans;
+    ans.scaling = 1.0f / scaling;
+    ans.rotation = rotation.inverse();
+    ans.translation = Vector3f() - ans.rotation.rotate(ans.scaling * translation);
+    return ans;
+}
+
 Vector2f Transformation::applyToUV(const Vector2f& u) const {
     return scaling * u;
 }

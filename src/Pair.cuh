@@ -16,7 +16,7 @@ public:
     __host__ __device__ Pair() :
         first(static_cast<S>(0)),
         second(static_cast<T>(0)) {};
-    
+
     __host__ __device__ Pair(S first, T second) :
         first(first),
         second(second) {};
@@ -24,7 +24,7 @@ public:
     __host__ __device__ Pair(const Pair<S, T>& p) :
         first(p.first),
         second(p.second) {};
-    
+
     __host__ __device__ ~Pair() {};
 
     __host__ __device__ bool operator==(const Pair<S, T>& p) const {

@@ -65,7 +65,7 @@ void BVH::initialize(const BVHNode* parent, int l, int r, std::vector<Face*>& fa
     } else {
         for (int i = l; i <= r; i++)
             node.bounds += bounds[i];
-        
+
         if (r - l == 1) {
             node.left = &nodes[index];
             initialize(&node, l, l, faces, bounds, centers);
@@ -146,7 +146,7 @@ thrust::device_vector<PairFF> BVH::traverse(const BVH* bvh, float thickness) con
     int* numPointer = pointer(num);
     countPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, bvh->root, thickness, numPointer);
     CUDA_CHECK_LAST();
-    
+
     thrust::inclusive_scan(num.begin(), num.end(), num.begin());
     thrust::device_vector<PairFF> ans(num.back());
     findPairs<<<GRID_SIZE, BLOCK_SIZE>>>(nLeaves, leavesPointer, bvh->root, thickness, numPointer, pointer(ans));

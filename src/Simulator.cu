@@ -33,7 +33,7 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
         CUDA_CHECK(cudaMemcpy(wind, windTemp, sizeof(Wind), cudaMemcpyHostToDevice));
         delete windTemp;
     }
-    
+
     magic = new Magic(json["magic"]);
 
     if (json["motions"].isArray()) {
@@ -53,12 +53,12 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
         std::string s, t;
         int frames;
         fin >> s >> frames;
-        
+
         std::vector<std::vector<Vector3f>> translations;
         std::vector<std::vector<Quaternion>> rotations;
         while (fin >> s >> t) {
             float w, x, y, z;
-            
+
             translations.push_back(std::vector<Vector3f>());
             for (int i = 0; i < frames; i++) {
                 fin >> x >> y >> z;
@@ -78,7 +78,10 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
         for (int i = 0; i < motions.size(); i++)
             motions[i] = new Motion(translations[i], rotations[i], transformation, fps);
     }
-    
+    transformations.resize(motions.size());
+    transformationsGpu.resize(motions.size());
+    updateTransformations();
+
     cloths.resize(json["cloths"].size());
     for (int i = 0; i < json["cloths"].size(); i++)
         cloths[i] = new Cloth(json["cloths"][i], pool);
@@ -86,15 +89,30 @@ Simulator::Simulator(SimulationMode mode, const std::string& path, const std::st
     if (json["obstacles"].isArray()) {
         obstacles.resize(json["obstacles"].size());
         for (int i = 0; i < json["obstacles"].size(); i++)
-            obstacles[i] = new Obstacle(json["obstacles"][i], motions, pool);
+            obstacles[i] = new Obstacle(json["obstacles"][i], transformations, pool);
     } else if (json["obstacles"].isString())
         for (int i = 0; ; i++) {
             std::string obstaclePath = stringFormat(parseString(json["obstacles"]), i);
             if (!std::filesystem::exists(obstaclePath))
                 break;
-            
-            obstacles.push_back(new Obstacle(obstaclePath, motions[i], pool));
+
+            obstacles.push_back(new Obstacle(obstaclePath, i, transformations, pool));
         }
+
+    for (const Json::Value& handleJson : json["handles"]) {
+        int clothIndex = parseInt(handleJson["cloth"]);
+        int motionIndex = parseInt(handleJson["motion"], -1);
+        std::vector<int> nodeIndices(handleJson["nodes"].size());
+        for (int i = 0; i < handleJson["nodes"].size(); i++)
+            nodeIndices[i] = parseInt(handleJson["nodes"][i]);
+        if (!gpu)
+            cloths[clothIndex]->addHandles(nodeIndices, motionIndex, transformations);
+        else
+            cloths[clothIndex]->addHandles(nodeIndices, motionIndex, transformationsGpu);
+    }
+
+    for (int i = 0; i < json["disable"].size(); i++)
+        disabled.insert(parseString(json["disable"][i]));
 }
 
 Simulator::~Simulator() {
@@ -152,7 +170,7 @@ void Simulator::traverse(const std::vector<BVH*>& clothBvhs, const std::vector<B
         clothBvhs[i]->traverse(thickness, callback);
         for (int j = 0; j < i; j++)
             clothBvhs[i]->traverse(clothBvhs[j], thickness, callback);
-        
+
         for (int j = 0; j < obstacleBvhs.size(); j++)
             clothBvhs[i]->traverse(obstacleBvhs[j], thickness, callback);
     }
@@ -184,7 +202,7 @@ void Simulator::checkVertexFaceProximity(const Vertex* vertex, const Face* face,
     Node* node2 = face->vertices[2]->node;
     if (node == node0 || node == node1 || node == node2)
         return;
-    
+
     Vector3f n;
     float w[4];
     float d = abs(signedVertexFaceDistance(node->x, node0->x, node1->x, node2->x, n, w));
@@ -219,14 +237,14 @@ void Simulator::checkEdgeEdgeProximity(const Edge* edge0, const Edge* edge1, std
     Node* node3 = edge1->nodes[1];
     if (node0 == node2 || node0 == node3 || node1 == node2 || node1 == node3)
         return;
-    
+
     Vector3f n;
     float w[4];
     float d = abs(signedEdgeEdgeDistance(node0->x, node1->x, node2->x, node3->x, n, w));
     bool inside = (min(w[0], w[1], -w[2], -w[3]) >= 1e-6f && inEdge(w[1], edge0, edge1) && inEdge(-w[3], edge1, edge0));
     if (!inside)
         return;
-    
+
     if (edge0->isFree()) {
         int side = n.dot(edge0->nodes[0]->n + edge0->nodes[1]->n) >= 0.0f ? 0 : 1;
         PairEi key(const_cast<Edge*>(edge0), side);
@@ -275,7 +293,7 @@ std::vector<Proximity> Simulator::findProximities(const std::vector<BVH*>& cloth
     for (const std::pair<PairFi, PairfN>& pair : faceProximities)
         if (pair.second.first < 2.0f * magic->repulsionThickness)
             ans.emplace_back(pair.second.second, pair.first.first, magic->collisionStiffness, clothFriction, obstacleFriction);
-    
+
     return ans;
 }
 
@@ -335,7 +353,7 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
         clothBvh->setAllActive(false);
     for (BVH* obstacleBvh : obstacleBvhs)
         obstacleBvh->setAllActive(false);
-    
+
     for (const Impact& impact : impacts)
         for (int i = 0; i < 4; i++) {
             Node* node = impact.nodes[i];
@@ -376,7 +394,7 @@ thrust::device_vector<Impact> Simulator::findImpacts(const std::vector<BVH*>& cl
 std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& impacts, int deform) const {
     std::vector<Impact> sorted = impacts;
     std::sort(sorted.begin(), sorted.end());
-    
+
     std::unordered_set<Node*> nodes;
     std::vector<Impact> ans;
     for (const Impact& impact : sorted) {
@@ -404,7 +422,7 @@ std::vector<Impact> Simulator::independentImpacts(const std::vector<Impact>& imp
 thrust::device_vector<Impact> Simulator::independentImpacts(const thrust::device_vector<Impact>& impacts, int deform) const {
     thrust::device_vector<Impact> sorted = impacts;
     thrust::sort(sorted.begin(), sorted.end());
-    
+
     int nImpacts = sorted.size();
     const Impact* sortedPointer = pointer(sorted);
     int nNodes = 4 * nImpacts;
@@ -447,7 +465,7 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
         clothBvh->setAllActive(false);
     for (BVH* obstacleBvh : obstacleBvhs)
         obstacleBvh->setAllActive(false);
-    
+
     for (const Intersection& intersection : intersections)
         for (int i = 0; i < 3; i++) {
             Node* node0 = intersection.face0->vertices[i]->node;
@@ -457,7 +475,7 @@ void Simulator::updateActive(const std::vector<BVH*>& clothBvhs, const std::vect
             for (BVH* obstacleBvh : obstacleBvhs)
                 if (obstacleBvh->contain(node0))
                     obstacleBvh->setActive(node0, true);
-            
+
             Node* node1 = intersection.face1->vertices[i]->node;
             for (BVH* clothBvh : clothBvhs)
                 if (clothBvh->contain(node1))
@@ -479,7 +497,7 @@ Vector3f Simulator::oldPosition(const Vector2f& u, const std::vector<BackupFace>
 Vector3f Simulator::oldPosition(const Face* face, const Vector3f& b, const std::vector<std::vector<BackupFace>>& faces) const {
     if (!face->isFree())
         return face->position(b);
-    
+
     Vector2f u = b(0) * face->vertices[0]->u + b(1) * face->vertices[1]->u + b(2) * face->vertices[2]->u;
     for (int i = 0; i < cloths.size(); i++)
         if (cloths[i]->getMesh()->contain(face))
@@ -544,9 +562,15 @@ thrust::device_vector<Intersection> Simulator::findIntersections(const std::vect
     return ans;
 }
 
+void Simulator::updateTransformations() {
+    float time = nSteps * dt;
+    for (int i = 0; i < motions.size(); i++)
+        transformations[i] = transformationsGpu[i] = motions[i]->computeTransformation(time);
+}
+
 void Simulator::physicsStep() {
     for (Obstacle* obstacle : obstacles)
-        obstacle->step(nSteps * dt, dt);
+        obstacle->step(dt, transformations);
 
     std::vector<BVH*> clothBvhs = std::move(buildClothBvhs(false));
     std::vector<BVH*> obstacleBvhs = std::move(buildObstacleBvhs(false));
@@ -554,11 +578,11 @@ void Simulator::physicsStep() {
     if (!gpu) {
         std::vector<Proximity> proximities = std::move(findProximities(clothBvhs, obstacleBvhs));
         for (Cloth* cloth : cloths)
-            cloth->physicsStep(dt, gravity, wind, magic->handleStiffness, proximities, magic->repulsionThickness);
+            cloth->physicsStep(dt, gravity, wind, transformations, magic->handleStiffness, proximities, magic->repulsionThickness);
     } else {
         thrust::device_vector<Proximity> proximities = std::move(findProximitiesGpu(clothBvhs, obstacleBvhs));
         for (Cloth* cloth : cloths)
-            cloth->physicsStep(dt, gravity, wind, magic->handleStiffness, proximities, magic->repulsionThickness);
+            cloth->physicsStep(dt, gravity, wind, transformationsGpu, magic->handleStiffness, proximities, magic->repulsionThickness);
     }
 
     destroyBvhs(clothBvhs);
@@ -568,7 +592,7 @@ void Simulator::physicsStep() {
         cloth->getMesh()->updatePositions(dt);
     for (Obstacle* obstacle : obstacles)
         obstacle->getMesh()->updatePositions(dt);
-    
+
     updateClothFaceGeometries();
     updateClothNodeGeometries();
     updateObstacleFaceGeometries();
@@ -589,7 +613,7 @@ void Simulator::collisionStep() {
             for (int i = 0; i < MAX_COLLISION_ITERATION; i++) {
                 if (!impacts.empty())
                     updateActive(clothBvhs, obstacleBvhs, impacts);
-                
+
                 std::vector<Impact> newImpacts;
                 traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
                     checkImpacts(face0, face1, thickness, newImpacts);
@@ -683,7 +707,7 @@ void Simulator::separationStep(const std::vector<std::vector<BackupFace>>& faces
         for (int i = 0; i < MAX_SEPARATION_ITERATION; i++) {
             if (!intersections.empty())
                 updateActive(clothBvhs, obstacleBvhs, intersections);
-            
+
             std::vector<Intersection> newIntersections;
             traverse(clothBvhs, obstacleBvhs, magic->collisionThickness, [&](const Face* face0, const Face* face1, float thickness) {
                 checkIntersection(face0, face1, newIntersections, faces);
@@ -816,6 +840,8 @@ void Simulator::simulateStep(bool offline) {
         nFrames++;
     std::cout << "Frame [" << nFrames << "], Step [" << nSteps << "]:" << std::endl;
 
+    updateTransformations();
+
     std::chrono::duration<float> d;
     auto t0 = std::chrono::high_resolution_clock::now();
 
@@ -830,41 +856,42 @@ void Simulator::simulateStep(bool offline) {
     auto t2 = std::chrono::high_resolution_clock::now();
     d = t2 - t1;
     std::cout << ", Collision Step: " << d.count() << "s";
-    
+
     if (nSteps % frameSteps == 0) {
-        if (!gpu) {
-            std::vector<std::vector<BackupFace>> faces(cloths.size());
-            for (int i = 0; i < cloths.size(); i++)
-                faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
+        if (disabled.find("remeshing") == disabled.end())
+            if (!gpu) {
+                std::vector<std::vector<BackupFace>> faces(cloths.size());
+                for (int i = 0; i < cloths.size(); i++)
+                    faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
 
-            remeshingStep();
-            cudaDeviceSynchronize();
-            auto t3 = std::chrono::high_resolution_clock::now();
-            d = t3 - t2;
-            std::cout << ", Remeshing Step: " << d.count() << "s";
+                remeshingStep();
+                cudaDeviceSynchronize();
+                auto t3 = std::chrono::high_resolution_clock::now();
+                d = t3 - t2;
+                std::cout << ", Remeshing Step: " << d.count() << "s";
 
-            separationStep(faces);
-            cudaDeviceSynchronize();
-            auto t4 = std::chrono::high_resolution_clock::now();
-            d = t4 - t3;
-            std::cout << ", Separation Step: " << d.count() << "s";
-        } else {
-            std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
-            for (int i = 0; i < cloths.size(); i++)
-                faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
+                separationStep(faces);
+                cudaDeviceSynchronize();
+                auto t4 = std::chrono::high_resolution_clock::now();
+                d = t4 - t3;
+                std::cout << ", Separation Step: " << d.count() << "s";
+            } else {
+                std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
+                for (int i = 0; i < cloths.size(); i++)
+                    faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
 
-            remeshingStep();
-            cudaDeviceSynchronize();
-            auto t3 = std::chrono::high_resolution_clock::now();
-            d = t3 - t2;
-            std::cout << ", Remeshing Step: " << d.count() << "s";
+                remeshingStep();
+                cudaDeviceSynchronize();
+                auto t3 = std::chrono::high_resolution_clock::now();
+                d = t3 - t2;
+                std::cout << ", Remeshing Step: " << d.count() << "s";
 
-            separationStep(faces);
-            cudaDeviceSynchronize();
-            auto t4 = std::chrono::high_resolution_clock::now();
-            d = t4 - t3;
-            std::cout << ", Separation Step: " << d.count() << "s";
-        }
+                separationStep(faces);
+                cudaDeviceSynchronize();
+                auto t4 = std::chrono::high_resolution_clock::now();
+                d = t4 - t3;
+                std::cout << ", Separation Step: " << d.count() << "s";
+            }
 
         if (!offline)
             updateRenderingData(true);
@@ -885,8 +912,9 @@ void Simulator::replayStep() {
     std::cout << "Frame [" << nFrames << "]" << std::endl;
 
     if (load()) {
+        updateTransformations();
         for (Obstacle* obstacle : obstacles)
-            obstacle->transform(nSteps * dt);
+            obstacle->transform(transformations);
         updateRenderingData(true);
     }
 }
@@ -907,7 +935,7 @@ void Simulator::render() const {
 
     for (const Cloth* cloth : cloths)
         cloth->render(model, view, projection, cameraPosition, lightDirection);
-    
+
     for (const Obstacle* obstacle : obstacles)
         obstacle->render(model, view, projection, cameraPosition, lightDirection);
 }
@@ -956,21 +984,22 @@ bool Simulator::finished() const {
 }
 
 void Simulator::simulate() {
-    if (!gpu) {
-        std::vector<std::vector<BackupFace>> faces(cloths.size());
-        for (int i = 0; i < cloths.size(); i++)
-            faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
+    if (disabled.find("remeshing") == disabled.end())
+        if (!gpu) {
+            std::vector<std::vector<BackupFace>> faces(cloths.size());
+            for (int i = 0; i < cloths.size(); i++)
+                faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
 
-        remeshingStep();
-        separationStep(faces);
-    } else {
-        std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
-        for (int i = 0; i < cloths.size(); i++)
-            faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
+            remeshingStep();
+            separationStep(faces);
+        } else {
+            std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
+            for (int i = 0; i < cloths.size(); i++)
+                faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
 
-        remeshingStep();
-        separationStep(faces);
-    }
+            remeshingStep();
+            separationStep(faces);
+        }
     bind();
 
     while (!glfwWindowShouldClose(renderer->getWindow()) && !finished()) {
@@ -979,7 +1008,7 @@ void Simulator::simulate() {
 
         render();
         if (!renderer->getPause())
-            simulateStep(false);                
+            simulateStep(false);
 
         glfwSwapBuffers(renderer->getWindow());
         glfwPollEvents();
@@ -990,21 +1019,22 @@ void Simulator::simulateOffline() {
     if (!std::filesystem::is_directory(directory))
         std::filesystem::create_directories(directory);
 
-    if (!gpu) {
-        std::vector<std::vector<BackupFace>> faces(cloths.size());
-        for (int i = 0; i < cloths.size(); i++)
-            faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
+    if (disabled.find("remeshing") == disabled.end())
+        if (!gpu) {
+            std::vector<std::vector<BackupFace>> faces(cloths.size());
+            for (int i = 0; i < cloths.size(); i++)
+                faces[i] = std::move(cloths[i]->getMesh()->backupFaces());
 
-        remeshingStep();
-        separationStep(faces);
-    } else {
-        std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
-        for (int i = 0; i < cloths.size(); i++)
-            faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
+            remeshingStep();
+            separationStep(faces);
+        } else {
+            std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
+            for (int i = 0; i < cloths.size(); i++)
+                faces[i] = std::move(cloths[i]->getMesh()->backupFacesGpu());
 
-        remeshingStep();
-        separationStep(faces);
-    }
+            remeshingStep();
+            separationStep(faces);
+        }
     save();
 
     while (!finished())
@@ -1014,10 +1044,11 @@ void Simulator::simulateOffline() {
 void Simulator::resume() {
     nFrames = lastFrame();
     nSteps = nFrames * frameSteps;
+    updateTransformations();
     for (Obstacle* obstacle : obstacles)
-        obstacle->transform(nSteps * dt);
+        obstacle->transform(transformations);
     bind();
-    
+
     while (!glfwWindowShouldClose(renderer->getWindow()) && !finished()) {
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1034,8 +1065,9 @@ void Simulator::resume() {
 void Simulator::resumeOffline() {
     nFrames = lastFrame();
     nSteps = nFrames * frameSteps;
+    updateTransformations();
     for (Obstacle* obstacle : obstacles)
-        obstacle->transform(nSteps * dt);
+        obstacle->transform(transformations);
 
     while (!finished())
         simulateStep(true);
@@ -1048,7 +1080,7 @@ void Simulator::replay() {
 
     while (!glfwWindowShouldClose(renderer->getWindow())) {
         auto t0 = std::chrono::high_resolution_clock::now();
-       
+
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

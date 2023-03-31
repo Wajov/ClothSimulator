@@ -11,5 +11,5 @@ Disk::Disk(const Vector2f& o, float r) :
 Disk::~Disk() {}
 
 bool Disk::enclose(const Disk& d) const {
-    return r >= d.r && sqr(r - d.r) >= (o - d.o).norm2();    
+    return r >= d.r && sqr(r - d.r) >= (o - d.o).norm2();
 }

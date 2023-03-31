@@ -12,25 +12,24 @@
 #include "Matrix.cuh"
 #include "Transformation.cuh"
 #include "Mesh.cuh"
-#include "Motion.cuh"
 #include "Shader.cuh"
 
 class Obstacle {
 private:
+    int motionIndex;
     Mesh* mesh;
-    Motion* motion;
     Shader* shader;
     std::vector<Vector3f> base;
     thrust::device_vector<Vector3f> baseGpu;
     void initialize();
 
 public:
-    Obstacle(const Json::Value& json, const std::vector<Motion*>& motions, MemoryPool* pool);
-    Obstacle(const std::string& path, const Motion* motion, MemoryPool* pool);
+    Obstacle(const Json::Value& json, const std::vector<Transformation>& transformations, MemoryPool* pool);
+    Obstacle(const std::string& path, int motionIndex, const std::vector<Transformation>& transformations, MemoryPool* pool);
     ~Obstacle();
     Mesh* getMesh() const;
-    void transform(float time);
-    void step(float time, float dt);
+    void transform(const std::vector<Transformation>& transformations);
+    void step(float dt, const std::vector<Transformation>& transformations);
     void bind();
     void render(const Matrix4x4f& model, const Matrix4x4f& view, const Matrix4x4f& projection, const Vector3f& cameraPosition, const Vector3f& lightDirection) const;
 };

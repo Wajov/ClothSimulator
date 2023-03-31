@@ -18,7 +18,7 @@ void BVHNode::setActiveUp(bool active) {
 
 void BVHNode::setActiveDown(bool active) {
     this->active = active;
-    if (!isLeaf()) { 
+    if (!isLeaf()) {
         left->setActiveDown(active);
         right->setActiveDown(active);
     }

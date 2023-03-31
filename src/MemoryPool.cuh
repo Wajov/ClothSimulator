@@ -12,10 +12,10 @@
 #include "Edge.cuh"
 #include "Face.cuh"
 
-const int NODE_POOL_SIZE = 1000000;
-const int VERTEX_POOL_SIZE = 1000000;
-const int EDGE_POOL_SIZE = 1000000;
-const int FACE_POOL_SIZE = 1000000;
+const int NODE_POOL_SIZE = 10000000;
+const int VERTEX_POOL_SIZE = 10000000;
+const int EDGE_POOL_SIZE = 10000000;
+const int FACE_POOL_SIZE = 10000000;
 
 extern bool gpu;
 

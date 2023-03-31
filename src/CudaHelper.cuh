@@ -4,8 +4,8 @@
 #include <iostream>
 
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <cusparse.h>
-#include <cusolverSp.h>
 #include <thrust/device_vector.h>
 
 #include "Pair.cuh"
@@ -15,14 +15,14 @@
 
 #define CUDA_CHECK(val) cudaCheck((val), #val, __FILE__, __LINE__)
 #define CUDA_CHECK_LAST() cudaCheckLast(__FILE__, __LINE__)
+#define CUBLAS_CHECK(val) cublasCheck((val), #val, __FILE__, __LINE__)
 #define CUSPARSE_CHECK(val) cusparseCheck((val), #val, __FILE__, __LINE__)
-#define CUSOLVER_CHECK(val) cusolverCheck((val), #val, __FILE__, __LINE__)
 
 struct IsNull {
     template<typename T> __device__ bool operator()(const T* p) const {
         return p == nullptr;
     };
-    
+
     __device__ bool operator()(int index) const {
         return index < 0;
     };
@@ -38,7 +38,7 @@ struct IsNull {
     __device__ bool operator()(const PairFi& p) const {
         return p.first == nullptr;
     };
-    
+
     __device__ bool operator()(const Impact& impact) const {
         return impact.t < 0.0f;
     };
@@ -57,8 +57,8 @@ const int BLOCK_SIZE = 256;
 
 void cudaCheck(cudaError_t err, const char* func, const char* file, int line);
 void cudaCheckLast(const char* file, int line);
+void cublasCheck(cublasStatus_t err, const char* func, const char* file, int line);
 void cusparseCheck(cusparseStatus_t err, const char* func, const char* file, int line);
-void cusolverCheck(cusolverStatus_t err, const char* func, const char* file, int line);
 
 template<typename T> static T* pointer(thrust::device_vector<T>& v, int offset = 0) {
     return thrust::raw_pointer_cast(v.data() + offset);

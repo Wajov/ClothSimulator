@@ -163,14 +163,14 @@ __global__ void countPairsSelf(int nLeaves, const BVHNode* leaves, const BVHNode
         do {
             const BVHNode* left = node->left;
             const BVHNode* right = node->right;
-            
+
             bool overlapLeft = i < left->maxIndex && bounds.overlap(left->bounds, thickness);
             bool overlapRight = i < right->maxIndex && bounds.overlap(right->bounds, thickness);
             if (overlapLeft && left->isLeaf())
                 n++;
             if (overlapRight && right->isLeaf())
                 n++;
-            
+
             bool traverseLeft = (overlapLeft && !left->isLeaf());
             bool traverseRight = (overlapRight && !right->isLeaf());
             if (!traverseLeft && !traverseRight)
@@ -200,7 +200,7 @@ __global__ void findPairsSelf(int nLeaves, const BVHNode* leaves, const BVHNode*
         do {
             const BVHNode* left = node->left;
             const BVHNode* right = node->right;
-            
+
             bool overlapLeft = i < left->maxIndex && bounds.overlap(left->bounds, thickness);
             bool overlapRight = i < right->maxIndex && bounds.overlap(right->bounds, thickness);
             if (overlapLeft && left->isLeaf()) {
@@ -213,7 +213,7 @@ __global__ void findPairsSelf(int nLeaves, const BVHNode* leaves, const BVHNode*
                 pair.first = face;
                 pair.second = right->face;
             }
-            
+
             bool traverseLeft = (overlapLeft && !left->isLeaf());
             bool traverseRight = (overlapRight && !right->isLeaf());
             if (!traverseLeft && !traverseRight)
@@ -242,14 +242,14 @@ __global__ void countPairs(int nLeaves, const BVHNode* leaves, const BVHNode* ro
         do {
             const BVHNode* left = node->left;
             const BVHNode* right = node->right;
-            
+
             bool overlapLeft = bounds.overlap(left->bounds, thickness);
             bool overlapRight = bounds.overlap(right->bounds, thickness);
             if (overlapLeft && left->isLeaf())
                 n++;
             if (overlapRight && right->isLeaf())
                 n++;
-            
+
             bool traverseLeft = (overlapLeft && !left->isLeaf());
             bool traverseRight = (overlapRight && !right->isLeaf());
             if (!traverseLeft && !traverseRight)
@@ -292,7 +292,7 @@ __global__ void findPairs(int nLeaves, const BVHNode* leaves, const BVHNode* roo
                 pair.first = face;
                 pair.second = right->face;
             }
-            
+
             bool traverseLeft = (overlapLeft && !left->isLeaf());
             bool traverseRight = (overlapRight && !right->isLeaf());
             if (!traverseLeft && !traverseRight)
@@ -320,14 +320,14 @@ __global__ void findNearestPointGpu(int nNodes, const Vector3f* x, const BVHNode
         do {
             const BVHNode* left = node->left;
             const BVHNode* right = node->right;
-            
+
             bool overlapLeft = left->bounds.distance(xt) < point.d;
             bool overlapRight = right->bounds.distance(xt) < point.d;
             if (overlapLeft && left->isLeaf())
                 checkNearestPoint(xt, left->face, point);
             if (overlapRight && right->isLeaf())
                 checkNearestPoint(xt, right->face, point);
-            
+
             bool traverseLeft = (overlapLeft && !left->isLeaf());
             bool traverseRight = (overlapRight && !right->isLeaf());
             if (!traverseLeft && !traverseRight)

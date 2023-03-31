@@ -72,7 +72,7 @@ void Optimization::valueAndGradient(const thrust::device_vector<Vector3f>& x, fl
     CUDA_CHECK_LAST();
 
     constraintGradient(x, c, mu, gradient);
-    
+
     computeSquare<<<GRID_SIZE, BLOCK_SIZE>>>(nConstraints, pointer(c));
     CUDA_CHECK_LAST();
 
@@ -122,13 +122,18 @@ void Optimization::solve() {
                 if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
                     break;
 
-                if (iter == 10)
-                    omega = 2.0f / (2.0f - RHO2);
-                else if (iter > 10)
-                    omega = 4.0f / (4.0f - RHO2 * omega);
-                float coeffient = (1 + omega) * s;
                 for (int i = 0; i < nNodes; i++)
-                    x[i] -= coeffient * gradient[i];
+                    x[i] = xt[i];
+
+                // if (iter == 10)
+                //     omega = 2.0f / (2.0f - RHO2);
+                // else if (iter > 10)
+                //     omega = 4.0f / (4.0f - RHO2 * omega);
+                // std::cout << omega << std::endl;
+                // for (int i = 0; i < nNodes; i++) {
+                //     Vector3f x0 = nodes[i]->x0;
+                //     x[i] = omega * (x[i] - x0) + x0;
+                // }
             }
             if (subIter == 0)
                 break;
@@ -153,22 +158,30 @@ void Optimization::solve() {
                 valueAndGradient(x, f, gradient);
 
                 computeNorm2<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, gradient2Pointer);
+                CUDA_CHECK_LAST();
+
                 float norm2 = thrust::reduce(gradient2.begin(), gradient2.end());
 
                 do {
                     s *= 0.7f;
                     computeXt<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xPointer, gradientPointer, s, xtPointer);
+                    CUDA_CHECK_LAST();
+
                     ft = value(xt);
                 } while (ft >= f - 0.5f * s * norm2 && s >= EPSILON_S && abs(f - ft) >= EPSILON_F);
                 if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
                     break;
-                
-                if (iter == 10)
-                    omega = 2.0f / (2.0f - RHO2);
-                else if (iter > 10)
-                    omega = 4.0f / (4.0f - RHO2 * omega);
-                float coeffient = (1 + omega) * s;
-                updateX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, coeffient, xPointer);
+
+                updateX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xtPointer, xPointer);
+                CUDA_CHECK_LAST();
+
+                // if (iter == 10)
+                //     omega = 2.0f / (2.0f - RHO2);
+                // else if (iter > 10)
+                //     omega = 4.0f / (4.0f - RHO2 * omega);
+                // std::cout << omega << std::endl;
+                // chebyshevAccelerate<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, omega, pointer(nodesGpu), xPointer);
+                // CUDA_CHECK_LAST();
             }
             if (subIter == 0)
                 break;

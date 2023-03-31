@@ -59,7 +59,7 @@ void Operator::split(const Edge* edge, const Material* material, MemoryPool* poo
     Edge* newEdges[2];
     newEdges[0] = pool->createEdge(newNode, node0);
     newEdges[1] = pool->createEdge(newNode, node1);
-    
+
     addedNodes.push_back(newNode);
     addedEdges.push_back(newEdges[0]);
     addedEdges.push_back(newEdges[1]);
@@ -91,14 +91,14 @@ void Operator::split(const Edge* edge, const Material* material, MemoryPool* poo
             Face* face = edge->adjacents[i];
             Edge* edge0 = face->findEdge(vertex1, vertex2);
             Edge* edge1 = face->findEdge(vertex2, vertex0);
-            
+
             Vertex* newVertex = newVertices[i];
             Edge* newEdge0 = newEdges[i];
             Edge* newEdge1 = newEdges[1 - i];
             Edge* newEdge2 = pool->createEdge(newNode, vertex2->node);
             Face* newFace0 = pool->createFace(vertex0, newVertex, vertex2, material);
             Face* newFace1 = pool->createFace(vertex2, newVertex, vertex1, material);
-            
+
             newEdge0->initialize(vertex2, newFace0);
             newEdge1->initialize(vertex2, newFace1);
             newEdge2->initialize(vertex0, newFace0);
@@ -107,7 +107,7 @@ void Operator::split(const Edge* edge, const Material* material, MemoryPool* poo
             newFace1->setEdges(newEdge2, newEdge1, edge0);
             edge0->initialize(newVertex, newFace1);
             edge1->initialize(newVertex, newFace0);
-            
+
             addedEdges.push_back(newEdge2);
             addedFaces.push_back(newFace0);
             addedFaces.push_back(newFace1);

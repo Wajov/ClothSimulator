@@ -49,8 +49,8 @@ if (WIN32)
                 glad
                 glfw
                 JsonCpp::JsonCpp
+                ${CUDA_cublas_LIBRARY}
                 ${CUDA_cusparse_LIBRARY}
-                ${CUDA_cusolver_LIBRARY}
         )
 else()
         target_link_libraries(
@@ -58,7 +58,7 @@ else()
                 glad
                 glfw
                 jsoncpp
+                ${CUDA_cublas_LIBRARY}
                 ${CUDA_cusparse_LIBRARY}
-                ${CUDA_cusolver_LIBRARY}
         )
 endif()

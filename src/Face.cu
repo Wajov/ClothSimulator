@@ -9,7 +9,7 @@ Face::Face(const Vertex* vertex0, const Vertex* vertex1, const Vertex* vertex2, 
 
 Face::~Face() {}
 
-void Face::initialize(const Material* material) {   
+void Face::initialize(const Material* material) {
     if (material != nullptr) {
         Vector2f d1 = vertices[1]->u - vertices[0]->u;
         Vector2f d2 = vertices[2]->u - vertices[0]->u;
