@@ -26,7 +26,7 @@ float Mesh::angle(const Vector3f& x0, const Vector3f& x1, const Vector3f& x2) co
 
 void Mesh::triangulate(const std::vector<Vector3f>& x, const std::vector<int>& xPolygon, const std::vector<int>& uPolygon, std::vector<int>& xTriangles, std::vector<int>& uTriangles) const {
     int n = xPolygon.size();
-    float bestMinAngle = 0.0f;
+    float bestMinAngle = -INFINITY;
     int index;
     for (int i = 0; i < n; i++) {
         float minAngle = INFINITY;

@@ -3,13 +3,13 @@
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}",
         "args": [
-            // "replay",
+            "replay",
             // "simulate",
-            "simulate_offline",
+            // "simulate_offline",
             // "resume",
             // "resume_offline",
-            "conf/flag.json",
-            "output/flag",
+            // "conf/five-sphere.json",
+            "output/sphere_fixed_mesh",
             "--gpu"
         ]
     },
