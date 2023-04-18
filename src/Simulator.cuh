@@ -8,7 +8,6 @@
 #include <fstream>
 #include <iostream>
 #include <unordered_set>
-#include <chrono>
 #include <filesystem>
 
 #include <glad/glad.h>
@@ -38,6 +37,7 @@
 #include "Impact.cuh"
 #include "BackupFace.cuh"
 #include "Intersection.cuh"
+#include "Timer.cuh"
 #include "MemoryPool.cuh"
 #include "optimization/CollisionOptimization.cuh"
 #include "optimization/SeparationOptimization.cuh"

@@ -317,11 +317,11 @@ void Mesh::load(const std::string& path, const Transformation& transformation, c
     while (getline(fin, line)) {
         std::vector<std::string> s = std::move(split(line, ' '));
         if (s[0] == "v") {
-            Vector3f position(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]));
+            Vector3f position(std::stof(s[1]), std::stof(s[2]), std::stof(s[3]));
             raw.push_back(position);
             x.push_back(transformation.applyToPoint(position));
         } else if (s[0] == "nv")
-            v.push_back(transformation.applyToVector(Vector3f(std::stod(s[1]), std::stod(s[2]), std::stod(s[3]))));
+            v.push_back(transformation.applyToVector(Vector3f(std::stof(s[1]), std::stof(s[2]), std::stof(s[3]))));
         else if (s[0] == "vt")
             u.push_back(transformation.applyToUV(Vector2f(std::stof(s[1]), std::stof(s[2]))));
         else if (s[0] == "f") {

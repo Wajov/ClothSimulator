@@ -842,20 +842,17 @@ void Simulator::simulateStep(bool offline) {
 
     updateTransformations();
 
-    std::chrono::duration<float> d;
-    auto t0 = std::chrono::high_resolution_clock::now();
+    Timer timer;
 
     physicsStep();
     cudaDeviceSynchronize();
-    auto t1 = std::chrono::high_resolution_clock::now();
-    d = t1 - t0;
-    std::cout << "Physics Step: " << d.count() << "s";
+    std::cout << "Physics Step: " << timer.duration() << "s";
+    timer.update();
 
     collisionStep();
     cudaDeviceSynchronize();
-    auto t2 = std::chrono::high_resolution_clock::now();
-    d = t2 - t1;
-    std::cout << ", Collision Step: " << d.count() << "s";
+    std::cout << ", Collision Step: " << timer.duration() << "s";
+    timer.update();
 
     if (nSteps % frameSteps == 0) {
         if (disabled.find("remeshing") == disabled.end())
@@ -866,15 +863,13 @@ void Simulator::simulateStep(bool offline) {
 
                 remeshingStep();
                 cudaDeviceSynchronize();
-                auto t3 = std::chrono::high_resolution_clock::now();
-                d = t3 - t2;
-                std::cout << ", Remeshing Step: " << d.count() << "s";
+                std::cout << ", Remeshing Step: " << timer.duration() << "s";
+                timer.update();
 
                 separationStep(faces);
                 cudaDeviceSynchronize();
-                auto t4 = std::chrono::high_resolution_clock::now();
-                d = t4 - t3;
-                std::cout << ", Separation Step: " << d.count() << "s";
+                std::cout << ", Separation Step: " << timer.duration() << "s";
+                timer.update();
             } else {
                 std::vector<thrust::device_vector<BackupFace>> faces(cloths.size());
                 for (int i = 0; i < cloths.size(); i++)
@@ -882,15 +877,13 @@ void Simulator::simulateStep(bool offline) {
 
                 remeshingStep();
                 cudaDeviceSynchronize();
-                auto t3 = std::chrono::high_resolution_clock::now();
-                d = t3 - t2;
-                std::cout << ", Remeshing Step: " << d.count() << "s";
+                std::cout << ", Remeshing Step: " << timer.duration() << "s";
+                timer.update();
 
                 separationStep(faces);
                 cudaDeviceSynchronize();
-                auto t4 = std::chrono::high_resolution_clock::now();
-                d = t4 - t3;
-                std::cout << ", Separation Step: " << d.count() << "s";
+                std::cout << ", Separation Step: " << timer.duration() << "s";
+                timer.update();
             }
 
         if (!offline)
@@ -1091,11 +1084,7 @@ void Simulator::replay() {
         glfwSwapBuffers(renderer->getWindow());
         glfwPollEvents();
 
-        std::chrono::duration<float> d;
-        do {
-            auto t1 = std::chrono::high_resolution_clock::now();
-            d = t1 - t0;
-        } while (d.count() < frameTime);
+        for (Timer timer; timer.duration() < frameTime; );
     }
 }
 
