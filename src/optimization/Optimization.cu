@@ -104,13 +104,14 @@ void Optimization::solve() {
         initialize(currentX);
         previousX = currentX;
 
-        for (int iter = 0; iter < MAX_ITERATIONS; ) {
+        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
             valueAndGradient(currentX, f, gradient);
 
             float norm2 = 0.0f;
             for (int i = 0; i < nNodes; i++)
                 norm2 += gradient[i].norm2();
 
+            s /= 0.7f;
             do {
                 s *= 0.7f;
                 for (int i = 0; i < nNodes; i++)
@@ -124,8 +125,8 @@ void Optimization::solve() {
                 omega = 2.0f / (2.0f - RHO2);
             else if (iter > 10)
                 omega = 4.0f / (4.0f - RHO2 * omega);
-            for (int i = 0; i < nNodes; i++)
-                nextX[i] = omega * (nextX[i] - previousX[i]) + previousX[i];
+            // for (int i = 0; i < nNodes; i++)
+            //     nextX[i] = omega * (nextX[i] - previousX[i]) + previousX[i];
 
             previousX = currentX;
             currentX = nextX;
@@ -145,7 +146,7 @@ void Optimization::solve() {
         initialize(currentX);
         previousX = currentX;
 
-        for (int iter = 0; iter < MAX_ITERATIONS; ) {
+        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
             valueAndGradient(currentX, f, gradient);
 
             computeNorm2<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, gradient2Pointer);
@@ -153,6 +154,7 @@ void Optimization::solve() {
 
             float norm2 = thrust::reduce(gradient2.begin(), gradient2.end());
 
+            s /= 0.7f;
             do {
                 s *= 0.7f;
                 computeNextX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, currentXPointer, gradientPointer, s, nextXPointer);
@@ -167,7 +169,7 @@ void Optimization::solve() {
                 omega = 2.0f / (2.0f - RHO2);
             else if (iter > 10)
                 omega = 4.0f / (4.0f - RHO2 * omega);
-            chebyshevAccelerate<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, omega, nextXPointer, previousXPointer);
+            // chebyshevAccelerate<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, omega, nextXPointer, previousXPointer);
             CUDA_CHECK_LAST();
 
             previousX = currentX;
