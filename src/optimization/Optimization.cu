@@ -96,98 +96,87 @@ void Optimization::updateMultiplier(const thrust::device_vector<Vector3f>& x) {
 }
 
 void Optimization::solve() {
-    float f, ft, s, omega = 1.0f;
+    float f, ft, s = 1e-3f * nNodes, omega = 1.0f;
     mu = 1e3f;
     if (!gpu) {
-        std::vector<Vector3f> x(nNodes), gradient(nNodes), xt(nNodes);
+        std::vector<Vector3f> nextX(nNodes), currentX(nNodes), previousX(nNodes), gradient(nNodes);
         lambda.assign(nConstraints, 0.0f);
-        initialize(x);
+        initialize(currentX);
+        previousX = currentX;
 
-        for (int iter = 0; iter < MAX_ITERATIONS; ) {
-            s = 1e-3 * nNodes;
-            int subIter;
-            for (subIter = 0; subIter < MAX_SUB_ITERATIONS && iter < MAX_ITERATIONS; subIter++, iter++) {
-                valueAndGradient(x, f, gradient);
+        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+            valueAndGradient(currentX, f, gradient);
 
-                float norm2 = 0.0f;
+            float norm2 = 0.0f;
+            for (int i = 0; i < nNodes; i++)
+                norm2 += gradient[i].norm2();
+
+            s /= 0.7f;
+            do {
+                s *= 0.7f;
                 for (int i = 0; i < nNodes; i++)
-                    norm2 += gradient[i].norm2();
-
-                do {
-                    s *= 0.7f;
-                    for (int i = 0; i < nNodes; i++)
-                        xt[i] = x[i] - s * gradient[i];
-                    ft = value(xt);
-                } while (ft >= f - 0.5f * s * norm2 && s >= EPSILON_S && abs(f - ft) >= EPSILON_F);
-                if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
-                    break;
-
-                for (int i = 0; i < nNodes; i++)
-                    x[i] = xt[i];
-
-                // if (iter == 10)
-                //     omega = 2.0f / (2.0f - RHO2);
-                // else if (iter > 10)
-                //     omega = 4.0f / (4.0f - RHO2 * omega);
-                // std::cout << omega << std::endl;
-                // for (int i = 0; i < nNodes; i++) {
-                //     Vector3f x0 = nodes[i]->x0;
-                //     x[i] = omega * (x[i] - x0) + x0;
-                // }
-            }
-            if (subIter == 0)
+                    nextX[i] = currentX[i] - s * gradient[i];
+                ft = value(nextX);
+            } while (ft >= f - 0.5f * s * norm2 && s >= EPSILON_S && abs(f - ft) >= EPSILON_F);
+            if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
                 break;
 
-            updateMultiplier(x);
+            if (iter == 10)
+                omega = 2.0f / (2.0f - RHO2);
+            else if (iter > 10)
+                omega = 4.0f / (4.0f - RHO2 * omega);
+            // for (int i = 0; i < nNodes; i++)
+            //     nextX[i] = omega * (nextX[i] - previousX[i]) + previousX[i];
+
+            previousX = currentX;
+            currentX = nextX;
+
+            updateMultiplier(currentX);
         }
-        finalize(x);
+        finalize(currentX);
     } else {
-        thrust::device_vector<Vector3f> x(nNodes), gradient(nNodes), xt(nNodes);
+        thrust::device_vector<Vector3f> nextX(nNodes), currentX(nNodes), previousX(nNodes), gradient(nNodes);
         thrust::device_vector<float> gradient2(nNodes);
-        Vector3f* xPointer = pointer(x);
+        Vector3f* nextXPointer = pointer(nextX);
+        Vector3f* currentXPointer = pointer(currentX);
+        Vector3f* previousXPointer = pointer(previousX);
         Vector3f* gradientPointer = pointer(gradient);
-        Vector3f* xtPointer = pointer(xt);
         float* gradient2Pointer = pointer(gradient2);
         lambdaGpu.assign(nConstraints, 0.0f);
-        initialize(x);
+        initialize(currentX);
+        previousX = currentX;
 
-        for (int iter = 0; iter < MAX_ITERATIONS; ) {
-            s = 1e-3 * nNodes;
-            int subIter;
-            for (subIter = 0; subIter < MAX_SUB_ITERATIONS && iter < MAX_ITERATIONS; subIter++, iter++) {
-                valueAndGradient(x, f, gradient);
+        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+            valueAndGradient(currentX, f, gradient);
 
-                computeNorm2<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, gradient2Pointer);
+            computeNorm2<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, gradientPointer, gradient2Pointer);
+            CUDA_CHECK_LAST();
+
+            float norm2 = thrust::reduce(gradient2.begin(), gradient2.end());
+
+            s /= 0.7f;
+            do {
+                s *= 0.7f;
+                computeNextX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, currentXPointer, gradientPointer, s, nextXPointer);
                 CUDA_CHECK_LAST();
 
-                float norm2 = thrust::reduce(gradient2.begin(), gradient2.end());
-
-                do {
-                    s *= 0.7f;
-                    computeXt<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xPointer, gradientPointer, s, xtPointer);
-                    CUDA_CHECK_LAST();
-
-                    ft = value(xt);
-                } while (ft >= f - 0.5f * s * norm2 && s >= EPSILON_S && abs(f - ft) >= EPSILON_F);
-                if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
-                    break;
-
-                updateX<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, xtPointer, xPointer);
-                CUDA_CHECK_LAST();
-
-                // if (iter == 10)
-                //     omega = 2.0f / (2.0f - RHO2);
-                // else if (iter > 10)
-                //     omega = 4.0f / (4.0f - RHO2 * omega);
-                // std::cout << omega << std::endl;
-                // chebyshevAccelerate<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, omega, pointer(nodesGpu), xPointer);
-                // CUDA_CHECK_LAST();
-            }
-            if (subIter == 0)
+                ft = value(nextX);
+            } while (ft >= f - 0.5f * s * norm2 && s >= EPSILON_S && abs(f - ft) >= EPSILON_F);
+            if (s < EPSILON_S || abs(f - ft) < EPSILON_F)
                 break;
 
-            updateMultiplier(x);
+            if (iter == 10)
+                omega = 2.0f / (2.0f - RHO2);
+            else if (iter > 10)
+                omega = 4.0f / (4.0f - RHO2 * omega);
+            // chebyshevAccelerate<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, omega, nextXPointer, previousXPointer);
+            // CUDA_CHECK_LAST();
+
+            previousX = currentX;
+            currentX = nextX;
+
+            updateMultiplier(currentX);
         }
-        finalize(x);
+        finalize(currentX);
     }
 }
