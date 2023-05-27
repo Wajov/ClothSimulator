@@ -170,7 +170,7 @@ void Optimization::solve() {
             else if (iter > 10)
                 omega = 4.0f / (4.0f - RHO2 * omega);
             // chebyshevAccelerate<<<GRID_SIZE, BLOCK_SIZE>>>(nNodes, omega, nextXPointer, previousXPointer);
-            CUDA_CHECK_LAST();
+            // CUDA_CHECK_LAST();
 
             previousX = currentX;
             currentX = nextX;
