@@ -43,7 +43,7 @@ For example:
 Similar to simulate mode, but will save cloth mesh for every frame to output directory.
 
 ```key
-./build/ClothSimulator simulate_offline [config__ile] [output_dir] --gpu
+./build/ClothSimulator simulate_offline [config_file] [output_dir] --gpu
 ```
 
 For example:
