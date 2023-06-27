@@ -1,7 +1,7 @@
 # Dependencies
 
 - OpenGL
-- GLAD
+- GLAD (already in lib directory)
 - GLFW
 - jsoncpp
 - Eigen
