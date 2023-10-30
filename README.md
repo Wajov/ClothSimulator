@@ -1,3 +1,7 @@
+# Introduction
+
+This is a GPU-based cloth simulator implemented by CUDA. The algorithm is based on [ARCSim](http://graphics.berkeley.edu/resources/ARCSim/).
+
 # Dependencies
 
 - OpenGL
@@ -75,3 +79,15 @@ Replay simulation result according to a output directiry. This mode has no GPU m
 ```key
 ./build/ClothSimulator replay [output_dir]
 ```
+
+# Samples
+
+Here are some offline results:
+
+![](samples/sphere.gif)
+
+![](samples/sleeve.gif)
+
+![](samples/dress-blue.gif)
+
+![](samples/dress-yellow.gif)
