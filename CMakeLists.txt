@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
 if (WIN32)
-        set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
-        add_compile_definitions(_USE_MATH_DEFINES)
+    set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+    add_compile_definitions(_USE_MATH_DEFINES)
 endif()
 
 project(ClothSimulator LANGUAGES CXX CUDA)
@@ -25,10 +25,10 @@ find_package(glfw3 REQUIRED)
 
 # jsoncpp
 if (WIN32)
-        find_package(jsoncpp CONFIG REQUIRED)
+    find_package(jsoncpp CONFIG REQUIRED)
 elseif()
-        find_package(PkgConfig REQUIRED)
-        pkg_check_modules(JSONCPP jsoncpp)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(JSONCPP jsoncpp)
 endif()
 
 # Eigen
@@ -39,26 +39,26 @@ find_package(CUDA REQUIRED)
 
 set_target_properties(ClothSimulator PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 include_directories(
-        ${OPENGL_INCLUDE_DIRS}
-        ${EIGEN3_INCLUDE_DIR}
-        ${CUDA_INCLUDE_DIRS}
+    ${OPENGL_INCLUDE_DIRS}
+    ${EIGEN3_INCLUDE_DIR}
+    ${CUDA_INCLUDE_DIRS}
 )
 if (WIN32)
-        target_link_libraries(
-                ClothSimulator
-                glad
-                glfw
-                JsonCpp::JsonCpp
-                ${CUDA_cublas_LIBRARY}
-                ${CUDA_cusparse_LIBRARY}
-        )
+    target_link_libraries(
+        ClothSimulator
+        glad
+        glfw
+        JsonCpp::JsonCpp
+        ${CUDA_cublas_LIBRARY}
+        ${CUDA_cusparse_LIBRARY}
+    )
 else()
-        target_link_libraries(
-                ClothSimulator
-                glad
-                glfw
-                jsoncpp
-                ${CUDA_cublas_LIBRARY}
-                ${CUDA_cusparse_LIBRARY}
-        )
+    target_link_libraries(
+        ClothSimulator
+        glad
+        glfw
+        jsoncpp
+        ${CUDA_cublas_LIBRARY}
+        ${CUDA_cusparse_LIBRARY}
+    )
 endif()
