@@ -19,17 +19,12 @@
 struct EdgeData {
     Vertex* opposite;
     Face* adjacent;
-};
 
-struct NodeData {
-    float mass, area;
+    __device__ EdgeData() :
+        opposite(nullptr),
+        adjacent(nullptr) {};
 
-    __device__ NodeData operator+(const NodeData& d) const {
-        NodeData ans;
-        ans.mass = mass + d.mass;
-        ans.area = area + d.area;
-        return ans;
-    };
+    __device__ ~EdgeData() {};
 };
 
 __global__ void initializeNodes(int nNodes, const Vector3f* x, bool isFree, int nVelocities, const Vector3f* v, Node** nodes, Node* pool);

@@ -27,10 +27,12 @@ Cloth::~Cloth() {
     delete edgeShader;
     delete faceShader;
 
-    if (!gpu)
+    if (!gpu) {
         delete material;
-    else {
+        delete remeshing;
+    } else {
         CUDA_CHECK(cudaFree(material));
+        CUDA_CHECK(cudaFree(remeshing));
 
         CUBLAS_CHECK(cublasDestroy(cublasHandle));
         CUSPARSE_CHECK(cusparseDestroy(cusparseHandle));

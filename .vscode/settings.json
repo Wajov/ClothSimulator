@@ -8,8 +8,8 @@
             // "simulate_offline",
             // "resume",
             // "resume_offline",
-            "conf/crush.json",
-            // "output/hang",
+            "conf/sphere.json",
+            // "output/crush",
             "--gpu"
         ]
     },
