@@ -9,7 +9,7 @@
             // "resume",
             // "resume_offline",
             "conf/sphere.json",
-            // "output/crush",
+            // "output/sphere",
             "--gpu"
         ]
     },

@@ -977,6 +977,8 @@ bool Simulator::finished() const {
 }
 
 void Simulator::simulate() {
+    Timer timer;
+
     if (disabled.find("remeshing") == disabled.end())
         if (!gpu) {
             std::vector<std::vector<BackupFace>> faces(cloths.size());
@@ -1006,9 +1008,13 @@ void Simulator::simulate() {
         glfwSwapBuffers(renderer->getWindow());
         glfwPollEvents();
     }
+
+    std::cout << "Total time: " << timer.duration() << "s" << std::endl;
 }
 
 void Simulator::simulateOffline() {
+    Timer timer;
+
     if (!std::filesystem::is_directory(directory))
         std::filesystem::create_directories(directory);
 
@@ -1032,9 +1038,13 @@ void Simulator::simulateOffline() {
 
     while (!finished())
         simulateStep(true);
+
+    std::cout << "Total time: " << timer.duration() << "s" << std::endl;
 }
 
 void Simulator::resume() {
+    Timer timer;
+
     nFrames = lastFrame();
     nSteps = nFrames * frameSteps;
     updateTransformations();
@@ -1053,9 +1063,13 @@ void Simulator::resume() {
         glfwSwapBuffers(renderer->getWindow());
         glfwPollEvents();
     }
+
+    std::cout << "Total time: " << timer.duration() << "s" << std::endl;
 }
 
 void Simulator::resumeOffline() {
+    Timer timer;
+
     nFrames = lastFrame();
     nSteps = nFrames * frameSteps;
     updateTransformations();
@@ -1064,6 +1078,8 @@ void Simulator::resumeOffline() {
 
     while (!finished())
         simulateStep(true);
+
+    std::cout << "Total time: " << timer.duration() << "s" << std::endl;
 }
 
 void Simulator::replay() {
